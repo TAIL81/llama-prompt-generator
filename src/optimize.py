@@ -5,8 +5,12 @@ import re
 from openai import OpenAI
 from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
+
 # 環境変数を .env ファイルから読み込みます
-load_dotenv()
+# プロジェクトルートの .env ファイルから環境変数を読み込みます
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # デフォルトのシステムプロンプトを定義します
 default_system = "You are a helpful and knowledgeable assistant who is able to provide detailed and accurate information on a wide range of topics. You are also able to provide clear and concise answers to questions and are always willing to go the extra mile to help others."
@@ -68,7 +72,7 @@ Finally, provide the revised prompt within the following XML tags:
 </revised_prompt>
 """.strip()
 
-# APIキーとベースURLを環境変数から取得します
+# APIキーとベースURLを (.env ファイルからロードされた) 環境変数から取得します
 openai_api_key = os.getenv("OPENAI_API_KEY")
 openai_base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 groq_api_key = os.getenv("GROQ_API_KEY")
