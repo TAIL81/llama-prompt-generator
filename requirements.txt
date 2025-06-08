@@ -1,3 +1,6 @@
-openai==1.14.3
-python-dotenv==1.0.1
-boto3>=1.34.70
+gradio
+fastapi
+python-dotenv
+openai                  # OpenRouter を OpenAI SDK 経由で利用する場 合
+groq                    # Groq API クライアント
+requests                # OpenRouter を HTTP 直呼びしたい場合に必要
