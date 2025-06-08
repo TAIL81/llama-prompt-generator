@@ -135,6 +135,8 @@ If the question cannot be answered by the document, say "Cannot answer the quest
             temperature=0.8,
         )
         result = completion.choices[0].message.content
+        # LLMからの応答をデバッグ出力
+        print(f"DEBUG: __call__ LLM response: {result}")
         # 結果から不要なXMLタグを除去します
         if result.startswith("<instruction>"):
             result = result[13:]
