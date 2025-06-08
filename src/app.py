@@ -24,7 +24,7 @@ calibration = CalibrationPrompt()
 # 環境変数を読み込みます
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
-language = os.getenv("LANGUAGE", "en")
+language = os.getenv("LANGUAGE", "ja")
 
 # JSONファイルから翻訳を読み込みます
 translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
