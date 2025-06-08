@@ -42,7 +42,11 @@ class CalibrationPrompt:
         if isinstance(dataset, bytes):
             data_io = io.BytesIO(dataset)
             dataset = pd.read_csv(data_io)
-        exec(postprocess_code, globals())
+        local_vars = {}
+        exec(postprocess_code, globals(), local_vars)
+        postprocess = local_vars.get('postprocess')
+        if not callable(postprocess):
+            raise ValueError("postprocess function not defined in the provided code")
         results = []
         for row_idx, row in dataset.iterrows():
             label = row['label']
@@ -80,7 +84,7 @@ class CalibrationPrompt:
         mean_score = self.eval_score(dataset)
         errors = self.extract_errors(dataset)
         large_error_to_str = self.large_error_to_str(errors, num_errors)
-        history = self.add_history(dataset, task_description, history, mean_score, errors)
+        history = self.add_history(prompt, dataset, task_description, history, mean_score, errors)
         sorted_history = sorted(history, key=lambda x: x['score'],reverse=False)
         last_history = sorted_history[-3:]
         history_prompt = '\n'.join([self.sample_to_text(sample,
@@ -172,7 +176,7 @@ class CalibrationPrompt:
         err_df = df[df['score'] < 0.5]
         err_df.sort_values(by=['score'])
         return err_df
-    def add_history(self, dataset, task_description, history, mean_score, errors):
+    def add_history(self, prompt, dataset, task_description, history, mean_score, errors):
         num_errors = 5
         large_error_to_str = self.large_error_to_str(errors, num_errors)
         prompt_input = {
