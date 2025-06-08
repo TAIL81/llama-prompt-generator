@@ -180,44 +180,33 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             )
 
         with gr.Row():
-            openai_model_dropdown = gr.Dropdown(
-                label=lang_store[language]["Choose OpenAI Model"],
+            openrouter_model_dropdown = gr.Dropdown(
+                label=lang_store[language].get("Choose OpenRouter Model", "Choose OpenRouter Model"),
                 choices=[
-                    "gpt-3.5-turbo",
-                    "gpt-3.5-turbo-1106",
-                    "gpt-4-32k",
-                    "gpt-4-1106-preview",
-                    "gpt-4-turbo-preview",
+                    "openrouter/anthropic/claude-3-haiku",
+                    "openrouter/meta-llama/llama-3-70b-instruct",
+                    "openrouter/google/gemini-pro",
+                    "openrouter/mistralai/mixtral-8x7b-32768",
                 ],
-                value="gpt-3.5-turbo",
+                value="openrouter/anthropic/claude-3-haiku",
             )
-            aws_model_dropdown = gr.Dropdown(
-                label=lang_store[language]["Choose AWS Model"],
+            groq_model_dropdown = gr.Dropdown(
+                label=lang_store[language].get("Choose Groq Model", "Choose Groq Model"),
                 choices=[
-                    "anthropic.claude-instant-v1:2:100k",
-                    "anthropic.claude-instant-v1",
-                    "anthropic.claude-v2:0:18k",
-                    "anthropic.claude-v2:0:100k",
-                    "anthropic.claude-v2:1:18k",
-                    "anthropic.claude-v2:1:200k",
-                    "anthropic.claude-v2:1",
-                    "anthropic.claude-v2",
-                    "anthropic.claude-3-sonnet-20240229-v1:0",
-                    "anthropic.claude-3-5-sonnet-20240620-v1:0",
-                    "anthropic.claude-3-haiku-20240307-v1:0",
-
+                    "mixtral-8x7b-32768",
+                    "llama3-70b-8192",
                 ],
-                value="anthropic.claude-3-haiku-20240307-v1:0",
+                value="mixtral-8x7b-32768",
             )
 
             invoke_button = gr.Button(lang_store[language]["Execute prompt"])
 
         with gr.Row():
-            openai_output = gr.Textbox(
-                label=lang_store[language]["OpenAI Output"], lines=3, interactive=False, show_copy_button=True
+            openrouter_output = gr.Textbox(
+                label=lang_store[language].get("OpenRouter Output", "OpenRouter Output"), lines=3, interactive=False, show_copy_button=True
             )
-            aws_output = gr.Textbox(
-                label=lang_store[language]["AWS Bedrock Output"],
+            groq_output = gr.Textbox(
+                label=lang_store[language].get("Groq Output", "Groq Output"),
                 lines=3,
                 interactive=False,
                 show_copy_button=True,
@@ -230,10 +219,10 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
                     user_prompt_eval_replaced,
                     user_prompt_original,
                     user_prompt_eval,
-                    openai_model_dropdown,
-                    aws_model_dropdown,
+                    openrouter_model_dropdown,
+                    groq_model_dropdown,
                 ],
-                outputs=[openai_output, aws_output],
+                outputs=[openrouter_output, groq_output],
             )
 
         with gr.Row():
@@ -254,7 +243,7 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             evaluate_button = gr.Button(lang_store[language]["Auto-evaluate the Prompt Effect"])
             evaluate_button.click(
                 alignment.evaluate_response,
-                inputs=[openai_output, aws_output, eval_model_dropdown],
+                inputs=[openrouter_output, groq_output, eval_model_dropdown],
                 outputs=[feedback_input],
             )
 
@@ -267,8 +256,8 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
                 inputs=[
                     feedback_input,
                     user_prompt_eval,
-                    openai_output,
-                    aws_output,
+                    openrouter_output,
+                    groq_output,
                     eval_model_dropdown,
                 ],
                 outputs=revised_prompt_output,
