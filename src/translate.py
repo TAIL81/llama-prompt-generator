@@ -4,30 +4,46 @@ import os
 from groq import Groq
 from dotenv import load_dotenv
 from pathlib import Path
-
+# 環境変数を .env ファイルから読み込みます
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 
 # Get the directory where the current script is located
+# 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 
 # Construct the full path to the file
+# PromptGuide.md へのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
 # Open the file using the full path
+# PromptGuide.md を読み込みます
 with open(prompt_guide_path, "r", encoding="utf-8") as f:
     PromptGuide = f.read()
 
+# AWSリージョン名を取得します (現在は使用されていません)
 region_name = os.getenv("REGION_NAME")
 
-
+# プロンプトガイドに基づいてプロンプトを書き換えるクラス
 class GuideBased:
     def __init__(self):
+        # Groq APIキーを取得し、クライアントを初期化します
         groq_api_key = os.getenv("GROQ_API_KEY")
         self.groq_client = Groq(api_key=groq_api_key)
 
     def __call__(self, initial_prompt):
+        """
+        初期プロンプトをプロンプトガイドに基づいて書き換えます。
+        言語を検出し、適切な言語で書き換えを行うよう指示します。
+
+        Args:
+            initial_prompt (str): 書き換え対象の初期プロンプト。
+
+        Returns:
+            str: 書き換えられたプロンプト。
+        """
         lang = self.detect_lang(initial_prompt)
+        # 検出された言語に応じて、プロンプトの言語指示を設定します
         if "ch" in lang:
             lang_prompt = "Please use Chinese for rewriting. The xml tag name is still in English."
         elif "en" in lang:
@@ -35,6 +51,7 @@ class GuideBased:
         else:
             lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."
 
+        # プロンプト書き換えのための指示テンプレート
         prompt = """
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
 This instruction is then sent to Llama to get the expected output.
@@ -111,6 +128,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
             },
             {"role": "assistant", "content": "<rerwited>"},
         ]
+        # Groq APIを使用してプロンプトの書き換えをリクエストします
         completion = self.groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
@@ -118,6 +136,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
             temperature=0.8,
         )
         result = completion.choices[0].message.content
+        # 結果から不要なXMLタグを除去します
         if result.startswith("<instruction>"):
             result = result[13:]
         if result.endswith("</instruction>"):
@@ -126,6 +145,15 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         return result
 
     def detect_lang(self, initial_prompt):
+        """
+        与えられたプロンプトの言語を検出します (英語または中国語)。
+
+        Args:
+            initial_prompt (str): 言語を検出する対象のプロンプト。
+
+        Returns:
+            str: 検出された言語コード ("ch" または "en")。エラーの場合は空文字列。
+        """
         lang_example = json.dumps({"lang": "ch"})
         prompt = """
 Please determine what language the document below is in? English (en) or Chinese (ch)?
@@ -146,6 +174,7 @@ Output example: {lang_example}
             },
             {"role": "assistant", "content": "{"},
         ]
+        # Groq APIを使用して言語検出をリクエストします
         completion = self.groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
@@ -153,12 +182,23 @@ Output example: {lang_example}
             temperature=0.8,
         )
         try:
+            # 結果のJSONをパースして言語コードを取得します
             lang = json.loads(completion.choices[0].message.content)["lang"]
         except:
+            # エラーが発生した場合は空文字列を返します
             lang = ""
         return lang
 
     def judge(self, candidates):
+        """
+        複数のプロンプト候補を評価し、最も良いものを選択します。
+
+        Args:
+            candidates (list[str]): 評価対象のプロンプト候補のリスト。
+
+        Returns:
+            int or None: 最も良いと判断された候補のインデックス。エラーの場合はNone。
+        """
         Instruction_prompts = []
         for idx, candidate in enumerate(candidates):
             Instruction_prompts.append(
@@ -166,6 +206,7 @@ Output example: {lang_example}
             )
         example = json.dumps({"Preferred": "Instruction 1"})
         prompt = """
+# プロンプト評価のための指示テンプレート
 You are a instruction engineer. Your task is to evaluate which of the three instructions given below is better based on guide in <guide> xml tag.
 
 Instruction guide:
@@ -191,6 +232,7 @@ Use JSON format when returning results. Please only output the result in json fo
             },
             {"role": "assistant", "content": "{"},
         ]
+        # Groq APIを使用してプロンプト候補の評価をリクエストします
         completion = self.groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
@@ -200,10 +242,12 @@ Use JSON format when returning results. Please only output the result in json fo
         final_result = None
         try:
             result = json.loads(completion.choices[0].message.content)
+            # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
             for idx in range(3):
                 if str(idx + 1) in result["Preferred"]:
                     final_result = idx
                     break
         except:
+            # JSONパースエラーなどが発生した場合はNoneのまま
             pass
         return final_result

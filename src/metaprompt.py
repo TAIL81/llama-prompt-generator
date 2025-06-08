@@ -5,30 +5,44 @@ import re
 from groq import Groq
 from dotenv import load_dotenv
 from pathlib import Path
-
+# 環境変数を .env ファイルから読み込みます
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 
-
+# メタプロンプトを生成し、関連情報を抽出するクラス
 class MetaPrompt:
     def __init__(self):
         # Get the directory where the current script is located
+        # 現在のスクリプトが配置されているディレクトリを取得します
         current_script_path = os.path.dirname(os.path.abspath(__file__))
 
         # Construct the full path to the file
+        # metaprompt.txt へのフルパスを構築します
         prompt_guide_path = os.path.join(current_script_path, "metaprompt.txt")
 
         # Open the file using the full path
+        # metaprompt.txt を読み込みます
         with open(prompt_guide_path, "r", encoding="utf-8") as f:
             self.metaprompt = f.read()
 
+        # Groq APIキーを取得し、クライアントを初期化します
         groq_api_key = os.getenv("GROQ_API_KEY")
         self.groq_client = Groq(api_key=groq_api_key)
 
     def __call__(self, task, variables):
+        """
+        タスクと変数に基づいてメタプロンプトを生成し、プロンプトテンプレートと変数を抽出します。
+
+        Args:
+            task (str): ユーザーが定義したタスク。
+            variables (str): 改行区切りの変数文字列。
+
+        Returns:
+            tuple: (抽出されたプロンプトテンプレート, 改行区切りの変数文字列)
+        """
         variables = variables.split("\n")
         variables = [variable for variable in variables if len(variable)]
-
+        # 変数リストをメタプロンプト用の文字列形式に変換します
         variable_string = ""
         for variable in variables:
             variable_string += "\n{$" + variable.upper() + "}"
@@ -42,6 +56,7 @@ class MetaPrompt:
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": assistant_partial},
         ]
+        # Groq APIを使用してメタプロンプトから指示を生成します
         completion = self.groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
@@ -50,6 +65,7 @@ class MetaPrompt:
         )
         message = completion.choices[0].message.content
 
+        # デバッグ用の整形出力関数 (現在はコメントアウト)
         def pretty_print(message):
             print(
                 "\n\n".join(
@@ -63,14 +79,27 @@ class MetaPrompt:
                 )
             )
 
+        # 生成されたメッセージからプロンプトテンプレートと変数を抽出します
         extracted_prompt_template = self.extract_prompt(message)
         variables = self.extract_variables(message)
 
         return extracted_prompt_template.strip(), "\n".join(variables)
 
     def extract_between_tags(
+        # 指定されたXMLタグ間のコンテンツを抽出するヘルパー関数
         self, tag: str, string: str, strip: bool = False
     ) -> list[str]:
+        """
+        文字列内から指定されたタグに囲まれた部分を抽出します。
+
+        Args:
+            tag (str): 抽出対象のタグ名。
+            string (str): 検索対象の文字列。
+            strip (bool, optional): 抽出された文字列の前後の空白を削除するかどうか。デフォルトは False。
+
+        Returns:
+            list[str]: 抽出された文字列のリスト。
+        """
         ext_list = re.findall(f"<{tag}>(.+?)</{tag}>", string, re.DOTALL)
         if strip:
             ext_list = [e.strip() for e in ext_list]
@@ -78,9 +107,24 @@ class MetaPrompt:
 
     def remove_empty_tags(self, text):
         return re.sub(r"\n<(\w+)>\s*</\1>\n", "", text, flags=re.DOTALL)
+        # 空のXMLタグ（例: <Tag></Tag>）をテキストから削除します。
 
     def extract_prompt(self, metaprompt_response):
+        """
+        メタプロンプトの応答から主要な指示部分を抽出します。
+
+        Args:
+            metaprompt_response (str): モデルからのメタプロンプト応答。
+
+        Returns:
+            str: 抽出されたプロンプト指示。
+        """
+        # <Instructions> タグ内のコンテンツを取得します
         between_tags = self.extract_between_tags("Instructions", metaprompt_response)[0]
+        # 最初の1000文字と、それ以降の空タグを削除した部分を結合します
+        # これは、応答が長すぎる場合に主要な部分を保持しつつ、不要な空タグをクリーンアップするためです。
+        # TODO: このロジックは応答形式に依存するため、より堅牢な抽出方法を検討する余地があります。
+
         return (
             between_tags[:1000]
             + self.remove_empty_tags(
@@ -89,11 +133,20 @@ class MetaPrompt:
         )
 
     def extract_variables(self, prompt):
+        """
+        プロンプト文字列から {{変数名}} 形式の変数を抽出します。
+
+        Args:
+            prompt (str): 変数を抽出する対象のプロンプト文字列。
+
+        Returns:
+            set: 抽出された変数名のセット（重複なし）。
+        """
         pattern = r"{([^}]+)}"
         variables = re.findall(pattern, prompt)
         return set(variables)
 
-
+# テスト用のコード (現在はコメントアウト)
 # test = MetaPrompt()
 # TASK = "Draft an email responding to a customer complaint" # Replace with your task!
 # # Optional: specify the input variables you want Llama to use. If you want Llama to choose, you can set `variables` to an empty list!
