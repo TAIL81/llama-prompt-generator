@@ -23,8 +23,8 @@ class CalibrationPrompt:
 
         groq_api_key = os.getenv("GROQ_API_KEY")
         self.groq_client = Groq(api_key=groq_api_key)
-    def invoke_model(self, prompt, model='haiku'):
-        model_id = "mixtral-8x7b-32768"
+    def invoke_model(self, prompt, model='scout'):
+        model_id = "meta-llama/llama-4-scout-17b-16e-instruct"
         messages = [
             {
                 "role": "user",
@@ -191,7 +191,7 @@ class CalibrationPrompt:
         for i, row in enumerate(conf_matrix):
             conf_text += f"\n{label_schema[i]}: {row}"
         prompt_input['confusion_matrix'] = conf_text
-        analysis = self.invoke_model(error_analysis_prompt.format(**prompt_input), model='haiku')
+        analysis = self.invoke_model(error_analysis_prompt.format(**prompt_input), model='scout')
         pattern = r"<analysis>(.*?)</analysis>"
         analysis = re.findall(pattern, analysis, re.DOTALL)[0].strip()
         history.append({'prompt': prompt, 'score': mean_score,'errors': errors, 'confusion_matrix': conf_matrix, 'analysis': analysis})

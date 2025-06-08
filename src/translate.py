@@ -110,7 +110,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
             {"role": "assistant", "content": "<rerwited>"},
         ]
         completion = self.groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_tokens=4096,
             temperature=0.8,
@@ -145,7 +145,7 @@ Output example: {lang_example}
             {"role": "assistant", "content": "{"},
         ]
         completion = self.groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_tokens=1000,
             temperature=0.8,
@@ -190,7 +190,7 @@ Use JSON format when returning results. Please only output the result in json fo
             {"role": "assistant", "content": "{"},
         ]
         completion = self.groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_tokens=128,
             temperature=0.1,

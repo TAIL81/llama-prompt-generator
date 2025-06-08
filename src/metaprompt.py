@@ -41,7 +41,7 @@ class MetaPrompt:
             {"role": "assistant", "content": assistant_partial},
         ]
         completion = self.groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_tokens=4096,
             temperature=0.0,

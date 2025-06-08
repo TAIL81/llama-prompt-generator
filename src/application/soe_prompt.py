@@ -10,7 +10,7 @@ load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 
 class SOEPrompt:
-    def __init__(self, model_id="mixtral-8x7b-32768", system='You are an AI assistant that generates SEO-optimized product descriptions.'):
+    def __init__(self, model_id="meta-llama/llama-4-scout-17b-16e-instruct", system='You are an AI assistant that generates SEO-optimized product descriptions.'):
         self.groq_client = Groq(api_key=groq_api_key)
         self.model_id = model_id
         self.system = system
