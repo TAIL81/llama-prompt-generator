@@ -175,7 +175,7 @@ Output example: {lang_example}
         ]
         # Groq APIを使用して言語検出をリクエストします
         completion = self.groq_client.chat.completions.create(
-            model="gemma2-9b-it",
+            model="llama-3.1-8b-instant",
             messages=messages,
             max_completion_tokens=1024,
             temperature=0.8,
