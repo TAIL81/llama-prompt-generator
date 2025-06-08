@@ -179,8 +179,8 @@ Output example: {lang_example}
         completion = self.groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=messages,
-            max_completion_tokens=1024,
-            temperature=0.8,
+            max_completion_tokens=128,
+            temperature=0.1,
         )
         # LLMからの応答をデバッグ出力
         print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
