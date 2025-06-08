@@ -17,7 +17,7 @@ class MetaPrompt:
         prompt_guide_path = os.path.join(current_script_path, "metaprompt.txt")
 
         # Open the file using the full path
-        with open(prompt_guide_path, "r") as f:
+        with open(prompt_guide_path, "r", encoding="utf-8") as f:
             self.metaprompt = f.read()
 
         groq_api_key = os.getenv("GROQ_API_KEY")

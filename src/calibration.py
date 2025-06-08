@@ -9,16 +9,16 @@ import pathlib
 import gradio as gr
 from sklearn.metrics import confusion_matrix
 
-with open('prompt/error_analysis_classification.prompt') as f:
+with open('prompt/error_analysis_classification.prompt', encoding="utf-8") as f:
     error_analysis_prompt = f.read()
-with open('prompt/step_prompt_classification.prompt') as f:
+with open('prompt/step_prompt_classification.prompt', encoding="utf-8") as f:
     step_prompt = f.read()
-with open('prompt/prompt_guide_short.prompt') as f:
+with open('prompt/prompt_guide_short.prompt', encoding="utf-8") as f:
     prompt_guide_short = f.read()
 
 class CalibrationPrompt:
     def __init__(self):
-        with open('metaprompt.txt') as f:
+        with open('metaprompt.txt', encoding="utf-8") as f:
             self.metaprompt = f.read()
 
         groq_api_key = os.getenv("GROQ_API_KEY")
