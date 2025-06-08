@@ -26,7 +26,8 @@ load_dotenv()
 language = os.getenv("LANGUAGE", "en")
 
 # Load translations from JSON file
-with open('translations.json', 'r', encoding='utf-8') as f:
+translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
+with open(translations_path, 'r', encoding='utf-8') as f:
     lang_store = json.load(f)
 
 
