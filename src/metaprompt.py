@@ -12,15 +12,12 @@ load_dotenv(env_path)
 # メタプロンプトを生成し、関連情報を抽出するクラス
 class MetaPrompt:
     def __init__(self):
-        # Get the directory where the current script is located
         # 現在のスクリプトが配置されているディレクトリを取得します
         current_script_path = os.path.dirname(os.path.abspath(__file__))
 
-        # Construct the full path to the file
         # metaprompt.txt へのフルパスを構築します
         prompt_guide_path = os.path.join(current_script_path, "metaprompt.txt")
 
-        # Open the file using the full path
         # metaprompt.txt を読み込みます
         with open(prompt_guide_path, "r", encoding="utf-8") as f:
             self.metaprompt = f.read()
