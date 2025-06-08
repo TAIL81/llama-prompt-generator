@@ -35,23 +35,23 @@ class GuideBased:
 
         prompt = """
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to claude to get the expected output.
+This instruction is then sent to Llama to get the expected output.
 
 <instruction_guide>
 {guide}
 </instruction_guide>
 
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to claude to get the expected output.
+This instruction is then sent to Llama to get the expected output.
 
 Here are some important rules for rewrite:
-1. Something like `{{variable}}` is customizable text that will be replaced when sent to claude. It needs to be retained in the rewrite.
+1. Something like `{{variable}}` is customizable text that will be replaced when sent to Llama. It needs to be retained in the rewrite.
 2. {lang_prompt}
 3. Only output the rewrite instruction return them in <rerwited></rerwited>XML tags
 4. If examples are already included in the initial prompt, do not remove the examples after the rewrite.
 
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to claude to get the expected output.
+This instruction is then sent to Llama to get the expected output.
 
 Example:
 <initial_instruction>

@@ -1,57 +1,57 @@
 <instruction_guide>
 ## Instruction Guide
 
-When working with the powerful language model Claude, providing clear and structured prompts is key to achieving the best results. Think of Claude as a new employee who needs detailed instructions to complete a task successfully. The more you can explain exactly what you want in a straightforward manner, the better Claude will perform.
+When working with the powerful language model Llama, providing clear and structured prompts is key to achieving the best results. Think of Llama as a new employee who needs detailed instructions to complete a task successfully. The more you can explain exactly what you want in a straightforward manner, the better Llama will perform.
 
 1. Be Clear and Direct
 - Include detailed context and step-by-step instructions. Provide specific rules or requirements for the task.
 - Use numbered lists or bullet points to break down complex instructions.
-- Be explicit about the desired outcome. If you want Claude to take a specific stance, make that clear.
+- Be explicit about the desired outcome. If you want Llama to take a specific stance, make that clear.
 - Test your prompts by having a friend try to follow the instructions to ensure they are clear and unambiguous.
 
 2. Use Examples
-- Examples are incredibly powerful for guiding Claude's performance. Provide 3-5 relevant examples that cover different scenarios.
+- Examples are incredibly powerful for guiding Llama's performance. Provide 3-5 relevant examples that cover different scenarios.
 - Ensure examples are clear, concise, and formatted consistently (e.g., using XML tags).
-- Analyze Claude's outputs and refine your examples if needed. Experiment to find the best approach.
+- Analyze Llama's outputs and refine your examples if needed. Experiment to find the best approach.
 
 3. Assign Roles
-- Assigning Claude a specific role can help it respond in a tailored way, improving accuracy and consistency.
+- Assigning Llama a specific role can help it respond in a tailored way, improving accuracy and consistency.
 - Role prompting is especially useful for technical tasks, communication styles, or enhancing baseline performance.
-- Be as specific as possible when defining Claude's role.
+- Be as specific as possible when defining Llama's role.
 
 4. Leverage XML Tags
-- XML tags help Claude understand the structure and context of your prompts, leading to more accurate responses.
+- XML tags help Llama understand the structure and context of your prompts, leading to more accurate responses.
 - Use tags to delineate instructions, examples, input data, and desired output formats.
 - When working with variable inputs, use XML tags to clearly indicate where the variable content should be inserted.
-- Request structured outputs by asking Claude to use XML tags in its responses.
+- Request structured outputs by asking Llama to use XML tags in its responses.
 
 5. Chain Prompts
 - For complex tasks that require multiple steps, break them down into smaller, more manageable subtasks.
-- Chaining prompts involves using the output from one prompt as the input for another, guiding Claude through the process.
+- Chaining prompts involves using the output from one prompt as the input for another, guiding Llama through the process.
 - This approach improves accuracy and consistency at each step, and makes troubleshooting easier.
 
-6. Let Claude Think
-- Encourage Claude to think through problems step-by-step before providing a final answer.
-- Specify the steps Claude should take, and use XML tags to separate its thinking process from the final answer.
-- This technique can significantly improve the accuracy and nuance of Claude's responses.
+6. Let Llama Think
+- Encourage Llama to think through problems step-by-step before providing a final answer.
+- Specify the steps Llama should take, and use XML tags to separate its thinking process from the final answer.
+- This technique can significantly improve the accuracy and nuance of Llama's responses.
 
 7. Control Output Format
-- Claude can generate output in a variety of formats, from JSON to Markdown.
-- Explicitly state the desired format, and provide examples to guide Claude's response.
+- Llama can generate output in a variety of formats, from JSON to Markdown.
+- Explicitly state the desired format, and provide examples to guide Llama's response.
 - Use clear and consistent formatting in your prompts, and experiment to find the best approach for your use case.
 
 8. Leverage Long Context
-- Claude's extended context window allows it to process large amounts of information in a single prompt.
+- Llama's extended context window allows it to process large amounts of information in a single prompt.
 - Structure long documents using XML tags to clearly separate input data from instructions.
-- For document-based question answering tasks, place the question at the end of the prompt and ask Claude to find relevant quotes before answering.
-- When generating multiple-choice questions, provide example questions and answers from the same text to guide Claude's output.
+- For document-based question answering tasks, place the question at the end of the prompt and ask Llama to find relevant quotes before answering.
+- When generating multiple-choice questions, provide example questions and answers from the same text to guide Llama's output.
 
-By mastering these prompt engineering techniques, you can unlock Claude's full potential and achieve exceptional results for your applications. Remember, prompt engineering is an iterative process - don't be afraid to experiment and refine your prompts until you find the approach that works best for your specific use cases.
+By mastering these prompt engineering techniques, you can unlock Llama's full potential and achieve exceptional results for your applications. Remember, prompt engineering is an iterative process - don't be afraid to experiment and refine your prompts until you find the approach that works best for your specific use cases.
 </instruction_guide>
 
 You are a instruction engineer.
 Your task is to rewrite the initial instruction in <original_instruction></original_instruction> xml tag based on the error analysis for the original prompt in <error_analysis></error_analysis> xml tag and the suggestions in instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to claude to get the expected output. You can add more requirements to improve accuracy.
+This instruction is then sent to Llama to get the expected output. You can add more requirements to improve accuracy.
 Here's what this instruction is trying to accomplish, make sure you don't deviate from it.
 <task_description>
 {task_description}
@@ -68,7 +68,7 @@ This is the error analysis for the original instruction:
 In the <original_instruction></original_instruction> xml tag is the original instruction. where {{}} is a user-defined variable, e.g. {{variant}}, and the content associated with this section (including the xml tag that wraps around it) must be preserved in the generated prompt.
 
 Your task is to rewrite the initial instruction in <original_instruction></original_instruction> xml tag based on the error analysis for the original prompt in <error_analysis></error_analysis> xml tag and the suggestions in instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to claude to get the expected output.
+This instruction is then sent to Llama to get the expected output.
 A new instruction in <new_prompt></new_prompt> xml tag that is
     - Different from the original instruction above
     - Follows exactly the error analysis modification suggestions, and fix the instruction to prevent the failure cases.

@@ -94,7 +94,7 @@ class MetaPrompt:
 
 # test = MetaPrompt()
 # TASK = "Draft an email responding to a customer complaint" # Replace with your task!
-# # Optional: specify the input variables you want Claude to use. If you want Claude to choose, you can set `variables` to an empty list!
+# # Optional: specify the input variables you want Llama to use. If you want Llama to choose, you can set `variables` to an empty list!
 
 # VARIABLES = ["CUSTOMER_COMPLAINT", "COMPANY_NAME"]
 # test(TASK, VARIABLES)

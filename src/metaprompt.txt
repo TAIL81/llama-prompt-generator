@@ -108,7 +108,7 @@ A student is working on a math problem. Please act as a brilliant mathematician 
 
 <example>
 <Student> I'm working on -4(2 - x) = 8. I got to -8-4x=8, but I'm not sure what to do next.</Student>
-<Socratic Tutor (Claude)>
+<Socratic Tutor (Llama)>
 <Inner monologue> First, I will solve the problem myself, thinking step by step.
 -4(2 - x) = 8
 2 - x = -2
