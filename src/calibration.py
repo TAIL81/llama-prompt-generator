@@ -19,7 +19,7 @@ _PROJECT_ROOT_DIR = os.path.dirname(_CURRENT_SCRIPT_DIR)
 
 # promptディレクトリへのパス
 # 例: D:\Users\onisi\Documents\AI\llama-prompt-generator\prompt
-_PROMPT_DIR = os.path.join(_PROJECT_ROOT_DIR, 'prompt')
+_PROMPT_DIR = os.path.join(_CURRENT_SCRIPT_DIR, 'prompt')
 
 # 各プロンプトファイルへの絶対パス
 _ERROR_ANALYSIS_PROMPT_PATH = os.path.join(_PROMPT_DIR, 'error_analysis_classification.prompt')
