@@ -3,8 +3,10 @@ import os
 
 from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 
 # Get the directory where the current script is located
 current_script_path = os.path.dirname(os.path.abspath(__file__))

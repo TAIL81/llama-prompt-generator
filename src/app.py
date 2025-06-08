@@ -5,6 +5,7 @@ import threading
 
 import gradio as gr
 from dotenv import load_dotenv
+from pathlib import Path
 from ape import APE
 from calibration import CalibrationPrompt
 from metaprompt import MetaPrompt
@@ -22,7 +23,8 @@ metaprompt = MetaPrompt()
 soeprompt = SOEPrompt()
 calibration = CalibrationPrompt()
 # Load environment variables
-load_dotenv()
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 language = os.getenv("LANGUAGE", "en")
 
 # Load translations from JSON file

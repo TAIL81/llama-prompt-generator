@@ -4,8 +4,10 @@ import re
 
 from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 
 
 class MetaPrompt:
