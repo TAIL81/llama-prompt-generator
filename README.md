@@ -1,49 +1,193 @@
-# Claude Prompt Generator
+# プロンプトジェネレーター
 
-## Overall Workflow
-For user not using any language model, initial prompt is generated from scratch according to Claude3 prompt guidance; For user already use language model (GPT), initial prompt is "translated" into Claude3 prompt including the transformation based on the prompt nuances between difference model characters, e.g. XML tag are recommended in Claude3. Once the initial prompt is generated, the auto & manual evaluation process are involved to gurantee the output effectivenss or alignment and revised prompt will be generated accordingly, user will keep iterating the process until the desired output is achieved. The final process will involve the manual adjustment to ensure the production ready quality, which can't be fully implemented by script or model as described as the 10% human-in-the-loop process.
-![image](https://github.com/aws-samples/claude-prompt-generator/assets/23544182/4ae1612a-c389-4c1f-8f4e-e9fe3d0f12d1)
+プロンプトジェネレーターは、タスクに基づいて最適なAIプロンプトを自動生成するPythonアプリケーションです。Groq API および OpenRouter を活用し、Llama4 モデルを用いて効果的で構造化されたプロンプトを作成します。
 
-## Quick Start
+## 主な機能
 
-**Pre-requisite**
-- Make sure you have an AWS account and and install the AWS CLI with AWS credentials properly configured to invoke AWS Bedrock API, see [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html) for more information on the CLI installation and configuration.
-- [Optional] Execute the script to check the Bedrock API availability in your region and priviledge to use the service, the script is located in the [src](./src/preflight/check.py) folder, run the script using command "python check.py".
-- [Optional] If you want to explore the prompt evaluation function, make sure you have an OpenAI API key, see [OpenAI API](https://platform.openai.com/docs/developer-quickstart/your-api-keys) for more information.
-- Install the required packages using command "pip install -r requirements.txt".
-- Login to src folder, copy the .env.example file and rename to .env, fill with your OPENAI_API_KEY, OPENAI_API_URL(leave blank if is from offcial service) and REGION_NAME (Refer to AWS region, e.g. us-east-1, and currently Bedrock API is only available in limited regions, e.g.us-east-1, us-west-2, ap-southeast-1, ap-northeast-1 etc. check the availability in the [AWS region table](https://aws.amazon.com/about-aws/global-infrastructure/regional-product-services/))
+- タスクベースのプロンプト生成
+- **テンプレート生成**: タスク記述と初期変数ヒントに基づいて、プロンプトテンプレートを生成
+- **動的変数抽出**: テンプレートから変数を自動検出し、入力フィールドを動的に構築
+- **リアルタイムバリデーション**: 変数名の形式（大文字英数字とアンダースコア）を検証し、必要に応じて変換
+- **変数入力と最終プロンプト生成**: 入力された変数値をもとに最終的なAI回答を生成
+- エンコードされた入力のサポート（UTF-8）
+- 不適切な変数（浮遊変数）の検出と自動修正
+- REST API による外部アプリケーション連携
+- フロントエンド付き（HTML+JS）
 
-**Run the demo**
+## 必要要件
+
+- Python 3.x
+- Groq API キー
+- OpenRouter API キー（OpenAI 互換）
+- `requirements.txt` に記載された依存パッケージのインストール
+
+## セットアップ手順
+
+### 1. 環境変数の設定
 
 ```bash
-cd src
+# Windows PowerShell の場合
+$env:GROQ_API_KEY="your-groq-api-key"
+$env:OPENROUTER_API_KEY="your-openrouter-api-key"
+
+# Linux/macOS の場合
+export GROQ_API_KEY="your-groq-api-key"
+export OPENROUTER_API_KEY="your-openrouter-api-key"
+```
+
+### 2. 仮想環境の作成（推奨）
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+```
+
+### 3. 依存パッケージのインストール
+
+```bash
+pip install -r requirements.txt
+```
+
+## 使用方法
+
+### フロントエンドの使用
+
+1. アプリケーションを起動：
+
+```bash
 python app.py
 ```
-Login to the URL in the output, normally like http://127.0.0.1:7860, and input your original OpenAI prompt to get the tranformed Claude prompt, then you can copy the Claude prompt to the evaluation tab to compare, evaluate and iterate until such prompt is align or surpass the original prompt.
 
-The UI is shown as below:
-![UI](./docs/img/pe-01.png)
+2. フロントエンドをブラウザで開く：
 
-**Overall workflow**
-1. **Initial Prompt Generation (User From Scratch)**: Go to the "Meta Prompt" tab, input your task e.g. draft respond email for customer complaint and associate vairables, e.g. customer complaint, and click "Generate Prompt" button to get the initial Claude prompt.
-![Prompt Generation](./docs/img/pe-02.png)
+```bash
+# Windows
+start index.html
 
-2. **Existing Prompt Translation (User From OpenAI)**: Go to the "Prompt Translation" tab, input your original OpenAI prompt and click "Revise Prompt" button to get the initial Claude prompt.
-![Prompt Translation](./docs/img/pe-03.png)
+# macOS
+open index.html
 
-3. **Prompt Evaluation**: Go to the "Prompt Evaluation" tab, input your original OpenAI prompt and initial Claude prompt, click "Replace Variables in Original Prompt" button to replace the variable with your actual value, then click the "Execute prompt" button to check the response in output box. 
-![Prompt Evaluation 01](./docs/img/pe-04.png)
-Input your feedback on both response manually or use the "Auto-evaluate the Prompt Effect" button to generate the revised recommendation, then click "Iterate Prompt" button to submit the revise and get the updated Claude prompt, you can repeat such process until you feel the Claude prompt is align or surpass the original prompt.
-![Prompt Evaluation 02](./docs/img/pe-05.png)
+# Linux
+xdg-open index.html
+```
 
-4. [Experimental]: We also offer a function to generate the prompt to genenerate SOE-optiomized product description to be published on e-commerce website, you can try the function in the "SOE-Optiomized Product Description" tab.
-![Experimental SOE](./docs/img/pe-06.png)
+3. 操作手順：
+   - タスクを入力（例：「Acme Dynamics社のカスタマーサクセス担当として丁寧に回答せよ」）
+   - 「プロンプト生成」ボタンをクリック
+   - 変数（FAQ、QUESTION など）に具体的な値を入力
+   - 「最終回答を生成」でLlama4モデルによる出力を確認
 
-## Security
+### コマンドラインからの使用例
 
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+```bash
+python main.py "数学の問題を解く" "difficulty,topic"
+```
 
-## License
+## Web API の利用
 
-This project is licensed under the Apache-2.0 License.
+アプリケーションは REST API としても利用可能です。
 
+### エンドポイント一覧
+
+#### GET /
+アプリケーションの状態確認用
+
+**レスポンス例**
+```json
+{
+  "status": "running",
+  "service": "Prompt Generator API",
+  "version": "1.0.0"
+}
+```
+
+#### POST /generate_template
+プロンプトテンプレート生成
+
+**リクエスト例**
+```json
+{
+  "task": "数学の問題を解く",
+  "variables": ["difficulty", "topic"]
+}
+```
+
+**レスポンス例**
+```json
+{
+  "template": "生成されたプロンプトテンプレート",
+  "variables": ["DIFFICULTY", "TOPIC"],
+  "unused_variables": []
+}
+```
+
+#### POST /execute_template
+プロンプトを基にAI出力を生成
+
+**リクエスト例**
+```json
+{
+  "template": "生成済みテンプレート",
+  "variables": {
+    "DIFFICULTY": "中級",
+    "TOPIC": "三角関数"
+  }
+}
+```
+
+**レスポンス例**
+```json
+{
+  "final_output": "生成された最終回答"
+}
+```
+
+## プロジェクト構成
+
+- `main.py`: CLI ベースのテンプレート生成スクリプト
+- `app.py`: REST API のサーバー実装
+- `index.html`: フロントエンドの画面
+- `app.js`: 入力・変数処理およびAPI連携
+- `styles.css`: フロントエンドのスタイル
+- `metaprompt.txt`: プロンプトテンプレートのテンプレート
+- `remove_floating_variables_prompt.txt`: 浮遊変数を除去する補助プロンプト
+- `requirements.txt`: 必要なパッケージのリスト
+
+## 実装の要点
+
+### プロンプト生成フロー
+
+1. タスクと変数を受け取る
+2. テンプレートエンジンを用いてプロンプトを作成
+3. 変数の正当性を検証
+4. Llama4 モデルを介してAI回答を生成
+
+### 変数処理の特徴
+
+- AWS 形式（{$VAR}）による動的変数の検出
+- 小文字の自動大文字化と形式バリデーション
+- 未使用・不正な変数の警告・除去
+- 入力値のチェックと自動整形
+
+### エラーハンドリング
+
+- API 呼び出し時の通信エラー
+- 入力形式の検証とエラーメッセージ
+- テンプレート読み込み失敗時の処理
+
+## 制限事項
+
+- Groq および OpenRouter API の使用制限・料金体系に準拠
+- 入力は UTF-8 エンコードで送信される必要あり
+
+## ライセンス
+
+このプロジェクトは [MITライセンス](LICENSE) の下で提供されています。
+
+## コントリビューション
+
+不具合報告や改善提案は GitHub Issue を通じて歓迎します。
+
+---
+
+より詳細な情報は、プロジェクトのドキュメントや Wiki をご参照ください。
