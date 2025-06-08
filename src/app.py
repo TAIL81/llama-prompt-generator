@@ -183,20 +183,20 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             openrouter_model_dropdown = gr.Dropdown(
                 label=lang_store[language].get("Choose OpenRouter Model", "Choose OpenRouter Model"),
                 choices=[
-                    "openrouter/anthropic/claude-3-haiku",
-                    "openrouter/meta-llama/llama-3-70b-instruct",
-                    "openrouter/google/gemini-pro",
-                    "openrouter/mistralai/mixtral-8x7b-32768",
+                    "microsoft/mai-ds-r1:free",
+                    "deepseek/deepseek-r1-0528:free",
+                    "qwen/qwen3-235b-a22b:free",
+                    "deepseek/deepseek-chat-v3-0324:free",
                 ],
-                value="openrouter/anthropic/claude-3-haiku",
+                value="microsoft/mai-ds-r1:free",
             )
             groq_model_dropdown = gr.Dropdown(
                 label=lang_store[language].get("Choose Groq Model", "Choose Groq Model"),
                 choices=[
-                    "mixtral-8x7b-32768",
-                    "llama3-70b-8192",
+                    "meta-llama/llama-4-scout-17b-16e-instruct",
+                    "llama-3.3-70b-versatile",
                 ],
-                value="mixtral-8x7b-32768",
+                value="meta-llama/llama-4-scout-17b-16e-instruct",
             )
 
             invoke_button = gr.Button(lang_store[language]["Execute prompt"])
@@ -235,10 +235,10 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             eval_model_dropdown = gr.Dropdown(
                 label=lang_store[language]["Choose the Evaluation Model"],
                 choices=[
-                    "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                    "meta-llama/llama-4-maverick-17b-128e-instruct",
 
                 ],
-                value="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                value="meta-llama/llama-4-maverick-17b-128e-instruct",
             )
             evaluate_button = gr.Button(lang_store[language]["Auto-evaluate the Prompt Effect"])
             evaluate_button.click(
