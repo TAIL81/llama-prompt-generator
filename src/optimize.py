@@ -10,8 +10,8 @@ load_dotenv()
 
 # デフォルトのシステムプロンプトを定義します
 default_system = "You are a helpful and knowledgeable assistant who is able to provide detailed and accurate information on a wide range of topics. You are also able to provide clear and concise answers to questions and are always willing to go the extra mile to help others."
-bedrock_default_system = default_system
-openai_default_system = default_system
+Groq_default_system = default_system
+OpenRouter_default_system = default_system
 
 # 応答評価用のプロンプトテンプレート
 evaluate_response_prompt_template = """
@@ -106,7 +106,7 @@ class Alignment:
         completion = self.groq_client.chat.completions.create(
             model=model_id,
             messages=[
-                {"role": "system", "content": bedrock_default_system},
+                {"role": "system", "content": Groq_default_system},
                 {"role": "user", "content": prompt},
             ],
         )
@@ -128,7 +128,7 @@ class Alignment:
         completion = self.openrouter_client.chat.completions.create(
             model=model_id,
             messages=[
-                {"role": "system", "content": openai_default_system},
+                {"role": "system", "content": OpenRouter_default_system},
                 {"role": "user", "content": prompt},
             ],
         )
@@ -139,7 +139,7 @@ class Alignment:
         stream = self.groq_client.chat.completions.create(
             model=model_id,
             messages=[
-                {"role": "system", "content": bedrock_default_system},
+                {"role": "system", "content": Groq_default_system},
                 {"role": "user", "content": prompt},
             ],
             stream=True,
@@ -153,7 +153,7 @@ class Alignment:
         stream = self.openrouter_client.chat.completions.create(
             model=model_id,
             messages=[
-                {"role": "system", "content": openai_default_system},
+                {"role": "system", "content": OpenRouter_default_system},
                 {"role": "user", "content": prompt},
             ],
             stream=True,

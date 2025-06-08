@@ -62,7 +62,7 @@ class MetaPrompt:
         )
         message = completion.choices[0].message.content
 
-        # デバッグ用の整形出力関数 (現在はコメントアウト)
+        # デバッグ用の整形出力関数
         def pretty_print(message):
             print(
                 "\n\n".join(
@@ -75,6 +75,9 @@ class MetaPrompt:
                     for paragraph in re.split(r"\n\n+", message)
                 )
             )
+
+        # pretty_print関数を呼び出して整形されたメッセージをコンソールに出力します
+        pretty_print(message)
 
         # 生成されたメッセージからプロンプトテンプレートと変数を抽出します
         extracted_prompt_template = self.extract_prompt(message)
