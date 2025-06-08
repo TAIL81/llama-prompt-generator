@@ -1,19 +1,9 @@
 import json
+from groq import Groq
+import os
 
-import boto3
-from botocore.config import Config
-
-region_name = "us-west-2"
-session = boto3.Session()
-retry_config = Config(
-    region_name=region_name,
-    retries={
-        "max_attempts": 5,
-        "mode": "standard",
-    },
-)
-service_name = "bedrock-runtime"
-bedrock_client = session.client(service_name=service_name, config=retry_config)
+groq_api_key = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=groq_api_key)
 
 
 class Rater:
@@ -36,26 +26,13 @@ class Rater:
 
     def get_output(self, prompt):
         messages = [{"role": "user", "content": prompt}]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 4096,
-                "temperature": 0.8,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["\n\nHuman:"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=messages,
+            max_tokens=4096,
+            temperature=0.8,
         )
-        modelId = "anthropic.claude-3-haiku-20240307-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        result = response_body["content"][0]["text"]
+        result = completion.choices[0].message.content
         return result
 
     def rater(self, initial_prompt, candidates):
@@ -96,35 +73,23 @@ Output example: {rater_example}
             },
             {"role": "assistant", "content": "{"},
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 4096,
-                "temperature": 0.8,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["\n\nHuman:"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=messages,
+            max_tokens=4096,
+            temperature=0.8,
         )
-        modelId = "anthropic.claude-3-sonnet-20240229-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        result_json = "{" + response_body["content"][0]["text"]
         try:
             result = None
-            result_json = json.loads(result_json)
+            result_json = json.loads(completion.choices[0].message.content)
             for idx in range(len(candidates)):
                 if str(idx + 1) in result_json["Preferred"]:
                     result = idx
                     break
         except:
-            result = random.ranint(0, len(candidates) - 1)
+            import random
+            result = random.randint(0, len(candidates) - 1)
         if result is None:
-            result = random.ranint(0, len(candidates) - 1)
+            import random
+            result = random.randint(0, len(candidates) - 1)
         return result

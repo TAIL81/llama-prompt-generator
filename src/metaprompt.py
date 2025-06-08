@@ -2,8 +2,7 @@ import json
 import os
 import re
 
-import boto3
-from botocore.config import Config
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,19 +20,8 @@ class MetaPrompt:
         with open(prompt_guide_path, "r") as f:
             self.metaprompt = f.read()
 
-        region_name = os.getenv("REGION_NAME")
-        session = boto3.Session()
-        retry_config = Config(
-            region_name=region_name,
-            retries={
-                "max_attempts": 5,
-                "mode": "standard",
-            },
-        )
-        service_name = "bedrock-runtime"
-        self.bedrock_client = session.client(
-            service_name=service_name, config=retry_config
-        )
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        self.groq_client = Groq(api_key=groq_api_key)
 
     def __call__(self, task, variables):
         variables = variables.split("\n")
@@ -52,23 +40,13 @@ class MetaPrompt:
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": assistant_partial},
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 4096,
-                "temperature": 0.0,
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = self.groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=messages,
+            max_tokens=4096,
+            temperature=0.0,
         )
-        modelId = "anthropic.claude-3-haiku-20240307-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        message = response_body["content"][0]["text"]
+        message = completion.choices[0].message.content
 
         def pretty_print(message):
             print(

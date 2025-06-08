@@ -1,8 +1,7 @@
 import json
 import os
 
-import boto3
-from botocore.config import Config
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,18 +21,8 @@ region_name = os.getenv("REGION_NAME")
 
 class GuideBased:
     def __init__(self):
-        session = boto3.Session()
-        retry_config = Config(
-            region_name=region_name,
-            retries={
-                "max_attempts": 5,
-                "mode": "standard",
-            },
-        )
-        service_name = "bedrock-runtime"
-        self.bedrock_client = session.client(
-            service_name=service_name, config=retry_config
-        )
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        self.groq_client = Groq(api_key=groq_api_key)
 
     def __call__(self, initial_prompt):
         lang = self.detect_lang(initial_prompt)
@@ -120,26 +109,13 @@ If the question cannot be answered by the document, say "Cannot answer the quest
             },
             {"role": "assistant", "content": "<rerwited>"},
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 4096,
-                "temperature": 0.8,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["</rerwited>"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = self.groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=messages,
+            max_tokens=4096,
+            temperature=0.8,
         )
-        modelId = "anthropic.claude-3-5-sonnet-20240620-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        result = response_body["content"][0]["text"].replace("</rewrite>", "").strip()
+        result = completion.choices[0].message.content
         if result.startswith("<instruction>"):
             result = result[13:]
         if result.endswith("</instruction>"):
@@ -168,27 +144,14 @@ Output example: {lang_example}
             },
             {"role": "assistant", "content": "{"},
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 1000,
-                "temperature": 0.8,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["\n\nHuman:"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = self.groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=messages,
+            max_tokens=1000,
+            temperature=0.8,
         )
-        modelId = "anthropic.claude-3-sonnet-20240229-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
         try:
-            lang = json.loads("{" + response_body["content"][0]["text"])["lang"]
+            lang = json.loads(completion.choices[0].message.content)["lang"]
         except:
             lang = ""
         return lang
@@ -226,28 +189,15 @@ Use JSON format when returning results. Please only output the result in json fo
             },
             {"role": "assistant", "content": "{"},
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 128,
-                "temperature": 0.1,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["\n\nHuman:"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = self.groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=messages,
+            max_tokens=128,
+            temperature=0.1,
         )
-        modelId = "anthropic.claude-3-haiku-20240307-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
         final_result = None
         try:
-            result = json.loads("{" + response_body["content"][0]["text"])
+            result = json.loads(completion.choices[0].message.content)
             for idx in range(3):
                 if str(idx + 1) in result["Preferred"]:
                     final_result = idx

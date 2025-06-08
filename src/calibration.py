@@ -1,5 +1,4 @@
-import boto3
-from botocore.config import Config
+from groq import Groq
 import json
 import re
 import os
@@ -22,44 +21,22 @@ class CalibrationPrompt:
         with open('metaprompt.txt') as f:
             self.metaprompt = f.read()
 
-        region_name = os.getenv("REGION_NAME")
-        session = boto3.Session()
-        retry_config = Config(
-            region_name=region_name,
-            retries={
-                "max_attempts": 5,
-                "mode": "standard",
-            },
-        )
-        service_name = "bedrock-runtime"
-        self.bedrock_client = session.client(service_name=service_name, config=retry_config)
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        self.groq_client = Groq(api_key=groq_api_key)
     def invoke_model(self, prompt, model='haiku'):
-        if 'haiku' in model:
-            model = "anthropic.claude-3-haiku-20240307-v1:0"
-        else:
-            model = "anthropic.claude-3-sonnet-20240229-v1:0"
-        messages=[
+        model_id = "mixtral-8x7b-32768"
+        messages = [
             {
                 "role": "user",
-                "content":  prompt
+                "content": prompt
             }
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 4096,
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = self.groq_client.chat.completions.create(
+            model=model_id,
+            messages=messages,
+            max_tokens=4096,
         )
-        modelId = "anthropic.claude-3-haiku-20240307-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        message = response_body["content"][0]["text"]
+        message = completion.choices[0].message.content
         return message
     def get_output(self, prompt, dataset, postprocess_code, return_df=False):
         if isinstance(dataset, bytes):

@@ -1,15 +1,17 @@
 import os
 import base64
 import json
-import boto3
+from groq import Groq
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
+groq_api_key = os.getenv("GROQ_API_KEY")
+
 class SOEPrompt:
-    def __init__(self, model_id="anthropic.claude-3-sonnet-20240229-v1:0", system='You are an AI assistant that generates SEO-optimized product descriptions.'):
-        self.bedrock_runtime = boto3.client(service_name='bedrock-runtime', region_name=os.getenv("REGION_NAME"))
+    def __init__(self, model_id="mixtral-8x7b-32768", system='You are an AI assistant that generates SEO-optimized product descriptions.'):
+        self.groq_client = Groq(api_key=groq_api_key)
         self.model_id = model_id
         self.system = system
 
@@ -18,32 +20,26 @@ class SOEPrompt:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
     def run_multi_modal_prompt(self, messages, max_tokens=4000):
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "messages": messages
-        })
+        # Groqは画像入力未対応のため、テキストのみ対応
+        completion = self.groq_client.chat.completions.create(
+            model=self.model_id,
+            messages=messages,
+            max_tokens=max_tokens,
+        )
+        # Groqのレスポンス形式に合わせて返却
+        return {"content": [{"text": completion.choices[0].message.content}]}
 
-        response = self.bedrock_runtime.invoke_model(
-            body=body, modelId=self.model_id)
-        response_body = json.loads(response.get('body').read())
-
-        return response_body
-
-    def generate_bedrock_response(self, prompt):
-        messages = [{
-            "role": "user",
-            "content": [{"type": "text", "text": prompt}]
-        }]
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4000,
-            "messages": messages,
-            "system": self.system,
-        })
-        response = self.bedrock_runtime.invoke_model(body=body, modelId=self.model_id)
-        response_body = json.loads(response.get('body').read())
-        return response_body['content'][0]['text']
+    def generate_groq_response(self, prompt):
+        messages = [
+            {"role": "system", "content": self.system},
+            {"role": "user", "content": prompt}
+        ]
+        completion = self.groq_client.chat.completions.create(
+            model=self.model_id,
+            messages=messages,
+            max_tokens=4000,
+        )
+        return completion.choices[0].message.content
 
     def generate_product_description(self, product_category, brand_name, usage_description, target_customer, image_path=None, media_type="image/jpeg"):
         image_description = None
@@ -94,7 +90,7 @@ class SOEPrompt:
         [Your revised prompt]
         </soe_optimized_product_description>
         """.strip()
-        product_description = self.generate_bedrock_response(prompt_template)
+        product_description = self.generate_groq_response(prompt_template)
         return product_description
 
     def generate_description(self, product_category, brand_name, usage_description, target_customer, image_files):

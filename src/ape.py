@@ -1,8 +1,7 @@
 import json
 import os
 
-import boto3
-from botocore.config import Config
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,18 +16,8 @@ prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 with open(prompt_guide_path, "r") as f:
     PromptGuide = f.read()
 
-region_name = os.getenv("REGION_NAME")
-
-session = boto3.Session()
-retry_config = Config(
-    region_name=region_name,
-    retries={
-        "max_attempts": 5,
-        "mode": "standard",
-    },
-)
-service_name = "bedrock-runtime"
-bedrock_client = session.client(service_name=service_name, config=retry_config)
+groq_api_key = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=groq_api_key)
 
 from rater import Rater
 
@@ -91,26 +80,13 @@ Please only output the rewrite result.
             #   "content": "{"
             # }
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 1000,
-                "temperature": 0.8,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["\n\nHuman:"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=messages,
+            max_tokens=1000,
+            temperature=0.8,
         )
-        modelId = "anthropic.claude-3-sonnet-20240229-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        result = response_body["content"][0]["text"].replace("</rewrite>", "").strip()
+        result = completion.choices[0].message.content
         if result.startswith("<instruction>"):
             result = result[13:]
         if result.endswith("</instruction>"):
@@ -152,26 +128,13 @@ Please only output the rewrite result.
             #   "content": "{"
             # }
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 1000,
-                "temperature": 0.8,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["\n\nHuman:"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        completion = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=messages,
+            max_tokens=1000,
+            temperature=0.8,
         )
-        modelId = "anthropic.claude-3-sonnet-20240229-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        result = response_body["content"][0]["text"].replace("</rewrite>", "").strip()
+        result = completion.choices[0].message.content
         if result.startswith("<instruction>"):
             result = result[13:]
         if result.endswith("</instruction>"):
