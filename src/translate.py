@@ -171,15 +171,17 @@ Output example: {lang_example}
                     document=initial_prompt, lang_example=lang_example
                 ),
             },
-            {"role": "assistant", "content": "{"},
+            # {"role": "assistant", "content": "{"},
         ]
         # Groq APIを使用して言語検出をリクエストします
         completion = self.groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="gemma2-9b-it",
             messages=messages,
             max_completion_tokens=1024,
             temperature=0.8,
         )
+        # LLMからの応答をデバッグ出力
+        print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
         try:
             # 結果のJSONをパースして言語コードを取得します
             lang = json.loads(completion.choices[0].message.content)["lang"]
@@ -229,15 +231,17 @@ Use JSON format when returning results. Please only output the result in json fo
                     example=example,
                 ),
             },
-            {"role": "assistant", "content": "{"},
+            # {"role": "assistant", "content": "{"},
         ]
         # Groq APIを使用してプロンプト候補の評価をリクエストします
         completion = self.groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             messages=messages,
             max_completion_tokens=128,
             temperature=0.1,
         )
+        # LLMからの応答をデバッグ出力
+        print(f"DEBUG: judge LLM response (raw): {completion.choices[0].message.content}")
         final_result = None
         try:
             result = json.loads(completion.choices[0].message.content)
