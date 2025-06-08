@@ -9,16 +9,35 @@ import pathlib
 import gradio as gr
 from sklearn.metrics import confusion_matrix
 
-with open('prompt/error_analysis_classification.prompt', encoding="utf-8") as f:
+# スクリプト (calibration.py) が置かれているディレクトリの絶対パス
+# 例: D:\Users\onisi\Documents\AI\llama-prompt-generator\src
+_CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# プロジェクトのルートディレクトリ (srcディレクトリの親)
+# 例: D:\Users\onisi\Documents\AI\llama-prompt-generator
+_PROJECT_ROOT_DIR = os.path.dirname(_CURRENT_SCRIPT_DIR)
+
+# promptディレクトリへのパス
+# 例: D:\Users\onisi\Documents\AI\llama-prompt-generator\prompt
+_PROMPT_DIR = os.path.join(_PROJECT_ROOT_DIR, 'prompt')
+
+# 各プロンプトファイルへの絶対パス
+_ERROR_ANALYSIS_PROMPT_PATH = os.path.join(_PROMPT_DIR, 'error_analysis_classification.prompt')
+_STEP_PROMPT_PATH = os.path.join(_PROMPT_DIR, 'step_prompt_classification.prompt')
+_PROMPT_GUIDE_SHORT_PATH = os.path.join(_PROMPT_DIR, 'prompt_guide_short.prompt')
+
+with open(_ERROR_ANALYSIS_PROMPT_PATH, encoding="utf-8") as f:
     error_analysis_prompt = f.read()
-with open('prompt/step_prompt_classification.prompt', encoding="utf-8") as f:
+with open(_STEP_PROMPT_PATH, encoding="utf-8") as f:
     step_prompt = f.read()
-with open('prompt/prompt_guide_short.prompt', encoding="utf-8") as f:
+with open(_PROMPT_GUIDE_SHORT_PATH, encoding="utf-8") as f:
     prompt_guide_short = f.read()
 
 class CalibrationPrompt:
     def __init__(self):
-        with open('metaprompt.txt', encoding="utf-8") as f:
+        # metaprompt.txt への絶対パス (srcディレクトリ内にあると仮定)
+        _METAPROMPT_PATH = os.path.join(_CURRENT_SCRIPT_DIR, 'metaprompt.txt')
+        with open(_METAPROMPT_PATH, encoding="utf-8") as f:
             self.metaprompt = f.read()
 
         groq_api_key = os.getenv("GROQ_API_KEY")
