@@ -71,7 +71,7 @@ class CalibrationPrompt:
         completion = self.groq_client.chat.completions.create(
             model=model_id,
             messages=messages,
-            max_tokens=4096,
+            max_completion_tokens=4096,
         )
         message = completion.choices[0].message.content
         return message

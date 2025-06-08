@@ -8,21 +8,18 @@ from pathlib import Path
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 
-# Get the directory where the current script is located
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 
-# Construct the full path to the file
 # PromptGuide.md へのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
-# Open the file using the full path
 # PromptGuide.md を読み込みます
 with open(prompt_guide_path, "r", encoding="utf-8") as f:
     PromptGuide = f.read()
 
 # AWSリージョン名を取得します (現在は使用されていません)
-region_name = os.getenv("REGION_NAME")
+# region_name = os.getenv("REGION_NAME")
 
 # プロンプトガイドに基づいてプロンプトを書き換えるクラス
 class GuideBased:
@@ -44,7 +41,9 @@ class GuideBased:
         """
         lang = self.detect_lang(initial_prompt)
         # 検出された言語に応じて、プロンプトの言語指示を設定します
-        if "ch" in lang:
+        if "ja" in lang:
+            lang_prompt = "Please use Japanese for rewriting. The xml tag name is still in English."
+        elif "ch" in lang:
             lang_prompt = "Please use Chinese for rewriting. The xml tag name is still in English."
         elif "en" in lang:
             lang_prompt = "Please use English for rewriting."
@@ -132,7 +131,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         completion = self.groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
-            max_tokens=4096,
+            max_completion_tokens=4096,
             temperature=0.8,
         )
         result = completion.choices[0].message.content
@@ -146,17 +145,17 @@ If the question cannot be answered by the document, say "Cannot answer the quest
 
     def detect_lang(self, initial_prompt):
         """
-        与えられたプロンプトの言語を検出します (英語または中国語)。
+        与えられたプロンプトの言語を検出します (英語、中国語または日本語)。
 
         Args:
             initial_prompt (str): 言語を検出する対象のプロンプト。
 
         Returns:
-            str: 検出された言語コード ("ch" または "en")。エラーの場合は空文字列。
+            str: 検出された言語コード ("en", "ch" または "ja")。エラーの場合は空文字列。
         """
-        lang_example = json.dumps({"lang": "ch"})
+        lang_example = json.dumps({"lang": "ja"})
         prompt = """
-Please determine what language the document below is in? English (en) or Chinese (ch)?
+Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
 
 <document>
 {document}
@@ -176,9 +175,9 @@ Output example: {lang_example}
         ]
         # Groq APIを使用して言語検出をリクエストします
         completion = self.groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model="llama-3.1-8b-instant",
             messages=messages,
-            max_tokens=1000,
+            max_completion_tokens=1024,
             temperature=0.8,
         )
         try:
@@ -205,8 +204,8 @@ Output example: {lang_example}
                 f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>"
             )
         example = json.dumps({"Preferred": "Instruction 1"})
-        prompt = """
 # プロンプト評価のための指示テンプレート
+        prompt = """
 You are a instruction engineer. Your task is to evaluate which of the three instructions given below is better based on guide in <guide> xml tag.
 
 Instruction guide:
@@ -234,9 +233,9 @@ Use JSON format when returning results. Please only output the result in json fo
         ]
         # Groq APIを使用してプロンプト候補の評価をリクエストします
         completion = self.groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model="llama-3.1-8b-instant",
             messages=messages,
-            max_tokens=128,
+            max_completion_tokens=128,
             temperature=0.1,
         )
         final_result = None

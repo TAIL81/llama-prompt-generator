@@ -47,7 +47,7 @@ class Rater:
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
-            max_tokens=4096,
+            max_completion_tokens=4096,
             temperature=0.8,
         )
         result = completion.choices[0].message.content
@@ -107,7 +107,7 @@ Output example: {rater_example}
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
-            max_tokens=4096,
+            max_completion_tokens=4096,
             temperature=0.8,
         )
         result = None

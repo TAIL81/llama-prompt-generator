@@ -19,12 +19,12 @@ class SOEPrompt:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def run_multi_modal_prompt(self, messages, max_tokens=4000):
+    def run_multi_modal_prompt(self, messages, max_completion_tokens=4000):
         # Groqは画像入力未対応のため、テキストのみ対応
         completion = self.groq_client.chat.completions.create(
             model=self.model_id,
             messages=messages,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_completion_tokens,
         )
         # Groqのレスポンス形式に合わせて返却
         return {"content": [{"text": completion.choices[0].message.content}]}
@@ -37,7 +37,7 @@ class SOEPrompt:
         completion = self.groq_client.chat.completions.create(
             model=self.model_id,
             messages=messages,
-            max_tokens=4000,
+            max_completion_tokens=4000,
         )
         return completion.choices[0].message.content
 
@@ -53,7 +53,7 @@ class SOEPrompt:
                 ]
             }
             messages = [message]
-            response = self.run_multi_modal_prompt(messages, max_tokens=4000)
+            response = self.run_multi_modal_prompt(messages, max_completion_tokens=4000)
             image_description = response['content'][0]['text']
             print("Image description generated: {}".format(image_description))
 
