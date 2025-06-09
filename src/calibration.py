@@ -15,19 +15,15 @@ import gradio as gr
 from sklearn.metrics import confusion_matrix # 混同行列の計算に使用
 
 # スクリプト (calibration.py) が置かれているディレクトリの絶対パス
-# 例: D:\Users\onisi\Documents\AI\llama-prompt-generator\src
 _CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # プロジェクトのルートディレクトリ (srcディレクトリの親)
-# 例: D:\Users\onisi\Documents\AI\llama-prompt-generator
 _PROJECT_ROOT_DIR = os.path.dirname(_CURRENT_SCRIPT_DIR)
 
 # promptディレクトリへのパス
-# 例: D:\Users\onisi\Documents\AI\llama-prompt-generator\prompt
 _PROMPT_DIR = os.path.join(_CURRENT_SCRIPT_DIR, 'prompt')
 
 # tempディレクトリへのパス (src/temp)
-# 例: D:\Users\onisi\Documents\AI\llama-prompt-generator\src\temp
 _TEMP_DIR_PATH = os.path.join(_CURRENT_SCRIPT_DIR, 'temp')
 
 # 各プロンプトファイルへの絶対パス
