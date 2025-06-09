@@ -6,15 +6,12 @@ from dotenv import load_dotenv
 # 環境変数を読み込みます
 load_dotenv()
 
-# Get the directory where the current script is located
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 
-# Construct the full path to the file
 # ファイルへのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
-# Open the file using the full path
 # フルパスを使用してファイルを開きます
 with open(prompt_guide_path, "r", encoding="utf-8") as f:
     PromptGuide = f.read()

@@ -216,9 +216,7 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
                 label=lang_store[language].get("Choose OpenRouter Model", "Choose OpenRouter Model"),
                 choices=[
                     "microsoft/mai-ds-r1:free",
-                    "deepseek/deepseek-r1-0528:free",
                     "qwen/qwen3-235b-a22b:free",
-                    "deepseek/deepseek-chat-v3-0324:free",
                 ],
                 value="microsoft/mai-ds-r1:free",
             )
