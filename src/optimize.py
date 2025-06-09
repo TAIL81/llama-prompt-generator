@@ -85,13 +85,18 @@ class Alignment:
                 base_url=openai_base_url,
                 api_key=openai_api_key,
             )
-        except:
+            # # 追加：実際のbase_urlをコンソールに出力
+            # if self.openrouter_client:
+            #     print(f"🔍 [DEBUG] Initialized OpenRouter client with base_url: {self.openrouter_client.base_url}")
+        except Exception as e:
             # APIキーがない場合、クライアントはNoneになります
+            print(f"OpenRouter client initialization failed: {e}") # エラーログを追加
             self.openrouter_client = None
         try:
             self.groq_client = Groq(api_key=groq_api_key)
-        except:
+        except Exception as e:
             # APIキーがない場合、クライアントはNoneになります
+            print(f"Groq client initialization failed: {e}") # エラーログを追加
             self.groq_client = None
 
     def generate_groq_response(self, prompt, model_id):
@@ -103,19 +108,26 @@ class Alignment:
             model_id (str): 使用するGroqモデルのID。
 
         Returns:
-            str: Groqモデルからの応答。
+            str: Groqモデルからの応答、またはエラーメッセージ。
         """
         if not self.groq_client:
             return "GroqError: API client not initialized. Check GROQ_API_KEY."
-        completion = self.groq_client.chat.completions.create(
-            model=model_id,
-            messages=[
-                {"role": "system", "content": Groq_default_system},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        msg = completion.choices[0].message
-        return msg.content if hasattr(msg, 'content') else "Error: Content missing"
+        try:
+            completion = self.groq_client.chat.completions.create(
+                model=model_id,
+                messages=[
+                    {"role": "system", "content": Groq_default_system},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            # レスポンス構造のバリデーションを追加
+            if hasattr(completion, 'choices') and completion.choices and hasattr(completion.choices[0], 'message'):
+                 msg = completion.choices[0].message
+                 return msg.content if hasattr(msg, 'content') else "Error: Content missing in Groq response"
+            else:
+                return "Error: Invalid response structure from Groq API"
+        except Exception as e:
+            return f"Groq API Error: {str(e)}"
 
     def generate_openrouter_response(self, prompt, model_id):
         """
@@ -126,11 +138,12 @@ class Alignment:
             model_id (str): 使用するOpenRouterモデルのID。
 
         Returns:
-            str: OpenRouterモデルからの応答。
+            str: OpenRouterモデルからの応答、またはエラーメッセージ。
         """
         if not self.openrouter_client:
             return "OpenRouterError: API client not initialized. Check OPENAI_API_KEY."
         try:
+            # print(f"🔍 [DEBUG] APIリクエスト送信: model={model_id}, prompt_length={len(prompt)}")
             completion = self.openrouter_client.chat.completions.create(
                 model=model_id,
                 messages=[
@@ -138,41 +151,76 @@ class Alignment:
                     {"role": "user", "content": prompt},
                 ],
             )
-            # レスポンス構造のバリデーションを追加
-            if completion.choices and completion.choices[0].message:
-                return completion.choices[0].message.content
-            else:
-                return "Error: Received empty response from OpenRouter API"
+
+            # APIからのレスポンスが文字列型の場合、エラーとして処理します
+            if isinstance(completion, str):
+                # print(f"🔍 [DEBUG] OpenRouter API returned a string: {completion}")
+                return f"OpenRouter API Error: Received unexpected string response: {completion}"
+
+            # レスポンス構造デバッグ
+            # print(f"🔍 [DEBUG] レスポンスタイプ: {type(completion)}")
+            # print(f"🔍 [DEBUG] レスポンス属性: {dir(completion)}")
+
+            if hasattr(completion, 'choices'):
+                # print(f"🔍 [DEBUG] choices数: {len(completion.choices)}")
+                if completion.choices and len(completion.choices) > 0: # choicesが空でないことを確認
+                    first_choice = completion.choices[0]
+                    # print(f"🔍 [DEBUG] 最初のchoiceタイプ: {type(first_choice)}")
+                    # print(f"🔍 [DEBUG] 最初のchoice属性: {dir(first_choice)}")
+                    if hasattr(first_choice, 'message'):
+                        msg = first_choice.message
+                        # print(f"🔍 [DEBUG] messageタイプ: {type(msg)}")
+                        # print(f"🔍 [DEBUG] message属性: {dir(msg)}")
+                        if hasattr(msg, 'content'):
+                            return msg.content
+            # 上記のいずれの条件にも一致しない場合、エラーメッセージを返します
+            error_message = "Error: Invalid or empty response structure from OpenRouter API."
+            # print(f"🔍 [DEBUG] {error_message} Response: {completion}") # 詳細なレスポンス内容をログに出力
+            return error_message
         except Exception as e:
-            return f"API Error: {str(e)}"
+            return f"OpenRouter API Error: {str(e)}"
 
     def stream_groq_response(self, prompt, model_id, output_component):
         # TODO: Gradioの出力コンポーネントへのストリーミング出力を実装する
-        stream = self.groq_client.chat.completions.create(
-            model=model_id,
-            messages=[
-                {"role": "system", "content": Groq_default_system},
-                {"role": "user", "content": prompt},
-            ],
-            stream=True,
-        )
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                output_component.update(chunk.choices[0].delta.content, append=True)
+        if not self.groq_client:
+            output_component.update("GroqError: API client not initialized. Check GROQ_API_KEY.")
+            return
+        try:
+            stream = self.groq_client.chat.completions.create(
+                model=model_id,
+                messages=[
+                    {"role": "system", "content": Groq_default_system},
+                    {"role": "user", "content": prompt},
+                ],
+                stream=True,
+            )
+            for chunk in stream:
+                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
+                    output_component.update(chunk.choices[0].delta.content, append=True)
+        except Exception as e:
+            output_component.update(f"Groq API Error during streaming: {str(e)}")
+
 
     def stream_openrouter_response(self, prompt, model_id, output_component):
         # TODO: Gradioの出力コンポーネントへのストリーミング出力を実装する
-        stream = self.openrouter_client.chat.completions.create(
-            model=model_id,
-            messages=[
-                {"role": "system", "content": OpenRouter_default_system},
-                {"role": "user", "content": prompt},
-            ],
-            stream=True,
-        )
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                output_component.update(chunk.choices[0].delta.content, append=True)
+        if not self.openrouter_client:
+            output_component.update("OpenRouterError: API client not initialized. Check OPENAI_API_KEY.")
+            return
+        try:
+            stream = self.openrouter_client.chat.completions.create(
+                model=model_id,
+                messages=[
+                    {"role": "system", "content": OpenRouter_default_system},
+                    {"role": "user", "content": prompt},
+                ],
+                stream=True,
+            )
+            for chunk in stream:
+                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
+                    output_component.update(chunk.choices[0].delta.content, append=True)
+        except Exception as e:
+             output_component.update(f"OpenRouter API Error during streaming: {str(e)}")
+
 
     def invoke_prompt(
         self,
@@ -203,16 +251,29 @@ class Alignment:
         if len(revised_prompt_replace) == 0:
             revised_prompt_replace = revised_prompt
 
-        if self.openrouter_client is None or self.groq_client is None:
-            openai_result = "OpenRouterError: API client not initialized. Check OPENAI_API_KEY." if self.openrouter_client is None else ""
-            groq_result = "GroqError: The api_key client option must be set either by passing api_key to the client or by setting the GROQ_API_KEY environment variable"
-            return openai_result, groq_result
-        openai_result = self.generate_openrouter_response(
-            original_prompt_replace, openrouter_model_id
-        )
-        groq_result = self.generate_groq_response(
-            revised_prompt_replace, groq_model_id
-        )
+        # APIクライアントが初期化されていない場合の具体的なエラーメッセージ
+        if self.openrouter_client is None:
+            openai_result = "OpenRouterError: API client not initialized. Check OPENAI_API_KEY and OPENAI_BASE_URL."
+        else:
+            # generate_openrouter_responseからの戻り値をチェック
+            openai_result = self.generate_openrouter_response(
+                original_prompt_replace, openrouter_model_id
+            )
+            # generate_openrouter_responseがエラー文字列を返す場合があるため、ここで処理
+            if isinstance(openai_result, str) and openai_result.startswith("OpenRouter API Error:"):
+                pass # エラーメッセージをそのまま使用
+
+        if self.groq_client is None:
+            groq_result = "GroqError: API client not initialized. Check GROQ_API_KEY."
+        else:
+            # generate_groq_responseからの戻り値をチェック
+            groq_result = self.generate_groq_response(
+                revised_prompt_replace, groq_model_id
+            )
+            # generate_groq_responseがエラー文字列を返す場合があるため、ここで処理
+            if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
+                pass # エラーメッセージをそのまま使用
+
         return openai_result, groq_result
 
     def evaluate_response(self, openai_output, groq_output, eval_model_id):
@@ -232,7 +293,11 @@ class Alignment:
         revised_prompt = evaluate_response_prompt_template.format(
             _OpenAI=openai_output, _Bedrock=groq_output
         )
+        # generate_groq_responseからの戻り値をチェック
         groq_result = self.generate_groq_response(revised_prompt, eval_model_id)
+        if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
+             return f"Evaluation Error: {groq_result}" # エラーメッセージを返す
+
         # 生成された結果からフィードバックと推奨事項を抽出します
         pattern = r"<auto_feedback>(.*?)</auto_feedback>"
         feedback_match = re.findall(pattern, groq_result, re.DOTALL)
@@ -292,7 +357,11 @@ class Alignment:
         )
         if not self.groq_client:
             return "GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY."
+        # generate_groq_responseからの戻り値をチェック
         groq_result = self.generate_groq_response(revised_prompt, eval_model_id)
+        if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
+             return f"Prompt Revision Error: {groq_result}" # エラーメッセージを返す
+
         # 生成された結果から改訂プロンプトを抽出します
         pattern = r"<revised_prompt>(.*?)</revised_prompt>"
         matches = re.findall(pattern, groq_result, re.DOTALL)
