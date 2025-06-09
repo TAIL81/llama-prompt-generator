@@ -26,6 +26,10 @@ _PROJECT_ROOT_DIR = os.path.dirname(_CURRENT_SCRIPT_DIR)
 # 例: D:\Users\onisi\Documents\AI\llama-prompt-generator\prompt
 _PROMPT_DIR = os.path.join(_CURRENT_SCRIPT_DIR, 'prompt')
 
+# tempディレクトリへのパス (src/temp)
+# 例: D:\Users\onisi\Documents\AI\llama-prompt-generator\src\temp
+_TEMP_DIR_PATH = os.path.join(_CURRENT_SCRIPT_DIR, 'temp')
+
 # 各プロンプトファイルへの絶対パス
 _ERROR_ANALYSIS_PROMPT_PATH = os.path.join(_PROMPT_DIR, 'error_analysis_classification.prompt')
 _STEP_PROMPT_PATH = os.path.join(_PROMPT_DIR, 'step_prompt_classification.prompt')
@@ -46,6 +50,8 @@ class CalibrationPrompt:
             self.metaprompt = f.read()
         # Groq APIキーを環境変数から取得し、クライアントを初期化します
         groq_api_key = os.getenv("GROQ_API_KEY")
+        # tempディレクトリを作成 (存在しない場合のみ)
+        os.makedirs(_TEMP_DIR_PATH, exist_ok=True)
         self.groq_client = Groq(api_key=groq_api_key)
     def invoke_model(self, prompt, model='scout'):
         """
@@ -116,8 +122,9 @@ class CalibrationPrompt:
             return dataset
         timestr = time.strftime("%Y%m%d-%H%M%S")
         # 結果を一時ファイルに保存し、Gradioのダウンロードボタンを返します
-        dataset.to_csv(f'temp/predict_{timestr}.csv', index=None)
-        return gr.DownloadButton(label=f'Download predict result (predict_{timestr}.csv)',value=pathlib.Path(f'temp/predict_{timestr}.csv'),visible=True)
+        temp_file_path = os.path.join(_TEMP_DIR_PATH, f'predict_{timestr}.csv')
+        dataset.to_csv(temp_file_path, index=None)
+        return gr.DownloadButton(label=f'Download predict result (predict_{timestr}.csv)',value=pathlib.Path(temp_file_path),visible=True)
 
     def optimize(self, task_description, prompt, dataset, postprocess_code, step_num=3):
         """
@@ -174,7 +181,8 @@ class CalibrationPrompt:
         cur_dataset = self.get_output(cur_prompt, dataset, postprocess_code, return_df=True)
         score = self.eval_score(cur_dataset)
         timestr = time.strftime("%Y%m%d-%H%M%S")
-        cur_dataset.to_csv(f'temp/predict_{timestr}.csv', index=None)
+        temp_file_path = os.path.join(_TEMP_DIR_PATH, f'predict_{timestr}.csv')
+        cur_dataset.to_csv(temp_file_path, index=None)
         return {
             'cur_prompt': cur_prompt,
             'score': score,
