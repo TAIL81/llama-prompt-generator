@@ -18,9 +18,6 @@ prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 with open(prompt_guide_path, "r", encoding="utf-8") as f:
     PromptGuide = f.read()
 
-# AWSリージョン名を取得します (現在は使用されていません)
-# region_name = os.getenv("REGION_NAME")
-
 # プロンプトガイドに基づいてプロンプトを書き換えるクラス
 class GuideBased:
     def __init__(self):

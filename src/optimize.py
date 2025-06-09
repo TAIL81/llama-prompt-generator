@@ -85,9 +85,6 @@ class Alignment:
                 base_url=openai_base_url,
                 api_key=openai_api_key,
             )
-            # # 追加：実際のbase_urlをコンソールに出力
-            # if self.openrouter_client:
-            #     print(f"🔍 [DEBUG] Initialized OpenRouter client with base_url: {self.openrouter_client.base_url}")
         except Exception as e:
             # APIキーがない場合、クライアントはNoneになります
             print(f"OpenRouter client initialization failed: {e}") # エラーログを追加
@@ -143,7 +140,6 @@ class Alignment:
         if not self.openrouter_client:
             return "OpenRouterError: API client not initialized. Check OPENAI_API_KEY."
         try:
-            # print(f"🔍 [DEBUG] APIリクエスト送信: model={model_id}, prompt_length={len(prompt)}")
             completion = self.openrouter_client.chat.completions.create(
                 model=model_id,
                 messages=[
@@ -151,31 +147,17 @@ class Alignment:
                     {"role": "user", "content": prompt},
                 ],
             )
-
-            # APIからのレスポンスが文字列型の場合、エラーとして処理します
             if isinstance(completion, str):
-                # print(f"🔍 [DEBUG] OpenRouter API returned a string: {completion}")
                 return f"OpenRouter API Error: Received unexpected string response: {completion}"
-
-            # レスポンス構造デバッグ
-            # print(f"🔍 [DEBUG] レスポンスタイプ: {type(completion)}")
-            # print(f"🔍 [DEBUG] レスポンス属性: {dir(completion)}")
-
             if hasattr(completion, 'choices'):
-                # print(f"🔍 [DEBUG] choices数: {len(completion.choices)}")
                 if completion.choices and len(completion.choices) > 0: # choicesが空でないことを確認
                     first_choice = completion.choices[0]
-                    # print(f"🔍 [DEBUG] 最初のchoiceタイプ: {type(first_choice)}")
-                    # print(f"🔍 [DEBUG] 最初のchoice属性: {dir(first_choice)}")
                     if hasattr(first_choice, 'message'):
                         msg = first_choice.message
-                        # print(f"🔍 [DEBUG] messageタイプ: {type(msg)}")
-                        # print(f"🔍 [DEBUG] message属性: {dir(msg)}")
                         if hasattr(msg, 'content'):
                             return msg.content
             # 上記のいずれの条件にも一致しない場合、エラーメッセージを返します
             error_message = "Error: Invalid or empty response structure from OpenRouter API."
-            # print(f"🔍 [DEBUG] {error_message} Response: {completion}") # 詳細なレスポンス内容をログに出力
             return error_message
         except Exception as e:
             return f"OpenRouter API Error: {str(e)}"
