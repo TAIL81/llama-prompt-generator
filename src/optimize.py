@@ -114,7 +114,8 @@ class Alignment:
                 {"role": "user", "content": prompt},
             ],
         )
-        return completion.choices[0].message.content
+        msg = completion.choices[0].message
+        return msg.content if hasattr(msg, 'content') else "Error: Content missing"
 
     def generate_openrouter_response(self, prompt, model_id):
         """

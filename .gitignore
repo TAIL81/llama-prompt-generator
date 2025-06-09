@@ -2,3 +2,4 @@
 .env
 __pycache__
 debug_groq.py
+debug_openrouter.py
