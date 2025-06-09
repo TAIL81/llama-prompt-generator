@@ -28,7 +28,7 @@ Here are the OpenAI response:
 
 Here are the Llama response:
 <response>
-{_Bedrock}
+{_Groq}
 </response>
 
 Please follow these steps:
@@ -55,7 +55,7 @@ Here are the OpenAI response:
 
 Here are the Llama response:
 <response>
-{_Bedrock}
+{_Groq}
 </response>
 
 Here are the human feedback:
@@ -291,7 +291,7 @@ class Alignment:
         if not self.groq_client:
             return "GroqError: API client for evaluation not initialized. Check GROQ_API_KEY."
         revised_prompt = evaluate_response_prompt_template.format(
-            _OpenAI=openai_output, _Bedrock=groq_output
+            _OpenAI=openai_output, _Groq=groq_output
         )
         # generate_groq_responseからの戻り値をチェック
         groq_result = self.generate_groq_response(revised_prompt, eval_model_id)
@@ -320,11 +320,10 @@ class Alignment:
         Returns:
             str: 置換後のプロンプト。
         """
-        # Split the key-value string by ';' to get individual pairs
         kv_pairs = kv_string.split(";")
         for pair in kv_pairs:
             if ":" in pair:
-                key, value = pair.split(":", 1)  # Only split on the first ':'
+                key, value = pair.split(":", 1)
                 # プロンプト内の {key} 形式のプレースホルダを value で置換します
                 user_prompt = user_prompt.replace(f"{{{key}}}", value)
         return user_prompt
@@ -353,7 +352,7 @@ class Alignment:
             _feedback=feedback,
             _prompt=prompt,
             _OpenAI=openai_response,
-            _Bedrock=groq_response,
+            _Groq=groq_response,
         )
         if not self.groq_client:
             return "GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY."

@@ -131,7 +131,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         completion = self.groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
-            max_completion_tokens=4096,
+            max_completion_tokens=8192,
             temperature=0.8,
         )
         result = completion.choices[0].message.content
@@ -179,7 +179,7 @@ Output example: {lang_example}
         completion = self.groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=messages,
-            max_completion_tokens=128,
+            max_completion_tokens=8192,
             temperature=0.1,
         )
         # LLMからの応答をデバッグ出力
@@ -239,7 +239,7 @@ Use JSON format when returning results. Please only output the result in json fo
         completion = self.groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
-            max_completion_tokens=128,
+            max_completion_tokens=8192,
             temperature=0.1,
         )
         # LLMからの応答をデバッグ出力

@@ -110,7 +110,7 @@ Please only output the rewrite result.
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
-            max_completion_tokens=1000,
+            max_completion_tokens=8192,
             temperature=0.8,
         )
         result = completion.choices[0].message.content
@@ -170,7 +170,7 @@ Please only output the rewrite result.
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
-            max_completion_tokens=1000,
+            max_completion_tokens=8192,
             temperature=0.8,
         )
         result = completion.choices[0].message.content

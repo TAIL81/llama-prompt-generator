@@ -57,7 +57,7 @@ class MetaPrompt:
         completion = self.groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
-            max_completion_tokens=4096,
+            max_completion_tokens=8192,
             temperature=0.0,
         )
         message = completion.choices[0].message.content
