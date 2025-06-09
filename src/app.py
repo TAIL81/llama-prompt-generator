@@ -225,10 +225,10 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             groq_model_dropdown = gr.Dropdown(
                 label=lang_store[language].get("Choose Groq Model", "Choose Groq Model"),
                 choices=[
-                    "meta-llama/llama-4-scout-17b-16e-instruct",
-                    "llama-3.3-70b-versatile",
+                    "compound-beta-mini",
+                    "compound-beta",
                 ],
-                value="meta-llama/llama-4-scout-17b-16e-instruct",
+                value="compound-beta-mini",
             )
 
             invoke_button = gr.Button(lang_store[language]["Execute prompt"])

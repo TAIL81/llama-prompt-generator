@@ -130,14 +130,21 @@ class Alignment:
         """
         if not self.openrouter_client:
             return "OpenRouterError: API client not initialized. Check OPENAI_API_KEY."
-        completion = self.openrouter_client.chat.completions.create(
-            model=model_id,
-            messages=[
-                {"role": "system", "content": OpenRouter_default_system},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        return completion.choices[0].message.content
+        try:
+            completion = self.openrouter_client.chat.completions.create(
+                model=model_id,
+                messages=[
+                    {"role": "system", "content": OpenRouter_default_system},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            # レスポンス構造のバリデーションを追加
+            if completion.choices and completion.choices[0].message:
+                return completion.choices[0].message.content
+            else:
+                return "Error: Received empty response from OpenRouter API"
+        except Exception as e:
+            return f"API Error: {str(e)}"
 
     def stream_groq_response(self, prompt, model_id, output_component):
         # TODO: Gradioの出力コンポーネントへのストリーミング出力を実装する
