@@ -133,7 +133,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         )
         result = completion.choices[0].message.content
         # LLMからの応答をデバッグ出力
-        print(f"DEBUG: __call__ LLM response: {result}")
+        # print(f"DEBUG: __call__ LLM response: {result}")
         # 結果から不要なXMLタグを除去します
         if result.startswith("<instruction>"):
             result = result[13:]
@@ -180,7 +180,7 @@ Output example: {lang_example}
             temperature=0.0,
         )
         # LLMからの応答をデバッグ出力
-        print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
+        # print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
         try:
             # 結果のJSONをパースして言語コードを取得します
             lang = json.loads(completion.choices[0].message.content)["lang"]
@@ -240,7 +240,7 @@ Use JSON format when returning results. Please only output the result in json fo
             temperature=0.0,
         )
         # LLMからの応答をデバッグ出力
-        print(f"DEBUG: judge LLM response (raw): {completion.choices[0].message.content}")
+        # print(f"DEBUG: judge LLM response (raw): {completion.choices[0].message.content}")
         final_result = None
         try:
             result = json.loads(completion.choices[0].message.content)
