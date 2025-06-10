@@ -101,7 +101,7 @@ Output example: {rater_example}
                     rater_example=rater_example,
                 ),
             },
-            {"role": "assistant", "content": "{"},
+            # {"role": "assistant", "content": "{"},
         ]
         # Groq APIを呼び出して評価を実行します
         completion = groq_client.chat.completions.create(
