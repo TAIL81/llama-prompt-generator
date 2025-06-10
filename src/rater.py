@@ -48,7 +48,7 @@ class Rater:
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_completion_tokens=8192,
-            temperature=0.8,
+            temperature=0.0,
         )
         result = completion.choices[0].message.content
         return result
@@ -108,7 +108,7 @@ Output example: {rater_example}
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_completion_tokens=8192,
-            temperature=0.8,
+            temperature=0.0,
         )
         result = None
         try:

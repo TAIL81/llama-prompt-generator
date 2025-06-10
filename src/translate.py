@@ -177,7 +177,7 @@ Output example: {lang_example}
             model="llama-3.1-8b-instant",
             messages=messages,
             max_completion_tokens=8192,
-            temperature=0.1,
+            temperature=0.0,
         )
         # LLMからの応答をデバッグ出力
         print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
@@ -237,7 +237,7 @@ Use JSON format when returning results. Please only output the result in json fo
             model="llama-3.3-70b-versatile",
             messages=messages,
             max_completion_tokens=8192,
-            temperature=0.1,
+            temperature=0.0,
         )
         # LLMからの応答をデバッグ出力
         print(f"DEBUG: judge LLM response (raw): {completion.choices[0].message.content}")

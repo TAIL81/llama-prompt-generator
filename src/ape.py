@@ -101,17 +101,14 @@ Please only output the rewrite result.
             {
                 "role": "user",
                 "content": prompt.format(guide=PromptGuide, initial=initial_prompt),
-            }  # ,{
-            #   "role": "assistant",
-            #   "content": "{"
-            # }
+            }
         ]
         # Groq APIを使用してプロンプトの書き換えをリクエストします
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_completion_tokens=8192,
-            temperature=0.8,
+            temperature=0.0,
         )
         result = completion.choices[0].message.content
         # 結果から不要なXMLタグを除去します
@@ -161,17 +158,14 @@ Please only output the rewrite result.
                 "content": prompt.format(
                     guide=PromptGuide, initial=initial_prompt, demo=example
                 ),
-            }  # ,{
-            #   "role": "assistant",
-            #   "content": "{"
-            # }
+            }
         ]
         # Groq APIを使用して追加のプロンプト候補を生成します
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_completion_tokens=8192,
-            temperature=0.8,
+            temperature=0.0,
         )
         result = completion.choices[0].message.content
         # 結果から不要なXMLタグを除去します

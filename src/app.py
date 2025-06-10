@@ -12,8 +12,6 @@ from optimize import Alignment
 from translate import GuideBased
 from application.soe_prompt import SOEPrompt
 
-
-
 # 各コンポーネントを初期化します
 ape = APE()
 rewrite = GuideBased()
@@ -30,7 +28,6 @@ language = os.getenv("LANGUAGE", "ja")
 translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
 with open(translations_path, 'r', encoding='utf-8') as f:
     lang_store = json.load(f)
-
 
 def generate_prompt(original_prompt, level):
     """
@@ -76,6 +73,9 @@ def generate_prompt(original_prompt, level):
         return textboxes
 
 def ape_prompt(original_prompt, user_data):
+    print("DEBUG: ape_prompt function was called!") # デバッグメッセージを追加
+    print(f"DEBUG: original_prompt = {original_prompt}")
+    print(f"DEBUG: user_data = {user_data}")
     """
     APE (Automatic Prompt Engineering) を使用してプロンプトを生成します。
 
@@ -215,10 +215,10 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             openrouter_model_dropdown = gr.Dropdown(
                 label=lang_store[language].get("Choose OpenRouter Model", "Choose OpenRouter Model"),
                 choices=[
-                    "microsoft/mai-ds-r1:free",
-                    "qwen/qwen3-235b-a22b:free",
+                    "deepseek/deepseek-chat-v3-0324:free",
+                    "nvidia/llama-3.1-nemotron-ultra-253b-v1:free",
                 ],
-                value="microsoft/mai-ds-r1:free",
+                value="deepseek/deepseek-chat-v3-0324:free",
             )
             groq_model_dropdown = gr.Dropdown(
                 label=lang_store[language].get("Choose Groq Model", "Choose Groq Model"),
@@ -268,10 +268,10 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             eval_model_dropdown = gr.Dropdown(
                 label=lang_store[language]["Choose the Evaluation Model"],
                 choices=[
-                    "meta-llama/llama-4-maverick-17b-128e-instruct",
                     "meta-llama/llama-4-scout-17b-16e-instruct",
+                    "meta-llama/llama-4-maverick-17b-128e-instruct",
                 ],
-                value="meta-llama/llama-4-maverick-17b-128e-instruct",
+                value="meta-llama/llama-4-scout-17b-16e-instruct",
             )
             # 自動評価ボタン            
             evaluate_button = gr.Button(lang_store[language]["Auto-evaluate the Prompt Effect"])
