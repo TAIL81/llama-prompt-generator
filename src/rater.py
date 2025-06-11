@@ -40,6 +40,7 @@ class Rater:
         # 評価を実行
         rate = self.rater(initial_prompt, candidates)
         return rate
+    print(f"DEBUG: __call__ LLM response: {result}")
 
     def get_output(self, prompt):
         """指定されたプロンプトでGroqモデルを実行し、出力を取得します。"""
@@ -52,6 +53,7 @@ class Rater:
         )
         result = completion.choices[0].message.content
         return result
+    print(f"DEBUG: get_output LLM response: {result}")
 
     def rater(self, initial_prompt, candidates):
         """
@@ -127,3 +129,4 @@ Output example: {rater_example}
             import random
             result = random.randint(0, len(candidates) - 1)
         return result
+    print(f"DEBUG: rater LLM response: {result}")
