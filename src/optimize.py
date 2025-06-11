@@ -2,6 +2,7 @@ import json
 import os
 import re
 
+import gradio as gr # Gradioをインポート
 from openai import OpenAI
 from groq import Groq
 from dotenv import load_dotenv
@@ -79,8 +80,10 @@ groq_api_key = os.getenv("GROQ_API_KEY")
 
 # プロンプトの最適化と評価を行うクラス
 class Alignment:
-    def __init__(self):
+    def __init__(self, lang_store=None, language='en'):
         try:
+            self.lang_store = lang_store
+            self.language = language
             self.openrouter_client = OpenAI(
                 base_url=openai_base_url,
                 api_key=openai_api_key,
@@ -95,6 +98,12 @@ class Alignment:
             # APIキーがない場合、クライアントはNoneになります
             print(f"Groq client initialization failed: {e}") # エラーログを追加
             self.groq_client = None
+
+    def _get_translation(self, key, default_text):
+        """翻訳を取得するヘルパーメソッド"""
+        if self.lang_store and self.language in self.lang_store:
+            return self.lang_store[self.language].get(key, default_text)
+        return default_text
 
     def generate_groq_response(self, prompt, model_id):
         """
@@ -210,6 +219,7 @@ class Alignment:
         revised_prompt_replace,
         original_prompt,
         revised_prompt,
+        model_provider_choice, # ラジオボタンからの選択値 ("OpenRouter" or "Groq")
         openrouter_model_id,
         groq_model_id,
     ):
@@ -220,6 +230,7 @@ class Alignment:
             original_prompt_replace (str): 変数が置換された元のプロンプト。
             revised_prompt_replace (str): 変数が置換された改訂プロンプト。
             original_prompt (str): 元のプロンプト（置換前）。
+            revised_prompt (str): 改訂プロンプト（置換前）。
             revised_prompt (str): 改訂プロンプト（置換前）。
             openrouter_model_id (str): OpenRouterで使用するモデルID。
             groq_model_id (str): Groqで使用するモデルID。
@@ -233,30 +244,60 @@ class Alignment:
         if len(revised_prompt_replace) == 0:
             revised_prompt_replace = revised_prompt
 
-        # APIクライアントが初期化されていない場合の具体的なエラーメッセージ
-        if self.openrouter_client is None:
-            openai_result = "OpenRouterError: API client not initialized. Check OPENAI_API_KEY and OPENAI_BASE_URL."
-        else:
-            # generate_openrouter_responseからの戻り値をチェック
-            openai_result = self.generate_openrouter_response(
+        output1_result = ""
+        output2_result = ""
+
+        processing_message = self._get_translation("Processing...", "Processing...")
+
+        if model_provider_choice == "OpenRouter":
+            if self.openrouter_client is None:
+                error_msg = "OpenRouterError: API client not initialized. Check OPENAI_API_KEY and OPENAI_BASE_URL."
+                yield gr.update(value=error_msg), gr.update(value=error_msg)
+                return
+
+            output1_result = self.generate_openrouter_response(
                 original_prompt_replace, openrouter_model_id
             )
-            # generate_openrouter_responseがエラー文字列を返す場合があるため、ここで処理
-            if isinstance(openai_result, str) and openai_result.startswith("OpenRouter API Error:"):
-                pass # エラーメッセージをそのまま使用
+            # 1つ目の結果をyieldし、2つ目は処理中と表示
+            yield gr.update(value=output1_result), gr.update(value=processing_message)
 
-        if self.groq_client is None:
-            groq_result = "GroqError: API client not initialized. Check GROQ_API_KEY."
-        else:
-            # generate_groq_responseからの戻り値をチェック
-            groq_result = self.generate_groq_response(
-                revised_prompt_replace, groq_model_id
+            # 1つ目のAPI呼び出しでエラーが発生した場合
+            if isinstance(output1_result, str) and (output1_result.startswith("OpenRouterError:") or output1_result.startswith("Error:")):
+                yield gr.update(value=output1_result), gr.update(value=output1_result) # エラーを両方に表示
+                return
+
+            output2_result = self.generate_openrouter_response(
+                revised_prompt_replace, openrouter_model_id # 同じOpenRouterモデルを使用
             )
-            # generate_groq_responseがエラー文字列を返す場合があるため、ここで処理
-            if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
-                pass # エラーメッセージをそのまま使用
+            # 両方の結果をyield
+            yield gr.update(value=output1_result), gr.update(value=output2_result)
 
-        return openai_result, groq_result
+        elif model_provider_choice == "Groq":
+            if self.groq_client is None:
+                error_msg = "GroqError: API client not initialized. Check GROQ_API_KEY."
+                yield gr.update(value=error_msg), gr.update(value=error_msg)
+                return
+
+            output1_result = self.generate_groq_response(
+                original_prompt_replace, groq_model_id
+            )
+            # 1つ目の結果をyieldし、2つ目は処理中と表示
+            yield gr.update(value=output1_result), gr.update(value=processing_message)
+
+            # 1つ目のAPI呼び出しでエラーが発生した場合
+            if isinstance(output1_result, str) and (output1_result.startswith("GroqError:") or output1_result.startswith("Error:")):
+                yield gr.update(value=output1_result), gr.update(value=output1_result)
+                return
+
+            output2_result = self.generate_groq_response(
+                revised_prompt_replace, groq_model_id # 同じGroqモデルを使用
+            )
+            # 両方の結果をyield
+            yield gr.update(value=output1_result), gr.update(value=output2_result)
+
+        else:
+            error_msg = "Error: Invalid model provider selected."
+            yield gr.update(value=error_msg), gr.update(value=error_msg)
 
     def evaluate_response(self, openai_output, groq_output, eval_model_id):
         """

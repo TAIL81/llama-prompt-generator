@@ -13,16 +13,22 @@ from translate import GuideBased
 from application.soe_prompt import SOEPrompt
 
 # 各コンポーネントを初期化します
-ape = APE()
-rewrite = GuideBased()
-alignment = Alignment()
-metaprompt = MetaPrompt()
-soeprompt = SOEPrompt()
-calibration = CalibrationPrompt()
 # 環境変数を読み込みます
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 language = os.getenv("LANGUAGE", "ja")
+
+# JSONファイルから翻訳を読み込みます
+translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
+with open(translations_path, 'r', encoding='utf-8') as f:
+    lang_store = json.load(f)
+
+ape = APE()
+rewrite = GuideBased()
+alignment = Alignment(lang_store=lang_store, language=language) # lang_storeとlanguageを渡す
+metaprompt = MetaPrompt()
+soeprompt = SOEPrompt()
+calibration = CalibrationPrompt()
 
 # JSONファイルから翻訳を読み込みます
 translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
@@ -212,11 +218,17 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
 
         # モデル選択と実行ボタンの定義
         with gr.Row():
+            model_provider_radio = gr.Radio(
+                choices=["OpenRouter", "Groq"],
+                label=lang_store[language].get("Choose Model Provider for Comparison", "Choose Model Provider for Comparison"),
+                value="OpenRouter", # デフォルト値
+                interactive=True
+            )
             openrouter_model_dropdown = gr.Dropdown(
                 label=lang_store[language].get("Choose OpenRouter Model", "Choose OpenRouter Model"),
                 choices=[
                     "deepseek/deepseek-chat-v3-0324:free",
-                    "nvidia/llama-3.1-nemotron-ultra-253b-v1:free",
+                    "deepseek/deepseek-r1-0528:free",
                 ],
                 value="deepseek/deepseek-chat-v3-0324:free",
             )
@@ -233,29 +245,56 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
 
         # モデル実行結果表示エリア
         with gr.Row():
+            # ラジオボタンのデフォルト値に基づいて初期ラベルを設定
+            # model_provider_radio はこの時点で value を持っています。
+            default_provider = model_provider_radio.value
+            initial_label_original_key = "Original Prompt Output by {provider}"
+            initial_label_eval_key = "Evaluation Prompt Output by {provider}"
+
             openrouter_output = gr.Textbox(
-                label=lang_store[language].get("OpenRouter Output", "OpenRouter Output"), lines=3, interactive=False, show_copy_button=True
+                label=lang_store[language].get(initial_label_original_key, "Output for Original Prompt ({provider})").format(provider=default_provider),
+                lines=3,
+                interactive=False,
+                show_copy_button=True
             )
             groq_output = gr.Textbox(
-                label=lang_store[language].get("Groq Output", "Groq Output"),
+                label=lang_store[language].get(initial_label_eval_key, "Output for Evaluation Prompt ({provider})").format(provider=default_provider),
                 lines=3,
                 interactive=False,
                 show_copy_button=True,
             )
 
-            # プロンプト実行イベント
-            invoke_button.click(
-                alignment.invoke_prompt,
-                inputs=[
-                    user_prompt_original_replaced,
-                    user_prompt_eval_replaced,
-                    user_prompt_original,
-                    user_prompt_eval,
-                    openrouter_model_dropdown,
-                    groq_model_dropdown,
-                ],
-                outputs=[openrouter_output, groq_output],
-            )
+        # ラジオボタン変更時に出力ラベルを更新する関数
+        def update_output_labels(provider_choice):
+            # language と lang_store はこの関数のスコープからアクセス可能です
+            label_original_key = "Original Prompt Output by {provider}"
+            label_eval_key = "Evaluation Prompt Output by {provider}"
+
+            new_label_original = lang_store[language].get(label_original_key, "Output for Original Prompt ({provider})").format(provider=provider_choice)
+            new_label_eval = lang_store[language].get(label_eval_key, "Output for Evaluation Prompt ({provider})").format(provider=provider_choice)
+
+            return gr.update(label=new_label_original), gr.update(label=new_label_eval)
+
+        model_provider_radio.change(
+            update_output_labels,
+            inputs=[model_provider_radio],
+            outputs=[openrouter_output, groq_output]
+        )
+
+        # プロンプト実行イベント
+        invoke_button.click(
+            alignment.invoke_prompt,
+            inputs=[
+                user_prompt_original_replaced,
+                user_prompt_eval_replaced,
+                user_prompt_original,
+                user_prompt_eval,
+                model_provider_radio,
+                openrouter_model_dropdown,
+                groq_model_dropdown,
+            ],
+            outputs=[openrouter_output, groq_output],
+        )
 
         # フィードバックと評価、改善プロンプト生成エリア
         with gr.Row():
