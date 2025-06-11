@@ -122,7 +122,6 @@ If the question cannot be answered by the document, say "Cannot answer the quest
                     guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt
                 ),
             },
-            {"role": "assistant", "content": "<rerwited>"},
         ]
         # Groq APIを使用してプロンプトの書き換えをリクエストします
         completion = self.groq_client.chat.completions.create(
@@ -133,7 +132,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         )
         result = completion.choices[0].message.content
         # LLMからの応答をデバッグ出力
-        # print(f"DEBUG: __call__ LLM response: {result}")
+        print(f"DEBUG: __call__ LLM response: {result}")
         # 結果から不要なXMLタグを除去します
         if result.startswith("<instruction>"):
             result = result[13:]
@@ -170,7 +169,6 @@ Output example: {lang_example}
                     document=initial_prompt, lang_example=lang_example
                 ),
             },
-            # {"role": "assistant", "content": "{"},
         ]
         # Groq APIを使用して言語検出をリクエストします
         completion = self.groq_client.chat.completions.create(
@@ -180,7 +178,7 @@ Output example: {lang_example}
             temperature=0.0,
         )
         # LLMからの応答をデバッグ出力
-        # print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
+        print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
         try:
             # 結果のJSONをパースして言語コードを取得します
             lang = json.loads(completion.choices[0].message.content)["lang"]
@@ -230,7 +228,6 @@ Use JSON format when returning results. Please only output the result in json fo
                     example=example,
                 ),
             },
-            # {"role": "assistant", "content": "{"},
         ]
         # Groq APIを使用してプロンプト候補の評価をリクエストします
         completion = self.groq_client.chat.completions.create(
@@ -240,7 +237,7 @@ Use JSON format when returning results. Please only output the result in json fo
             temperature=0.0,
         )
         # LLMからの応答をデバッグ出力
-        # print(f"DEBUG: judge LLM response (raw): {completion.choices[0].message.content}")
+        print(f"DEBUG: judge LLM response (raw): {completion.choices[0].message.content}")
         final_result = None
         try:
             result = json.loads(completion.choices[0].message.content)
