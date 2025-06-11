@@ -39,8 +39,8 @@ class Rater:
             initial_prompt = initial_prompt.replace(k, v)
         # 評価を実行
         rate = self.rater(initial_prompt, candidates)
+        print(f"DEBUG: Rater.__call__ return: {rate}")
         return rate
-    print(f"DEBUG: __call__ LLM response: {result}")
 
     def get_output(self, prompt):
         """指定されたプロンプトでGroqモデルを実行し、出力を取得します。"""
@@ -52,8 +52,8 @@ class Rater:
             temperature=0.0,
         )
         result = completion.choices[0].message.content
+        print(f"DEBUG: Rater.get_output return: {result}")
         return result
-    print(f"DEBUG: get_output LLM response: {result}")
 
     def rater(self, initial_prompt, candidates):
         """
@@ -125,8 +125,9 @@ Output example: {rater_example}
             # TODO: エラーハンドリングをより詳細に行うべき
             import random
             result = random.randint(0, len(candidates) - 1)
+            print(f"DEBUG: Rater.rater (exception) return: {result}")
         if result is None:
             import random
             result = random.randint(0, len(candidates) - 1)
+            print(f"DEBUG: Rater.rater (result is None) return: {result}")
         return result
-    print(f"DEBUG: rater LLM response: {result}")

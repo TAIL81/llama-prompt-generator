@@ -66,8 +66,8 @@ class APE:
             candidates = [candidates[best_candidate]] + [{"prompt": more_candidate}]
             # 再度評価し、最良のものを選択します
             best_candidate = self.rater(initial_prompt, candidates, demo_data)
+        print(f"DEBUG: APE.__call__ return: {candidates[best_candidate]}")
         return candidates[best_candidate]
-    print(f"DEBUG: __call__ LLM response: {candidates[best_candidate]}")
 
     def rewrite(self, initial_prompt):
         """
@@ -118,8 +118,8 @@ Please only output the rewrite result.
         if result.endswith("</instruction>"):
             result = result[:-14]
         result = result.strip()
+        print(f"DEBUG: APE.rewrite return: {result}")
         return result
-    print(f"DEBUG: rewrite LLM response: {result}")
 
     def generate_more(self, initial_prompt, example):
         """
@@ -176,5 +176,5 @@ Please only output the rewrite result.
         if result.endswith("</instruction>"):
             result = result[:-14]
         result = result.strip()
+        print(f"DEBUG: APE.generate_more return: {result}")
         return result
-    print(f"DEBUG: generate_more LLM response: {result}")
