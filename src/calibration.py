@@ -170,7 +170,7 @@ class CalibrationPrompt:
         }
         prompt_input["labels"] = json.dumps([str(label) for label in list(dataset['label'].unique())])
         # 新しいプロンプトを提案するモデルを呼び出します
-        prompt_suggestion = self.invoke_model(step_prompt.format(**prompt_input), model='sonnet')
+        prompt_suggestion = self.invoke_model(step_prompt.format(**prompt_input), model='scout')
         pattern = r"<new_prompt>(.*?)</new_prompt>"
         cur_prompt = re.findall(pattern, prompt_suggestion, re.DOTALL)[0]
         # 新しいプロンプトで出力を取得
