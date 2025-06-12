@@ -119,18 +119,22 @@ class MetaPrompt:
         Returns:
             str: 抽出されたプロンプト指示。
         """
-        # <Instructions> タグ内のコンテンツを取得します
-        between_tags = self.extract_between_tags("Instructions", metaprompt_response)[0]
-        # 最初の1000文字と、それ以降の空タグを削除した部分を結合します
-        # これは、応答が長すぎる場合に主要な部分を保持しつつ、不要な空タグをクリーンアップするためです。
-        # TODO: このロジックは応答形式に依存するため、より堅牢な抽出方法を検討する余地があります。
+        # <Instructions> タグ内のコンテンツを取得し、前後の空白を削除します。
+        # main.py の extract_prompt 関数のロジックを参考にしています。
+        instructions_list = self.extract_between_tags("Instructions", metaprompt_response, strip=True)
 
-        return (
-            between_tags[:1000]
-            + self.remove_empty_tags(
-                self.remove_empty_tags(between_tags[1000:]).strip()
-            ).strip()
-        )
+        if instructions_list and instructions_list[0]:
+            # 抽出されたコンテンツが空でなければ、それを返します。
+            # 1000文字の制限や remove_empty_tags の呼び出しは不要になります。
+            return instructions_list[0].strip()
+
+        # タグが見つからないか、内容が空の場合の処理。
+        # main.py では logger.warning を使用していますが、
+        # このクラスのコンテキストでは、呼び出し元で処理することを期待して
+        # 空文字列を返すか、あるいは必要に応じてprint文で警告を出します。
+        # print("警告: API応答から<Instructions>タグが見つからないか、内容が空です。") # 必要に応じてログ出力や例外処理を検討
+        return ""
+        # 元の複雑なロジックは削除:
 
     def extract_variables(self, prompt):
         """
