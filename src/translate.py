@@ -132,7 +132,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         )
         result = completion.choices[0].message.content
         # LLMからの応答をデバッグ出力
-        print(f"DEBUG: __call__ LLM response: {result}")
+        print(f"DEBUG: __call__ LLM response: \n{result}\n")
         # 結果から不要なXMLタグを除去します
         if result.startswith("<instruction>"):
             result = result[13:]
