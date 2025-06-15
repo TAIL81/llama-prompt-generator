@@ -150,7 +150,7 @@ class Alignment:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.0,
-                max_completion_tokens =8192
+                max_tokens=8192
             )
             # レスポンス構造のバリデーションを追加
             if hasattr(completion, 'choices') and completion.choices and hasattr(completion.choices[0], 'message'):
@@ -182,7 +182,7 @@ class Alignment:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.0,
-                max_completion_tokens =8192
+                max_tokens=8192
             )
             if isinstance(completion, str):
                 return f"OpenRouter API Error: Received unexpected string response: {completion}"
@@ -213,7 +213,7 @@ class Alignment:
                 ],
                 stream=True,
                 temperature=0.0,
-                max_completion_tokens =8192
+                max_tokens=8192
             )
             for chunk in stream:
                 if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
@@ -235,7 +235,7 @@ class Alignment:
                 ],
                 stream=True,
                 temperature=0.0,
-                max_completion_tokens =8192
+                max_tokens=8192
             )
             for chunk in stream:
                 if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
