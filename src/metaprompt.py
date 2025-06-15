@@ -44,6 +44,7 @@ class MetaPrompt:
         for variable in variables:
             variable_string += "\n{$" + variable.upper() + "}"
         prompt = self.metaprompt.replace("{{TASK}}", task)
+        prompt += "Please use Japanese for rewriting. The xml tag name is still in English." # 指示文を追加
         assistant_partial = "<Inputs>"
         if variable_string:
             assistant_partial += (
