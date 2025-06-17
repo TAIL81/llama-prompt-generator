@@ -42,10 +42,10 @@ class APE:
         """
         candidates = []
         for _ in range(2):
-            candidates.append(self.rewrite(initial_prompt))
-        candidates_raw = candidates.copy()
+            candidates.append(self.rewrite(initial_prompt)) # ここでは candidates_raw ではなく直接 candidates に追加
+        # candidates_raw = candidates.copy() # この行は不要になるか、上のループ結果を raw とするか検討
         customizable_variable_list = list(demo_data.keys())
-        candidates = [
+        filtered_candidates = [ # 変数名を filtered_candidates に変更
             {"prompt": candidate}
             # カスタマイズ可能な変数がすべて含まれている候補のみをフィルタリングします
             for candidate in candidates
@@ -56,18 +56,39 @@ class APE:
                 ]
             )
         ]
+        if not filtered_candidates:
+            print("Warning: No candidates left after filtering for customizable variables. Returning initial prompt.")
+            return {"prompt": initial_prompt, "error": "No valid candidates after filtering."}
+
         # 候補プロンプトを評価し、最良のものを選択します
-        best_candidate = self.rater(initial_prompt, candidates, demo_data)
-        for _ in range(epoch):
+        best_candidate_idx = self.rater(initial_prompt, filtered_candidates, demo_data)
+
+        if best_candidate_idx is None:
+            print("Error: Rater did not return a valid candidate index. Using the first available filtered candidate.")
+            # filtered_candidates は上で空でないことをチェック済みなので、少なくとも1要素はあるはず
+            best_candidate_obj = filtered_candidates[0]
+        else:
+            best_candidate_obj = filtered_candidates[best_candidate_idx]
+
+        for i in range(epoch): # epoch の回数だけループ
             # 最良の候補を基にさらに候補を生成します
-            more_candidate = self.generate_more(
-                initial_prompt, candidates[best_candidate]["prompt"]
+            more_candidate_prompt = self.generate_more(
+                initial_prompt, best_candidate_obj["prompt"] # オブジェクトのプロンプトを使用
             )
-            candidates = [candidates[best_candidate]] + [{"prompt": more_candidate}]
+            # 新しい候補と現在の最良候補でリストを作成
+            current_rating_candidates = [best_candidate_obj, {"prompt": more_candidate_prompt}]
+
             # 再度評価し、最良のものを選択します
-            best_candidate = self.rater(initial_prompt, candidates, demo_data)
-        print(f"DEBUG: APE.__call__ return: {candidates[best_candidate]}")
-        return candidates[best_candidate]
+            rated_idx_loop = self.rater(initial_prompt, current_rating_candidates, demo_data)
+
+            if rated_idx_loop is None:
+                print(f"Warning: Rater failed in epoch {i+1}. Keeping previous best candidate.")
+                # 評価に失敗した場合は、現在の best_candidate_obj を維持
+            else:
+                best_candidate_obj = current_rating_candidates[rated_idx_loop]
+
+        print(f"DEBUG: APE.__call__ return: {best_candidate_obj}")
+        return best_candidate_obj
 
     def rewrite(self, initial_prompt):
         """

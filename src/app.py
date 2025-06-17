@@ -103,6 +103,39 @@ def ape_prompt(original_prompt, user_data):
         )
     ] + [gr.Textbox(visible=False)] * 2 # 他のタブとの互換性のための非表示テキストボックス
 
+# メタプロンプト出力に対してAPEを実行する関数
+def run_ape_on_metaprompt_output(metaprompt_template, metaprompt_variables_str):
+    """
+    メタプロンプトで生成されたテンプレートと変数文字列を元にAPEを実行します。
+
+    Args:
+        metaprompt_template (str): メタプロンプトによって生成されたプロンプトテンプレート。
+        metaprompt_variables_str (str): 改行区切りの変数名文字列 (例: "VAR1\nVAR2")。
+                                         metaprompt.py の修正により、変数名の中身のみが含まれます。
+
+    Returns:
+        tuple: (APEによって生成された新しいプロンプトテンプレート, 元の変数文字列)
+    """
+    variable_names = [var for var in metaprompt_variables_str.split("\n") if var]
+    demo_data = {}
+    for var_name in variable_names:
+        # APEはプロンプト内の {{VAR_NAME}} 形式の変数を期待し、demo_dataのキーもそれに合わせる
+        placeholder_key_for_ape = f"{{${var_name}}}" # 例: {$CUSTOMER_COMPLAINT}
+        demo_data[placeholder_key_for_ape] = f"dummy_{var_name.lower()}" # APE評価用のダミーデータ
+
+    # APEを実行 (epoch=1は固定)
+    result_dict = ape(initial_prompt=metaprompt_template, epoch=1, demo_data=demo_data)
+    return result_dict["prompt"], metaprompt_variables_str # variables_result は変更しない
+
+# メタプロンプト生成ボタンクリック時のラッパー関数
+def metaprompt_wrapper(task, variables_str):
+    """
+    metapromptを実行し、APE結果表示用のテキストボックスをクリアするための値を返すラッパー。
+    """
+    prompt, new_vars = metaprompt(task, variables_str)
+    # メタプロンプトの出力と、APE側をクリアするための空文字列を返す
+    return prompt, new_vars, "", ""
+
 # Gradioインターフェースを定義します
 with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme="soft") as demo:
     gr.Markdown(f"# {lang_store[language]['Automatic Prompt Engineering']}")
@@ -123,25 +156,55 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             lines=5,
             placeholder=lang_store[language]["CUSTOMER_COMPLAINT\nCOMPANY_NAME"],
         )
-        metaprompt_button = gr.Button(lang_store[language]["Generate Prompt"])
-        prompt_result = gr.Textbox(
-            label=lang_store[language]["Prompt Template Generated"],
-            # 生成されたプロンプトテンプレート表示用
-            lines=3,
-            show_copy_button=True,
-            interactive=False,
-        )
-        variables_result = gr.Textbox(
-            label=lang_store[language]["Variables Generated"],
-            lines=3,
-            # 生成された変数表示用
-            show_copy_button=True,
-            interactive=False,
-        )
+        with gr.Row():
+            metaprompt_button = gr.Button(lang_store[language]["Generate Prompt"], scale=1)
+            ape_on_metaprompt_button = gr.Button(lang_store[language]["APE on MetaPrompt Output"], scale=1)
+
+        with gr.Row(): # プロンプトテンプレート表示エリア
+            prompt_result_meta = gr.Textbox(
+                label=lang_store[language]["MetaPrompt Output: Prompt Template"],
+                lines=5, # 表示行数を少し増やす
+                show_copy_button=True,
+                interactive=False,
+                scale=1
+            )
+            prompt_result_ape = gr.Textbox(
+                label=lang_store[language]["APE Output: Prompt Template"],
+                lines=5, # 表示行数を少し増やす
+                show_copy_button=True,
+                interactive=False,
+                scale=1
+            )
+        with gr.Row(): # 変数表示エリア
+            variables_result_meta = gr.Textbox(
+                label=lang_store[language]["MetaPrompt Output: Variables"],
+                lines=5, # 表示行数を少し増やす
+                show_copy_button=True,
+                interactive=False,
+                scale=1
+            )
+            variables_result_ape = gr.Textbox(
+                label=lang_store[language]["APE Output: Variables"],
+                lines=5, # 表示行数を少し増やす
+                show_copy_button=True,
+                interactive=False,
+                scale=1
+            )
+
         metaprompt_button.click(
-            metaprompt,
+            metaprompt_wrapper, # ラッパー関数を使用
             inputs=[original_task, variables],
-            outputs=[prompt_result, variables_result],
+            outputs=[prompt_result_meta, variables_result_meta, prompt_result_ape, variables_result_ape],
+            # APE側の出力もクリアするために4つの出力を指定
+        )
+
+        ape_on_metaprompt_button.click(
+            run_ape_on_metaprompt_output,
+            inputs=[prompt_result_meta, variables_result_meta], # メタプロンプトの出力をAPEの入力とする
+            outputs=[prompt_result_ape, variables_result_ape]
+            # APEの結果をAPE用の表示エリアに出力
+            # run_ape_on_metaprompt_output は (ape_prompt, original_vars) を返すので、
+            # variables_result_ape には元の変数が表示される
         )
     # 「プロンプト翻訳」タブ (実際にはプロンプトの書き換え・改善機能)
     with gr.Tab(lang_store[language]["Prompt Translation"]):

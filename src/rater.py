@@ -107,7 +107,7 @@ Output example: {rater_example}
         ]
         # Groq APIを呼び出して評価を実行します
         completion = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model="llama-3.3-70b-versatile",
             messages=messages,
             max_completion_tokens=8192,
             temperature=0.0,
@@ -115,19 +115,32 @@ Output example: {rater_example}
         result = None
         try:
             # 結果のJSONをパースし、優先される応答のインデックスを取得します
-            result_json = json.loads(completion.choices[0].message.content)
-            for idx in range(len(candidates)):
-                if str(idx + 1) in result_json["Preferred"]:
-                    result = idx
-                    break
-        except:
-            # JSONパースエラーなどが発生した場合は、ランダムなインデックスを返します
-            # TODO: エラーハンドリングをより詳細に行うべき
-            import random
-            result = random.randint(0, len(candidates) - 1)
-            print(f"DEBUG: Rater.rater (exception) return: {result}")
-        if result is None:
-            import random
-            result = random.randint(0, len(candidates) - 1)
-            print(f"DEBUG: Rater.rater (result is None) return: {result}")
+            # candidates が空の場合、LLMに問い合わせる意味がないかもしれないが、現状のフローを維持
+            if candidates: # 候補がある場合のみLLMに評価を依頼
+                result_json = json.loads(completion.choices[0].message.content)
+                for idx in range(len(candidates)):
+                    if str(idx + 1) in result_json["Preferred"]:
+                        result = idx
+                        break
+            else: # 候補がない場合は評価スキップ
+                print(f"DEBUG: Rater.rater - No candidates provided for LLM rating.")
+                result = None
+            print(f"DEBUG: Rater.rater return: {result}")# テスト
+        except Exception as e: # より具体的な例外 (json.JSONDecodeError, KeyErrorなど) を捕捉する方が望ましい
+            print(f"DEBUG: Rater.rater - Error parsing LLM response or key error: {e}")
+            # result は None のまま
+
+        # LLMからの評価が得られなかった場合、またはエラーが発生した場合のフォールバック
+        if result is None: # result が None のまま (LLM評価失敗または候補なし)
+            print(f"DEBUG: Rater.rater - LLM rating failed or result is None. Falling back.")
+            if not candidates:
+                # 候補が全くない場合は、有効なインデックスは返せない
+                print(f"DEBUG: Rater.rater - No candidates to choose from in fallback. Returning None.")
+                return None # 呼び出し元で None を処理する必要がある
+            else:
+                # 候補がある場合はランダムに選択
+                import random
+                result = random.randint(0, len(candidates) - 1) # candidates は空でないことが保証されている
+                print(f"DEBUG: Rater.rater (fallback, random choice) return: {result}")
+
         return result

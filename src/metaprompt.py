@@ -142,14 +142,26 @@ class MetaPrompt:
         Returns:
             set: 抽出された変数名のセット（重複なし）。
         """
-        pattern = r"{([^}]+)}"
-        variables = re.findall(pattern, prompt)
-        return set(variables)
+        # Matches {{VAR}}, {$VAR}, and {VAR} (case-insensitive for VAR content)
+        # Extracts only the content VAR.
+        # Order of patterns matters to avoid {{VAR}} being matched by {VAR} partially.
+        patterns = [
+            r"\{\{([^{}]+?)\}\}",  # {{VAR}}
+            r"\{\$([^{}]+?)\}",   # {$VAR} (extracts VAR from {$VAR})
+            r"\{([^{}]+?)\}",    # {VAR}
+        ]
+        variables = set()
+        temp_string = prompt
+        for pattern in patterns:
+            matches = re.findall(pattern, temp_string)
+            for m_content in matches:
+                variables.add(m_content)
+            # Remove matched parts to avoid re-matching by simpler patterns
+            temp_string = re.sub(pattern, "", temp_string)
+        return variables
 
 # テスト用のコード (現在はコメントアウト)
 # test = MetaPrompt()
 # TASK = "Draft an email responding to a customer complaint" # Replace with your task!
-# # Optional: specify the input variables you want Llama to use. If you want Llama to choose, you can set `variables` to an empty list!
-
 # VARIABLES = ["CUSTOMER_COMPLAINT", "COMPANY_NAME"]
 # test(TASK, VARIABLES)

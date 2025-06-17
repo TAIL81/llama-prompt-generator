@@ -58,7 +58,12 @@
         "Groq": "Groq",
         "Original Prompt Output by {provider}": "Output for Original Prompt by {provider}",
         "Evaluation Prompt Output by {provider}": "Output for Evaluation Prompt by {provider}",
-        "Processing...": "Processing..."
+        "Processing...": "Processing...",
+        "APE on MetaPrompt Output": "Run APE on Generated Template",
+        "MetaPrompt Output: Prompt Template": "MetaPrompt Output: Prompt Template",
+        "MetaPrompt Output: Variables": "MetaPrompt Output: Variables",
+        "APE Output: Prompt Template": "APE Output: Prompt Template",
+        "APE Output: Variables": "APE Output: Variables"
     },
     "zh": {
         "Submit": "提交",
@@ -180,6 +185,11 @@
         "Groq": "Groq",
         "Original Prompt Output by {provider}": "元のプロンプトの出力 ({provider})",
         "Evaluation Prompt Output by {provider}": "評価が必要なプロンプトの出力 ({provider})",
-        "Processing...": "処理中..."
+        "Processing...": "処理中...",
+        "APE on MetaPrompt Output": "生成テンプレートでAPE実行",
+        "MetaPrompt Output: Prompt Template": "メタプロンプト出力: プロンプトテンプレート",
+        "MetaPrompt Output: Variables": "メタプロンプト出力: 変数",
+        "APE Output: Prompt Template": "APE出力: プロンプトテンプレート",
+        "APE Output: Variables": "APE出力: 変数"
     }
 }
