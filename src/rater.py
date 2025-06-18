@@ -1,5 +1,6 @@
 import json
 from groq import Groq
+import groq # Import the groq module to access specific error types
 import os
 # Groq APIキーを環境変数から取得し、クライアントを初期化します
 groq_api_key = os.getenv("GROQ_API_KEY")
@@ -45,15 +46,29 @@ class Rater:
     def get_output(self, prompt):
         """指定されたプロンプトでGroqモデルを実行し、出力を取得します。"""
         messages = [{"role": "user", "content": prompt}]
-        completion = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=messages,
-            max_completion_tokens=8192,
-            temperature=0.0,
-        )
-        result = completion.choices[0].message.content
-        print(f"DEBUG: Rater.get_output return: {result}")
-        return result
+        try:
+            completion = groq_client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=messages,
+                max_completion_tokens=8192,
+                temperature=0.0,
+            )
+            result = completion.choices[0].message.content
+            print(f"DEBUG: Rater.get_output successful, result: {result}")
+            return result
+        except groq.InternalServerError as e:
+            error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            print(f"ERROR: Rater.get_output - Groq InternalServerError: {error_message} (Details: {e})")
+            # 呼び出し元がエラーを処理できるように、エラー情報を含む文字列を返すか、例外を再送出します。
+            # ここではエラーメッセージを返します。
+            return f"Groq API Internal Server Error: {error_message}"
+        except groq.APIError as e: # InternalServerError以外のAPIエラーも捕捉
+            error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            print(f"ERROR: Rater.get_output - Groq APIError: {error_message} (Details: {e})")
+            return f"Groq API Error: {error_message}"
+        except Exception as e: # その他の予期せぬエラー
+            print(f"ERROR: Rater.get_output - Unexpected error: {e}")
+            return f"Unexpected error during Groq API call: {str(e)}"
 
     def rater(self, initial_prompt, candidates):
         """
