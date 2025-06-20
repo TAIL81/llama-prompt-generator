@@ -231,7 +231,7 @@ Please only output the rewrite result.
             if result.endswith("</instruction>"):
                 result = result[:-14]
             result = result.strip()
-            print(f"DEBUG: APE.generate_more successful, result: {result}")
+            print(f"DEBUG: APE.generate_more successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
             error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)

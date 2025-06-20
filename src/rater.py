@@ -40,7 +40,7 @@ class Rater:
             initial_prompt = initial_prompt.replace(k, v)
         # 評価を実行
         rate = self.rater(initial_prompt, candidates)
-        print(f"DEBUG: Rater.__call__ return: {rate}")
+        print(f"DEBUG: Rater.__call__ return: {rate}\n")
         return rate
 
     def get_output(self, prompt):
@@ -48,13 +48,13 @@ class Rater:
         messages = [{"role": "user", "content": prompt}]
         try:
             completion = groq_client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                model="compound-beta-mini",
                 messages=messages,
                 max_completion_tokens=8192,
-                temperature=0.1,
+                temperature=0.0,
             )
             result = completion.choices[0].message.content
-            print(f"DEBUG: Rater.get_output successful, result: {result}")
+            print(f"DEBUG: Rater.get_output successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
             error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
@@ -140,7 +140,6 @@ Output example: {rater_example}
             else: # 候補がない場合は評価スキップ
                 print(f"DEBUG: Rater.rater - No candidates provided for LLM rating.")
                 result = None
-            print(f"DEBUG: Rater.rater return: {result}")# テスト
         except Exception as e: # より具体的な例外 (json.JSONDecodeError, KeyErrorなど) を捕捉する方が望ましい
             print(f"DEBUG: Rater.rater - Error parsing LLM response or key error: {e}")
             # result は None のまま
@@ -156,6 +155,5 @@ Output example: {rater_example}
                 # 候補がある場合はランダムに選択
                 import random
                 result = random.randint(0, len(candidates) - 1) # candidates は空でないことが保証されている
-                print(f"DEBUG: Rater.rater (fallback, random choice) return: {result}")
-
+                print(f"DEBUG: Rater.rater (fallback, random choice) return: {result}\n")
         return result
