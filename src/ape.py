@@ -98,7 +98,17 @@ class APE:
                 print(f"Warning: generate_more failed in epoch {i+1}. Keeping previous best candidate.")
                 # generate_more に失敗した場合も、現在の best_candidate_obj を維持
 
-        print(f"DEBUG: APE.__call__ return: {json.dumps(best_candidate_obj, indent=2, ensure_ascii=False)}")
+        # print(f"DEBUG: APE.__call__ return: {json.dumps(best_candidate_obj, indent=2, ensure_ascii=False)}") # 元のprint文
+        print("DEBUG: APE.__call__ return:")
+        for key, value in best_candidate_obj.items():
+            print(f"  {key}:")
+            # 値が文字列の場合、改行を維持してインデント付きで表示
+            if isinstance(value, str):
+                for line in value.splitlines():
+                    print(f"    {line}")
+            else:
+                # 文字列以外の場合は、そのままインデント付きで表示
+                print(f"    {value}")
         return best_candidate_obj
 
     def rewrite(self, initial_prompt):
@@ -151,7 +161,7 @@ Please only output the rewrite result.
             if result.endswith("</instruction>"):
                 result = result[:-14]
             result = result.strip()
-            print(f"DEBUG: APE.rewrite successful, result: {result}")
+            print(f"DEBUG: APE.rewrite successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
             error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
