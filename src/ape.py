@@ -98,9 +98,8 @@ class APE:
                 print(f"Warning: generate_more failed in epoch {i+1}. Keeping previous best candidate.")
                 # generate_more に失敗した場合も、現在の best_candidate_obj を維持
 
-        print(f"DEBUG: APE.__call__ return: {best_candidate_obj}")
+        print(f"DEBUG: APE.__call__ return: {json.dumps(best_candidate_obj, indent=2, ensure_ascii=False)}")
         return best_candidate_obj
-
 
     def rewrite(self, initial_prompt):
         """
