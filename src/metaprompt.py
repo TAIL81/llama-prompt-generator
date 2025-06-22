@@ -59,7 +59,7 @@ class MetaPrompt:
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_completion_tokens=8192,
-            temperature=0.0,
+            temperature=0.1,
         )
         message = completion.choices[0].message.content
 

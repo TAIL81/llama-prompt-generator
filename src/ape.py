@@ -152,7 +152,7 @@ Please only output the rewrite result.
                 model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=messages,
                 max_completion_tokens=8192,
-                temperature=0.0,
+                temperature=0.1,
             )
             result = completion.choices[0].message.content
             # 結果から不要なXMLタグを除去します
@@ -222,7 +222,7 @@ Please only output the rewrite result.
                 model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=messages,
                 max_completion_tokens=8192,
-                temperature=0.0,
+                temperature=0.1,
             )
             result = completion.choices[0].message.content
             # 結果から不要なXMLタグを除去します

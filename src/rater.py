@@ -51,7 +51,7 @@ class Rater:
                 model="compound-beta-mini",
                 messages=messages,
                 max_completion_tokens=8192,
-                temperature=0.0,
+                temperature=0.1,
             )
             result = completion.choices[0].message.content
             print(f"DEBUG: Rater.get_output successful, result: \n{result}\n")

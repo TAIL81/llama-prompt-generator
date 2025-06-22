@@ -149,7 +149,7 @@ class Alignment:
                     {"role": "system", "content": self.groq_system_content},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.0,
+                temperature=0.1,
                 max_tokens=8192
             )
             # レスポンス構造のバリデーションを追加
@@ -181,7 +181,7 @@ class Alignment:
                     {"role": "system", "content": self.openrouter_system_content},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.0,
+                temperature=0.1,
                 max_tokens=8192
             )
             if isinstance(completion, str):
@@ -212,7 +212,7 @@ class Alignment:
                     {"role": "user", "content": prompt},
                 ],
                 stream=True,
-                temperature=0.0,
+                temperature=0.1,
                 max_tokens=8192
             )
             for chunk in stream:
@@ -234,7 +234,7 @@ class Alignment:
                     {"role": "user", "content": prompt},
                 ],
                 stream=True,
-                temperature=0.0,
+                temperature=0.1,
                 max_tokens=8192
             )
             for chunk in stream:

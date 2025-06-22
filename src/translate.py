@@ -128,7 +128,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
             max_completion_tokens=8192,
-            temperature=0.8,
+            temperature=0.3,
         )
         result = completion.choices[0].message.content
         # LLMからの応答をデバッグ出力

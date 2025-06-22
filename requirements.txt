@@ -1,6 +1,0 @@
-gradio
-fastapi
-python-dotenv
-openai                  # OpenRouter を OpenAI SDK 経由で利用する場 合
-groq                    # Groq API クライアント
-requests                # OpenRouter を HTTP 直呼びしたい場合に必要
