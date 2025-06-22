@@ -78,7 +78,7 @@ class MetaPrompt:
             )
 
         # pretty_print関数を呼び出して整形されたメッセージをコンソールに出力します
-        # pretty_print(message)
+        pretty_print(message)
 
         # 生成されたメッセージからプロンプトテンプレートと変数を抽出します
         extracted_prompt_template = self.extract_prompt(message)
