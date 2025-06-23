@@ -134,7 +134,7 @@ def metaprompt_wrapper(task, variables_str):
     """
     prompt, new_vars = metaprompt(task, variables_str)
     # メタプロンプトの出力と、APE側をクリアするための空文字列を返す
-    return prompt, new_vars, "", ""
+    return prompt, new_vars, "", "", ""
 
 # Gradioインターフェースを定義します
 with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme="soft") as demo:
@@ -155,47 +155,47 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             info=lang_store[language]["Please input your variables, one variable per line"],
             lines=5,
             placeholder=lang_store[language]["CUSTOMER_COMPLAINT\nCOMPANY_NAME"],
-        )
-        with gr.Row():
-            metaprompt_button = gr.Button(lang_store[language]["Generate Prompt"], scale=1)
-            ape_on_metaprompt_button = gr.Button(lang_store[language]["APE on MetaPrompt Output"], scale=1)
+        )        
+        with gr.Column(scale=2):
+            with gr.Row():
+                metaprompt_button = gr.Button(lang_store[language]["Generate Prompt"], scale=1)
+                ape_on_metaprompt_button = gr.Button(lang_store[language]["APE on MetaPrompt Output"], scale=1)
 
-        with gr.Row(): # プロンプトテンプレート表示エリア
-            prompt_result_meta = gr.Textbox(
-                label=lang_store[language]["MetaPrompt Output: Prompt Template"],
-                lines=5, # 表示行数を少し増やす
-                show_copy_button=True,
-                interactive=False,
-                scale=1
-            )
-            prompt_result_ape = gr.Textbox(
-                label=lang_store[language]["APE Output: Prompt Template"],
-                lines=5, # 表示行数を少し増やす
-                show_copy_button=True,
-                interactive=False,
-                scale=1
-            )
-        with gr.Row(): # 変数表示エリア
-            variables_result_meta = gr.Textbox(
-                label=lang_store[language]["MetaPrompt Output: Variables"],
-                lines=5, # 表示行数を少し増やす
-                show_copy_button=True,
-                interactive=False,
-                scale=1
-            )
-            variables_result_ape = gr.Textbox(
-                label=lang_store[language]["APE Output: Variables"],
-                lines=5, # 表示行数を少し増やす
-                show_copy_button=True,
-                interactive=False,
-                scale=1
-            )
+        with gr.Row():
+            with gr.Column(): # プロンプトテンプレート表示エリア
+                prompt_result_meta = gr.Textbox(
+                    label=lang_store[language]["MetaPrompt Output: Prompt Template"],
+                    lines=5,
+                    show_copy_button=True,
+                    interactive=False,
+                )
+                variables_result_meta = gr.Textbox(
+                    label=lang_store[language]["MetaPrompt Output: Variables"],
+                    lines=5,
+                    show_copy_button=True,
+                    interactive=False,
+                )
+            with gr.Column():
+                prompt_result_ape = gr.Textbox(
+                    label=lang_store[language]["APE Output: Prompt Template"],
+                    lines=5,
+                    show_copy_button=True,
+                    interactive=False,
+                    scale=1
+                )
+                variables_result_ape = gr.Textbox(
+                    label=lang_store[language]["APE Output: Variables"],
+                    lines=5,
+                    show_copy_button=True,
+                    interactive=False,
+                    scale=1
+                )
 
         metaprompt_button.click(
             metaprompt_wrapper, # ラッパー関数を使用
             inputs=[original_task, variables],
             outputs=[prompt_result_meta, variables_result_meta, prompt_result_ape, variables_result_ape],
-            # APE側の出力もクリアするために4つの出力を指定
+        # APE側の出力もクリアするために5つの出力を指定
         )
 
         ape_on_metaprompt_button.click(
