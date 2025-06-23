@@ -1,68 +1,72 @@
 import json
 import os
 
-import boto3
-from botocore.config import Config
+from groq import Groq
 from dotenv import load_dotenv
+from pathlib import Path
+# 環境変数を .env ファイルから読み込みます
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 
-load_dotenv()
-
-# Get the directory where the current script is located
+# 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 
-# Construct the full path to the file
+# PromptGuide.md へのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
-# Open the file using the full path
-with open(prompt_guide_path, "r") as f:
+# PromptGuide.md を読み込みます
+with open(prompt_guide_path, "r", encoding="utf-8") as f:
     PromptGuide = f.read()
 
-region_name = os.getenv("REGION_NAME")
-
-
+# プロンプトガイドに基づいてプロンプトを書き換えるクラス
 class GuideBased:
     def __init__(self):
-        session = boto3.Session()
-        retry_config = Config(
-            region_name=region_name,
-            retries={
-                "max_attempts": 5,
-                "mode": "standard",
-            },
-        )
-        service_name = "bedrock-runtime"
-        self.bedrock_client = session.client(
-            service_name=service_name, config=retry_config
-        )
+        # Groq APIキーを取得し、クライアントを初期化します
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        self.groq_client = Groq(api_key=groq_api_key)
 
     def __call__(self, initial_prompt):
+        """
+        初期プロンプトをプロンプトガイドに基づいて書き換えます。
+        言語を検出し、適切な言語で書き換えを行うよう指示します。
+
+        Args:
+            initial_prompt (str): 書き換え対象の初期プロンプト。
+
+        Returns:
+            str: 書き換えられたプロンプト。
+        """
         lang = self.detect_lang(initial_prompt)
-        if "ch" in lang:
+        # 検出された言語に応じて、プロンプトの言語指示を設定します
+        if "ja" in lang:
+            lang_prompt = "Please use Japanese for rewriting. The xml tag name is still in English."
+        elif "ch" in lang:
             lang_prompt = "Please use Chinese for rewriting. The xml tag name is still in English."
         elif "en" in lang:
             lang_prompt = "Please use English for rewriting."
         else:
             lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."
 
+        # プロンプト書き換えのための指示テンプレート
         prompt = """
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to claude to get the expected output.
+This instruction is then sent to Llama to get the expected output.
 
 <instruction_guide>
 {guide}
 </instruction_guide>
 
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to claude to get the expected output.
+This instruction is then sent to Llama to get the expected output.
 
 Here are some important rules for rewrite:
-1. Something like `{{variable}}` is customizable text that will be replaced when sent to claude. It needs to be retained in the rewrite.
+1. Something like `{{variable}}` is customizable text that will be replaced when sent to Llama. It needs to be retained in the rewrite.
 2. {lang_prompt}
 3. Only output the rewrite instruction return them in <rerwited></rerwited>XML tags
 4. If examples are already included in the initial prompt, do not remove the examples after the rewrite.
 
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to claude to get the expected output.
+This instruction is then sent to Llama to get the expected output.
 
 Example:
 <initial_instruction>
@@ -118,28 +122,18 @@ If the question cannot be answered by the document, say "Cannot answer the quest
                     guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt
                 ),
             },
-            {"role": "assistant", "content": "<rerwited>"},
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 4096,
-                "temperature": 0.8,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["</rerwited>"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        # Groq APIを使用してプロンプトの書き換えをリクエストします
+        completion = self.groq_client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=messages,
+            max_completion_tokens=8192,
+            temperature=0.3,
         )
-        modelId = "anthropic.claude-3-5-sonnet-20240620-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        result = response_body["content"][0]["text"].replace("</rewrite>", "").strip()
+        result = completion.choices[0].message.content
+        # LLMからの応答をデバッグ出力
+        print(f"DEBUG: __call__ LLM response: \n{result}\n")
+        # 結果から不要なXMLタグを除去します
         if result.startswith("<instruction>"):
             result = result[13:]
         if result.endswith("</instruction>"):
@@ -148,9 +142,18 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         return result
 
     def detect_lang(self, initial_prompt):
-        lang_example = json.dumps({"lang": "ch"})
+        """
+        与えられたプロンプトの言語を検出します (英語、中国語または日本語)。
+
+        Args:
+            initial_prompt (str): 言語を検出する対象のプロンプト。
+
+        Returns:
+            str: 検出された言語コード ("en", "ch" または "ja")。エラーの場合は空文字列。
+        """
+        lang_example = json.dumps({"lang": "ja"})
         prompt = """
-Please determine what language the document below is in? English (en) or Chinese (ch)?
+Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
 
 <document>
 {document}
@@ -166,40 +169,41 @@ Output example: {lang_example}
                     document=initial_prompt, lang_example=lang_example
                 ),
             },
-            {"role": "assistant", "content": "{"},
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 1000,
-                "temperature": 0.8,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["\n\nHuman:"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        # Groq APIを使用して言語検出をリクエストします
+        completion = self.groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=messages,
+            max_completion_tokens=8192,
+            temperature=0.0,
         )
-        modelId = "anthropic.claude-3-sonnet-20240229-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
+        # LLMからの応答をデバッグ出力
+        print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
         try:
-            lang = json.loads("{" + response_body["content"][0]["text"])["lang"]
+            # 結果のJSONをパースして言語コードを取得します
+            lang = json.loads(completion.choices[0].message.content)["lang"]
         except:
+            # エラーが発生した場合は空文字列を返します
             lang = ""
         return lang
 
     def judge(self, candidates):
+        """
+        複数のプロンプト候補を評価し、最も良いものを選択します。
+
+        Args:
+            candidates (list[str]): 評価対象のプロンプト候補のリスト。
+
+        Returns:
+            int or None: 最も良いと判断された候補のインデックス。エラーの場合はNone。
+        """
         Instruction_prompts = []
         for idx, candidate in enumerate(candidates):
             Instruction_prompts.append(
                 f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>"
             )
         example = json.dumps({"Preferred": "Instruction 1"})
+# プロンプト評価のための指示テンプレート
         prompt = """
 You are a instruction engineer. Your task is to evaluate which of the three instructions given below is better based on guide in <guide> xml tag.
 
@@ -224,34 +228,25 @@ Use JSON format when returning results. Please only output the result in json fo
                     example=example,
                 ),
             },
-            {"role": "assistant", "content": "{"},
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 128,
-                "temperature": 0.1,
-                "top_k": 50,
-                "top_p": 1,
-                "stop_sequences": ["\n\nHuman:"],
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        # Groq APIを使用してプロンプト候補の評価をリクエストします
+        completion = self.groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            max_completion_tokens=8192,
+            temperature=0.0,
         )
-        modelId = "anthropic.claude-3-haiku-20240307-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
+        # LLMからの応答をデバッグ出力
+        print(f"DEBUG: judge LLM response (raw): {completion.choices[0].message.content}")
         final_result = None
         try:
-            result = json.loads("{" + response_body["content"][0]["text"])
+            result = json.loads(completion.choices[0].message.content)
+            # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
             for idx in range(3):
                 if str(idx + 1) in result["Preferred"]:
                     final_result = idx
                     break
         except:
+            # JSONパースエラーなどが発生した場合はNoneのまま
             pass
         return final_result

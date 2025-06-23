@@ -1,76 +1,111 @@
-import boto3
-from botocore.config import Config
+from groq import Groq
 import json
 import re
 import os
+from dotenv import load_dotenv # .envファイルから環境変数を読み込むために使用
+from pathlib import Path
+
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 import pandas as pd
 import io
 import time
 import pathlib
 import gradio as gr
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix # 混同行列の計算に使用
 
-with open('prompt/error_analysis_classification.prompt') as f:
+# スクリプト (calibration.py) が置かれているディレクトリの絶対パス
+_CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# プロジェクトのルートディレクトリ (srcディレクトリの親)
+_PROJECT_ROOT_DIR = os.path.dirname(_CURRENT_SCRIPT_DIR)
+
+# promptディレクトリへのパス
+_PROMPT_DIR = os.path.join(_CURRENT_SCRIPT_DIR, 'prompt')
+
+# tempディレクトリへのパス (src/temp)
+_TEMP_DIR_PATH = os.path.join(_CURRENT_SCRIPT_DIR, 'temp')
+
+# 各プロンプトファイルへの絶対パス
+_ERROR_ANALYSIS_PROMPT_PATH = os.path.join(_PROMPT_DIR, 'error_analysis_classification.prompt')
+_STEP_PROMPT_PATH = os.path.join(_PROMPT_DIR, 'step_prompt_classification.prompt')
+_PROMPT_GUIDE_SHORT_PATH = os.path.join(_PROMPT_DIR, 'prompt_guide_short.prompt')
+# 各プロンプトファイルを読み込みます
+with open(_ERROR_ANALYSIS_PROMPT_PATH, encoding="utf-8") as f:
     error_analysis_prompt = f.read()
-with open('prompt/step_prompt_classification.prompt') as f:
+with open(_STEP_PROMPT_PATH, encoding="utf-8") as f:
     step_prompt = f.read()
-with open('prompt/prompt_guide_short.prompt') as f:
+with open(_PROMPT_GUIDE_SHORT_PATH, encoding="utf-8") as f:
     prompt_guide_short = f.read()
-
+# プロンプトキャリブレーションを行うクラス
 class CalibrationPrompt:
     def __init__(self):
-        with open('metaprompt.txt') as f:
+        # metaprompt.txt への絶対パス (srcディレクトリ内にあると仮定)
+        _METAPROMPT_PATH = os.path.join(_CURRENT_SCRIPT_DIR, 'metaprompt.txt')
+        with open(_METAPROMPT_PATH, encoding="utf-8") as f:
             self.metaprompt = f.read()
+        # Groq APIキーを環境変数から取得し、クライアントを初期化します
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        # tempディレクトリを作成 (存在しない場合のみ)
+        os.makedirs(_TEMP_DIR_PATH, exist_ok=True)
+        self.groq_client = Groq(api_key=groq_api_key)
+    def invoke_model(self, prompt, model='scout'):
+        """
+        指定されたプロンプトとモデルを使用してGroq API経由でモデルを呼び出します。
 
-        region_name = os.getenv("REGION_NAME")
-        session = boto3.Session()
-        retry_config = Config(
-            region_name=region_name,
-            retries={
-                "max_attempts": 5,
-                "mode": "standard",
-            },
-        )
-        service_name = "bedrock-runtime"
-        self.bedrock_client = session.client(service_name=service_name, config=retry_config)
-    def invoke_model(self, prompt, model='haiku'):
-        if 'haiku' in model:
-            model = "anthropic.claude-3-haiku-20240307-v1:0"
-        else:
-            model = "anthropic.claude-3-sonnet-20240229-v1:0"
-        messages=[
+        Args:
+            prompt (str): モデルに送信するプロンプト。
+            model (str, optional): 使用するモデルのエイリアス。現在は 'scout' のみサポート。
+                                   デフォルトは 'scout'。
+
+        Returns:
+            str: モデルからの応答メッセージ。
+        """
+        # TODO: model引数に基づいて実際に使用するモデルIDを動的に変更できるようにする
+        model_id = "meta-llama/llama-4-scout-17b-16e-instruct"
+        messages = [
             {
                 "role": "user",
-                "content":  prompt
+                "content": prompt
             }
         ]
-        body = json.dumps(
-            {
-                "messages": messages,
-                "max_tokens": 4096,
-                "anthropic_version": "bedrock-2023-05-31",
-            }
+        # Groq APIを呼び出し、チャット補完を生成します
+        completion = self.groq_client.chat.completions.create(
+            model=model_id,
+            messages=messages,
+            max_completion_tokens=8192,
         )
-        modelId = "anthropic.claude-3-haiku-20240307-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = self.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-        message = response_body["content"][0]["text"]
+        message = completion.choices[0].message.content
         return message
     def get_output(self, prompt, dataset, postprocess_code, return_df=False):
+        """
+        データセット内の各行に対してプロンプトを実行し、後処理を適用して結果を取得します。
+
+        Args:
+            prompt (str): 実行するプロンプトテンプレート。変数プレースホルダを含むことができます。
+            dataset (bytes or pd.DataFrame): CSV形式のデータセットまたはPandas DataFrame。
+            postprocess_code (str): ユーザー定義の後処理Pythonコード文字列。
+                                    'postprocess(llm_output)'という関数を定義する必要があります。
+            return_df (bool, optional): 結果をDataFrameとして返すか、ダウンロードボタンとして返すか。
+                                        デフォルトは False (ダウンロードボタン)。
+
+        Returns:
+            pd.DataFrame or gr.DownloadButton: return_dfの値に応じた結果。
+        """
         if isinstance(dataset, bytes):
             data_io = io.BytesIO(dataset)
             dataset = pd.read_csv(data_io)
-        exec(postprocess_code, globals())
+        local_vars = {}
+        exec(postprocess_code, globals(), local_vars)
+        postprocess = local_vars.get('postprocess') # ユーザー定義の後処理関数を取得
+        if not callable(postprocess):
+            raise ValueError("postprocess function not defined in the provided code")
         results = []
         for row_idx, row in dataset.iterrows():
             label = row['label']
             variables = {}
             for key, value in dict(row).items():
+                # 'label'列以外の列を変数として使用します
                 if key == 'label':
                     continue
                 variables[key] = value
@@ -78,20 +113,37 @@ class CalibrationPrompt:
             result = postprocess(predict)
             results.append(result)
         
-        dataset['predict'] = results
+        dataset['predict'] = results # 予測結果をデータセットに追加
         if return_df:
             return dataset
         timestr = time.strftime("%Y%m%d-%H%M%S")
-        dataset.to_csv(f'temp/predict_{timestr}.csv', index=None)
-        return gr.DownloadButton(label=f'Download predict result (predict_{timestr}.csv)',value=pathlib.Path(f'temp/predict_{timestr}.csv'),visible=True)
+        # 結果を一時ファイルに保存し、Gradioのダウンロードボタンを返します
+        temp_file_path = os.path.join(_TEMP_DIR_PATH, f'predict_{timestr}.csv')
+        dataset.to_csv(temp_file_path, index=None)
+        return gr.DownloadButton(label=f'Download predict result (predict_{timestr}.csv)',value=pathlib.Path(temp_file_path),visible=True)
 
     def optimize(self, task_description, prompt, dataset, postprocess_code, step_num=3):
+        """
+        指定されたステップ数だけプロンプトの最適化処理を繰り返します。
+
+        Args:
+            task_description (str): 最適化対象のタスクの説明。
+            prompt (str): 初期プロンプト。
+            dataset (bytes or pd.DataFrame): 評価に使用するデータセット。
+            postprocess_code (str): 後処理コード。
+            step_num (int, optional): 最適化のステップ（エポック）数。デフォルトは 3。
+
+        Returns:
+            str: 最適化された最終的なプロンプト。
+        """
         if isinstance(dataset, bytes):
             data_io = io.BytesIO(dataset)
             dataset = pd.read_csv(data_io)
+        # 初期プロンプトで出力を取得
         cur_dataset = self.get_output(prompt, dataset, postprocess_code, return_df=True)
         history = []
         for _ in range(step_num):
+            # 最適化の1ステップを実行
             step_result = self.step(task_description, prompt, dataset, postprocess_code, history)
             prompt = step_result['cur_prompt']
             dataset = step_result['dataset']
@@ -99,13 +151,15 @@ class CalibrationPrompt:
         return prompt.strip()
 
     def step(self, task_description, prompt, dataset, postprocess_code, history):
+        # 1回の最適化ステップを実行します。エラー分析、履歴の追加、新しいプロンプトの提案を行います。
         num_errors = 5
         mean_score = self.eval_score(dataset)
         errors = self.extract_errors(dataset)
         large_error_to_str = self.large_error_to_str(errors, num_errors)
-        history = self.add_history(dataset, task_description, history, mean_score, errors)
+        history = self.add_history(prompt, dataset, task_description, history, mean_score, errors)
         sorted_history = sorted(history, key=lambda x: x['score'],reverse=False)
         last_history = sorted_history[-3:]
+        # 履歴からプロンプト入力を作成
         history_prompt = '\n'.join([self.sample_to_text(sample,
                                                         num_errors_per_label=num_errors,
                                                         is_score=True) for sample in last_history])
@@ -115,13 +169,16 @@ class CalibrationPrompt:
         'failure_cases': large_error_to_str
         }
         prompt_input["labels"] = json.dumps([str(label) for label in list(dataset['label'].unique())])
-        prompt_suggestion = self.invoke_model(step_prompt.format(**prompt_input), model='sonnet')
+        # 新しいプロンプトを提案するモデルを呼び出します
+        prompt_suggestion = self.invoke_model(step_prompt.format(**prompt_input), model='scout')
         pattern = r"<new_prompt>(.*?)</new_prompt>"
         cur_prompt = re.findall(pattern, prompt_suggestion, re.DOTALL)[0]
+        # 新しいプロンプトで出力を取得
         cur_dataset = self.get_output(cur_prompt, dataset, postprocess_code, return_df=True)
         score = self.eval_score(cur_dataset)
         timestr = time.strftime("%Y%m%d-%H%M%S")
-        cur_dataset.to_csv(f'temp/predict_{timestr}.csv', index=None)
+        temp_file_path = os.path.join(_TEMP_DIR_PATH, f'predict_{timestr}.csv')
+        cur_dataset.to_csv(temp_file_path, index=None)
         return {
             'cur_prompt': cur_prompt,
             'score': score,
@@ -132,6 +189,7 @@ class CalibrationPrompt:
         
         
     def get_eval_function(self):
+        # 評価関数を生成します。この例では、ラベルと予測が一致するかどうかでスコアを付けます。
         def set_function_from_iterrow(func):
             def wrapper(dataset):
                 dataset['score'] = dataset.apply(func, axis=1)
@@ -157,7 +215,7 @@ class CalibrationPrompt:
         :param num_large_errors_per_label: The (maximum) number of large errors per label
         :return: A string that contains the large errors that is used in the meta-prompt
         """
-        required_columns = error_df.columns.tolist()
+        required_columns = error_df.columns.tolist() # エラー分析に必要な列
         label_schema = error_df['label'].unique()
         gt_name = 'GT'
         error_res_df_list = []
@@ -165,10 +223,12 @@ class CalibrationPrompt:
         for label in label_schema:
             cur_df = error_df[error_df['label'] == label]
             cur_df = cur_df.sample(frac=1.0, random_state=42)[:num_large_errors_per_label]
+            # 各ラベルごとに指定された数のエラーサンプルをランダムに抽出
             error_res_df_list.append(cur_df[required_columns])
         if len(error_res_df_list) > 0:
             error_res_df = pd.concat(error_res_df_list, ignore_index=True)
             error_res_df = error_res_df.sample(frac=1.0, random_state=42)
+            # 抽出されたエラーサンプルをテキスト形式に変換
             for i, row in error_res_df.iterrows():
                 label = row.label
                 prediction = row.predict
@@ -182,6 +242,7 @@ class CalibrationPrompt:
         return txt_res.strip()
 
     def eval_score(self, dataset) -> float:
+        # データセットの平均スコアを計算します。
         score_func = self.get_eval_function()
         dataset = score_func(dataset)
         mean_score = dataset['score'].mean()
@@ -192,11 +253,24 @@ class CalibrationPrompt:
         :return: records that contains the errors
         """
         df = dataset
+        # スコアが0.5未満のレコードをエラーとして抽出します
         err_df = df[df['score'] < 0.5]
         err_df.sort_values(by=['score'])
         return err_df
-    def add_history(self, dataset, task_description, history, mean_score, errors):
+    def add_history(self, prompt, dataset, task_description, history, mean_score, errors):
+        """
+        現在のステップの情報を履歴に追加します。エラー分析も行います。
+
+        Args:
+            prompt (str): 現在のプロンプト。
+            dataset (pd.DataFrame): 現在のデータセット（予測結果を含む）。
+            task_description (str): タスクの説明。
+            history (list): これまでの履歴のリスト。
+            mean_score (float): 現在の平均スコア。
+            errors (pd.DataFrame): 現在のエラーデータフレーム。
+        """
         num_errors = 5
+        # エラー情報を文字列に変換
         large_error_to_str = self.large_error_to_str(errors, num_errors)
         prompt_input = {
             'task_description': task_description,
@@ -205,13 +279,16 @@ class CalibrationPrompt:
             'failure_cases': large_error_to_str
             }
         label_schema = dataset['label'].unique()
+        # 混同行列を計算
         conf_matrix = confusion_matrix(dataset['label'], dataset['predict'], labels=label_schema)
         conf_text = f"Confusion matrix columns:{label_schema} the matrix data:"
         for i, row in enumerate(conf_matrix):
             conf_text += f"\n{label_schema[i]}: {row}"
         prompt_input['confusion_matrix'] = conf_text
-        analysis = self.invoke_model(error_analysis_prompt.format(**prompt_input), model='haiku')
+        # エラー分析プロンプトを実行
+        analysis = self.invoke_model(error_analysis_prompt.format(**prompt_input), model='scout')
         pattern = r"<analysis>(.*?)</analysis>"
         analysis = re.findall(pattern, analysis, re.DOTALL)[0].strip()
+        # 現在の情報を履歴に追加
         history.append({'prompt': prompt, 'score': mean_score,'errors': errors, 'confusion_matrix': conf_matrix, 'analysis': analysis})
         return history

@@ -1,2 +1,5 @@
-.env
+.venv/
 __pycache__
+.env
+.cache_ggshield
+secrets-to-remove.txt
