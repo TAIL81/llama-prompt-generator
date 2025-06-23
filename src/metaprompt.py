@@ -64,6 +64,8 @@ class MetaPrompt:
         message = completion.choices[0].message.content
 
         # デバッグ用の整形出力関数
+        # この関数は、与えられたメッセージを整形し、コンソールに出力します。
+        # 長い行を100文字で折り返し、段落ごとに改行を挿入して可読性を高めます。
         def pretty_print(message):
             print(
                 "\n\n".join(

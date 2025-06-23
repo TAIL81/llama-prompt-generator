@@ -12,13 +12,13 @@ from optimize import Alignment
 from translate import GuideBased
 from application.soe_prompt import SOEPrompt
 
-# 各コンポーネントを初期化します
-# 環境変数を読み込みます
+## 各コンポーネントを初期化します
+## 環境変数を読み込みます
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 language = os.getenv("LANGUAGE", "ja")
 
-# JSONファイルから翻訳を読み込みます
+## JSONファイルから翻訳を読み込みます
 translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
 with open(translations_path, 'r', encoding='utf-8') as f:
     lang_store = json.load(f)
@@ -30,7 +30,7 @@ metaprompt = MetaPrompt()
 soeprompt = SOEPrompt()
 calibration = CalibrationPrompt()
 
-# JSONファイルから翻訳を読み込みます
+## JSONファイルから翻訳を読み込みます
 translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
 with open(translations_path, 'r', encoding='utf-8') as f:
     lang_store = json.load(f)
@@ -78,10 +78,13 @@ def generate_prompt(original_prompt, level):
             )
         return textboxes
 
+import logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
 def ape_prompt(original_prompt, user_data):
-    print("DEBUG: ape_prompt function was called!") # デバッグメッセージを追加
-    print(f"DEBUG: original_prompt = {original_prompt}")
-    print(f"DEBUG: user_data = {user_data}")
+    logging.debug("ape_prompt function was called!")
+    logging.debug(f"original_prompt = {original_prompt}")
+    logging.debug(f"user_data = {user_data}")
     """
     APE (Automatic Prompt Engineering) を使用してプロンプトを生成します。
 
@@ -103,7 +106,7 @@ def ape_prompt(original_prompt, user_data):
         )
     ] + [gr.Textbox(visible=False)] * 2 # 他のタブとの互換性のための非表示テキストボックス
 
-# メタプロンプト出力に対してAPEを実行する関数
+## メタプロンプト出力に対してAPEを実行する関数
 def run_ape_on_metaprompt_output(metaprompt_template, metaprompt_variables_str):
     """
     メタプロンプトで生成されたテンプレートと変数文字列を元にAPEを実行します。
@@ -127,7 +130,7 @@ def run_ape_on_metaprompt_output(metaprompt_template, metaprompt_variables_str):
     result_dict = ape(initial_prompt=metaprompt_template, epoch=1, demo_data=demo_data)
     return result_dict["prompt"], metaprompt_variables_str # variables_result は変更しない
 
-# メタプロンプト生成ボタンクリック時のラッパー関数
+## メタプロンプト生成ボタンクリック時のラッパー関数
 def metaprompt_wrapper(task, variables_str):
     """
     metapromptを実行し、APE結果表示用のテキストボックスをクリアするための値を返すラッパー。
@@ -136,14 +139,14 @@ def metaprompt_wrapper(task, variables_str):
     # メタプロンプトの出力と、APE側をクリアするための空文字列を返す
     return prompt, new_vars, "", "", ""
 
-# Gradioインターフェースを定義します
+## Gradioインターフェースを定義します
 with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme="soft") as demo:
-    gr.Markdown(f"# {lang_store[language]['Automatic Prompt Engineering']}")
+    gr.Markdown(f"## {lang_store[language]['Automatic Prompt Engineering']}")
 
-    # 「メタプロンプト」タブ
+    ## 「メタプロンプト」タブ
     with gr.Tab(lang_store[language]["Meta Prompt"]):
         original_task = gr.Textbox(
-            # タスク入力用のテキストボックス            
+            ## タスク入力用のテキストボックス            
             label=lang_store[language]["Task"],
             lines=3,
             info=lang_store[language]["Please input your task"],
@@ -162,7 +165,7 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
                 ape_on_metaprompt_button = gr.Button(lang_store[language]["APE on MetaPrompt Output"], scale=1)
 
         with gr.Row():
-            with gr.Column(): # プロンプトテンプレート表示エリア
+            with gr.Column(): ## プロンプtテンプレート表示エリア
                 prompt_result_meta = gr.Textbox(
                     label=lang_store[language]["MetaPrompt Output: Prompt Template"],
                     lines=5,
@@ -206,11 +209,11 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             # run_ape_on_metaprompt_output は (ape_prompt, original_vars) を返すので、
             # variables_result_ape には元の変数が表示される
         )
-    # 「プロンプト翻訳」タブ (実際にはプロンプトの書き換え・改善機能)
+    ## 「プロンプト翻訳」タブ (実際にはプロンプトの書き換え・改善機能)
     with gr.Tab(lang_store[language]["Prompt Translation"]):
         original_prompt = gr.Textbox(
             label=lang_store[language]["Please input your original prompt"],
-            # 元のプロンプト入力用
+            ## 元のプロンプト入力用
             lines=3,
             placeholder=lang_store[language]["Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\""],
         )
@@ -219,7 +222,7 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             with gr.Column(scale=2):
                 level = gr.Radio(
                     ["One-time Generation", "Multiple-time Generation"],
-                    # 最適化レベル選択用ラジオボタン
+                    ## 最適化レベル選択用ラジオボタン
                     label=lang_store[language]["Optimize Level"],
                     value="One-time Generation",
                 )
@@ -227,7 +230,7 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
                 textboxes = []
                 for i in range(3):
                     t = gr.Textbox(
-                        # 生成されたプロンプト表示用 (最大3つ)
+                        ## 生成されたプロンプト表示用 (最大3つ)
                         label=lang_store[language]["Prompt Template Generated"],
                         elem_id="textbox_id",
                         lines=3,
@@ -263,7 +266,7 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
                 label=lang_store[language]["Replace Result"], lines=3, interactive=False
             )
 
-        # 変数置換ボタンの定義
+        ## 変数置換ボタンの定義
         with gr.Row():
             insert_button_original = gr.Button(lang_store[language]["Replace Variables in Original Prompt"])
             insert_button_original.click(
@@ -279,12 +282,12 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
                 outputs=user_prompt_eval_replaced,
             )
 
-        # モデル選択と実行ボタンの定義
+        ## モデル選択と実行ボタンの定義
         with gr.Row():
             model_provider_radio = gr.Radio(
                 choices=["OpenRouter", "Groq"],
                 label=lang_store[language].get("Choose Model Provider for Comparison", "Choose Model Provider for Comparison"),
-                value="OpenRouter", # デフォルト値
+                value="OpenRouter", ## デフォルト値
                 interactive=True
             )
             openrouter_model_dropdown = gr.Dropdown(
@@ -306,10 +309,10 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
 
             invoke_button = gr.Button(lang_store[language]["Execute prompt"])
 
-        # モデル実行結果表示エリア
+        ## モデル実行結果表示エリア
         with gr.Row():
-            # ラジオボタンのデフォルト値に基づいて初期ラベルを設定
-            # model_provider_radio はこの時点で value を持っています。
+            ## ラジオボタンのデフォルト値に基づいて初期ラベルを設定
+            ## model_provider_radio はこの時点で value を持っています。
             default_provider = model_provider_radio.value
             initial_label_original_key = "Original Prompt Output by {provider}"
             initial_label_eval_key = "Evaluation Prompt Output by {provider}"
@@ -341,10 +344,10 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
         model_provider_radio.change(
             update_output_labels,
             inputs=[model_provider_radio],
-            outputs=[openrouter_output, groq_output]
-        )
+                outputs=[openrouter_output, groq_output]
+            )
 
-        # プロンプト実行イベント
+        ## プロンプト実行イベント
         invoke_button.click(
             alignment.invoke_prompt,
             inputs=[
@@ -400,7 +403,7 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
                 outputs=revised_prompt_output,
             )
 
-    # 「SOE最適化商品説明」タブ
+    ## 「SOE最適化商品説明」タブ
     with gr.Tab(lang_store[language]["SOE-Optimized Product Description"]):
         with gr.Row():
             with gr.Column():
@@ -416,7 +419,7 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
         
         with gr.Row():
             product_description = gr.Textbox(label=lang_store[language]["Generated Product Description"], lines=10, interactive=False)
-            # 商品説明生成イベント
+            ## 商品説明生成イベント
             generate_button.click(
                 soeprompt.generate_description,
                 inputs=[product_category, brand_name, usage_description, target_customer, image_upload],
@@ -424,9 +427,9 @@ with gr.Blocks(title=lang_store[language]["Automatic Prompt Engineering"], theme
             )
             image_upload.upload(lambda images: images, inputs=image_upload, outputs=image_preview)
 
-    # 「プロンプトキャリブレーション」タブ
+    ## 「プロンプトキャリブレーション」タブ
     with gr.Tab(lang_store[language]["Prompt Calibration"]):
-# デフォルトの後処理コード
+## デフォルトの後処理コード
         default_code = '''
 def postprocess(llm_output):
     return llm_output
@@ -435,25 +438,25 @@ def postprocess(llm_output):
             with gr.Column(scale=2):
                 calibration_task = gr.Textbox(label=lang_store[language]["Please input your task"], lines=3)
                 calibration_prompt_original = gr.Textbox(label=lang_store[language]["Please input your original prompt"], lines=5, placeholder=lang_store[language]["Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\""])
-                # 元のプロンプト入力
+                ## 元のプロンプト入力
             with gr.Column(scale=2):
                 postprocess_code = gr.Textbox(label=lang_store[language]["Please input your postprocess code"], lines=3, value=default_code)
-                # 後処理コード入力
+                ## 後処理コード入力
                 dataset_file = gr.File(file_types=['csv'], type='binary')
-                # データセットファイルアップロード
+                ## データセットファイルアップロード
         with gr.Row():
             with gr.Column(scale=2):
                 calibration_task = gr.Radio(["classification"], value="classification", label=lang_store[language]["Task type"])
             with gr.Column(scale=2):
                 steps_num = gr.Slider(1, 5, value=1, step=1, label=lang_store[language]["Epoch"])
-                # タスクタイプ選択
+                ## タスクタイプ選択
             calibration_optimization = gr.Button(lang_store[language]["Optimization based on prediction"])
-            # 最適化実行ボタン
+            ## 最適化実行ボタン
             calibration_prompt = gr.Textbox(label=lang_store[language]["Revised Prompt"], lines=3, show_copy_button=True, interactive=False)
-            # 改善されたプロンプト表示
+            ## 改善されたプロンプト表示
             calibration_optimization.click(
                 calibration.optimize, inputs=[calibration_task, calibration_prompt_original, dataset_file, postprocess_code, steps_num],
                 outputs=calibration_prompt
             )
-# Gradioアプリを起動します
+## Gradioアプリを起動します
 demo.launch()

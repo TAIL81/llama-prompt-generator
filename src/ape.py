@@ -1,11 +1,14 @@
 import json
 import os
 
+import logging
 import groq # Import the groq module to access specific error types
 from groq import Groq
 from dotenv import load_dotenv
 # 環境変数を読み込みます
 load_dotenv()
+
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
@@ -48,7 +51,7 @@ class APE:
                 candidates.append(rewritten_prompt)
 
         if not candidates: # 2回のrewriteが両方失敗した場合
-            print("Error: Initial prompt rewriting failed for all attempts. Returning initial prompt.")
+            logging.error("Initial prompt rewriting failed for all attempts. Returning initial prompt.")
             return {"prompt": initial_prompt, "error": "Initial prompt rewriting failed."}
 
         customizable_variable_list = list(demo_data.keys())
@@ -64,14 +67,14 @@ class APE:
             )
         ]
         if not filtered_candidates:
-            print("Warning: No candidates left after filtering for customizable variables. Returning initial prompt.")
+            logging.warning("No candidates left after filtering for customizable variables. Returning initial prompt.")
             return {"prompt": initial_prompt, "error": "No valid candidates after filtering."}
 
         # 候補プロンプトを評価し、最良のものを選択します
         best_candidate_idx = self.rater(initial_prompt, filtered_candidates, demo_data)
 
         if best_candidate_idx is None:
-            print("Error: Rater did not return a valid candidate index. Using the first available filtered candidate.")
+            logging.error("Rater did not return a valid candidate index. Using the first available filtered candidate.")
             # filtered_candidates は上で空でないことをチェック済みなので、少なくとも1要素はあるはず
             best_candidate_obj = filtered_candidates[0]
         else:
@@ -90,25 +93,24 @@ class APE:
                 rated_idx_loop = self.rater(initial_prompt, current_rating_candidates, demo_data)
 
                 if rated_idx_loop is None:
-                    print(f"Warning: Rater failed in epoch {i+1}. Keeping previous best candidate.")
+                    logging.warning(f"Rater failed in epoch {i+1}. Keeping previous best candidate.")
                     # 評価に失敗した場合は、現在の best_candidate_obj を維持
                 else:
                     best_candidate_obj = current_rating_candidates[rated_idx_loop]
             else:
-                print(f"Warning: generate_more failed in epoch {i+1}. Keeping previous best candidate.")
+                logging.warning(f"generate_more failed in epoch {i+1}. Keeping previous best candidate.")
                 # generate_more に失敗した場合も、現在の best_candidate_obj を維持
 
-        # print(f"DEBUG: APE.__call__ return: {json.dumps(best_candidate_obj, indent=2, ensure_ascii=False)}") # 元のprint文
-        print("DEBUG: APE.__call__ return:")
+        logging.debug("APE.__call__ return:")
         for key, value in best_candidate_obj.items():
-            print(f"  {key}:")
+            logging.debug(f"  {key}:")
             # 値が文字列の場合、改行を維持してインデント付きで表示
             if isinstance(value, str):
                 for line in value.splitlines():
-                    print(f"    {line}")
+                    logging.debug(f"    {line}")
             else:
                 # 文字列以外の場合は、そのままインデント付きで表示
-                print(f"    {value}")
+                logging.debug(f"    {value}")
         return best_candidate_obj
 
     def rewrite(self, initial_prompt):
@@ -161,19 +163,19 @@ Please only output the rewrite result.
             if result.endswith("</instruction>"):
                 result = result[:-14]
             result = result.strip()
-            print(f"DEBUG: APE.rewrite successful, result: \n{result}\n")
+            logging.debug(f"APE.rewrite successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
             error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
-            print(f"ERROR: APE.rewrite - Groq InternalServerError: {error_message} (Details: {e})")
-            return None # エラー時はNoneを返す
+            logging.error(f"APE.rewrite - Groq InternalServerError: {error_message} (Details: {e})")
+            raise # 例外を再送出
         except groq.APIError as e:
             error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
-            print(f"ERROR: APE.rewrite - Groq APIError: {error_message} (Details: {e})")
-            return None # エラー時はNoneを返す
+            logging.error(f"APE.rewrite - Groq APIError: {error_message} (Details: {e})")
+            raise # 例外を再送出
         except Exception as e:
-            print(f"ERROR: APE.rewrite - Unexpected error: {e}")
-            return None # エラー時はNoneを返す
+            logging.error(f"APE.rewrite - Unexpected error: {e}")
+            raise # 例外を再送出
 
     def generate_more(self, initial_prompt, example):
         """
@@ -231,16 +233,16 @@ Please only output the rewrite result.
             if result.endswith("</instruction>"):
                 result = result[:-14]
             result = result.strip()
-            print(f"DEBUG: APE.generate_more successful, result: \n{result}\n")
+            logging.debug(f"APE.generate_more successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
             error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
-            print(f"ERROR: APE.generate_more - Groq InternalServerError: {error_message} (Details: {e})")
-            return None # エラー時はNoneを返す
+            logging.error(f"APE.generate_more - Groq InternalServerError: {error_message} (Details: {e})")
+            raise # 例外を再送出
         except groq.APIError as e:
             error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
-            print(f"ERROR: APE.generate_more - Groq APIError: {error_message} (Details: {e})")
-            return None # エラー時はNoneを返す
+            logging.error(f"APE.generate_more - Groq APIError: {error_message} (Details: {e})")
+            raise # 例外を再送出
         except Exception as e:
-            print(f"ERROR: APE.generate_more - Unexpected error: {e}")
-            return None # エラー時はNoneを返す
+            logging.error(f"APE.generate_more - Unexpected error: {e}")
+            raise # 例外を再送出

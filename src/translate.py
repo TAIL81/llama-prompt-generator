@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 
 from groq import Groq
 from dotenv import load_dotenv
@@ -7,6 +8,8 @@ from pathlib import Path
 # 環境変数を .env ファイルから読み込みます
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
@@ -38,11 +41,11 @@ class GuideBased:
         """
         lang = self.detect_lang(initial_prompt)
         # 検出された言語に応じて、プロンプトの言語指示を設定します
-        if "ja" in lang:
+        if lang == "ja":
             lang_prompt = "Please use Japanese for rewriting. The xml tag name is still in English."
-        elif "ch" in lang:
+        elif lang == "ch":
             lang_prompt = "Please use Chinese for rewriting. The xml tag name is still in English."
-        elif "en" in lang:
+        elif lang == "en":
             lang_prompt = "Please use English for rewriting."
         else:
             lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."
@@ -132,7 +135,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         )
         result = completion.choices[0].message.content
         # LLMからの応答をデバッグ出力
-        print(f"DEBUG: __call__ LLM response: \n{result}\n")
+        logging.debug(f"__call__ LLM response: \n{result}\n")
         # 結果から不要なXMLタグを除去します
         if result.startswith("<instruction>"):
             result = result[13:]
@@ -178,12 +181,13 @@ Output example: {lang_example}
             temperature=0.0,
         )
         # LLMからの応答をデバッグ出力
-        print(f"DEBUG: detect_lang LLM response: {completion.choices[0].message.content}")
+        logging.debug(f"detect_lang LLM response: {completion.choices[0].message.content}")
         try:
             # 結果のJSONをパースして言語コードを取得します
             lang = json.loads(completion.choices[0].message.content)["lang"]
-        except:
+        except Exception as e:
             # エラーが発生した場合は空文字列を返します
+            logging.error(f"Error detecting language: {e}")
             lang = ""
         return lang
 
@@ -237,7 +241,7 @@ Use JSON format when returning results. Please only output the result in json fo
             temperature=0.0,
         )
         # LLMからの応答をデバッグ出力
-        print(f"DEBUG: judge LLM response (raw): {completion.choices[0].message.content}")
+        logging.debug(f"judge LLM response (raw): {completion.choices[0].message.content}")
         final_result = None
         try:
             result = json.loads(completion.choices[0].message.content)
@@ -246,7 +250,11 @@ Use JSON format when returning results. Please only output the result in json fo
                 if str(idx + 1) in result["Preferred"]:
                     final_result = idx
                     break
-        except:
+        except (json.JSONDecodeError, KeyError) as e:
             # JSONパースエラーなどが発生した場合はNoneのまま
+            logging.error(f"Error parsing judge LLM response: {e}")
+            pass
+        except Exception as e:
+            logging.error(f"Unexpected error in judge method: {e}")
             pass
         return final_result
