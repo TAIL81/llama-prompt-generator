@@ -1,100 +1,177 @@
 import json
 import logging
+import os
+import random
+from typing import Dict, List, Optional, Union
+from dataclasses import dataclass
 from groq import Groq
 import groq # Import the groq module to access specific error types
+import json
+import logging
 import os
+import random
+from typing import Dict, List, Optional, Union
+from dataclasses import dataclass
+from groq import Groq
+import groq
+import asyncio
+import nest_asyncio # nest_asyncioをインポート
+
+# nest_asyncioを適用して、既に実行中のイベントループ内で新しいイベントループをネストできるようにします
+nest_asyncio.apply()
+
 # Groq APIキーを環境変数から取得し、クライアントを初期化します
-groq_api_key = os.getenv("GROQ_API_KEY")
-groq_client = Groq(api_key=groq_api_key)
+groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
+if not groq_api_key:
+    logging.error("GROQ_API_KEY環境変数が設定されていません。")
+    raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
+
+# 非同期Groqクライアントを初期化
+async_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
+# 同期Groqクライアントを初期化
+sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+
+@dataclass
+class GroqConfig:
+    get_output_model: str = "compound-beta-mini"
+    rater_model: str = "llama-3.3-70b-versatile"
+    max_tokens: int = 8192
+    temperature_get_output: float = 0.1
+    temperature_rater: float = 0.0
 
 # プロンプト候補を評価するクラス
 class Rater:
     def __init__(self):
-        pass
+        self.config = GroqConfig()
 
-    def __call__(self, initial_prompt, candidates, demo_data):
+    def __call__(self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]) -> Optional[int]:
         """
         複数のプロンプト候補を評価し、最も良いものを選択します。
 
         Args:
             initial_prompt (str): 元の指示プロンプト。
-            candidates (list[dict]): 評価対象のプロンプト候補のリスト。
+            candidates (List[Dict[str, str]]): 評価対象のプロンプト候補のリスト。
                                      各要素は {"prompt": "候補プロンプト"} の形式。
-            demo_data (dict): デモデータ（キーと値のペア）。プロンプト内のプレースホルダを置換するために使用。
+            demo_data (Dict[str, str]): デモデータ（キーと値のペア）。プロンプト内のプレースホルダを置換するために使用。
 
         Returns:
-            int: 最も評価の高かった候補のインデックス。
+            Optional[int]: 最も評価の高かった候補のインデックス。エラー時はNone。
         """
-        for candidate in candidates:
-            if "output" in candidate:
-                # 既に評価済みの場合はスキップ
-                continue
-            candidate_prompt = candidate["prompt"]
-            # デモデータでプロンプト内のプレースホルダを置換
-            for k, v in demo_data.items():
-                candidate_prompt = candidate_prompt.replace(k, v)
-            candidate["input"] = candidate_prompt
-            # 置換後のプロンプトでモデル出力を取得
-            candidate["output"] = self.get_output(candidate_prompt)
+        self._validate_inputs(initial_prompt, candidates, demo_data)
+
+        # 既に評価済みの候補を特定
+        unrated_candidates_indices = [
+            i for i, candidate in enumerate(candidates) if "output" not in candidate
+        ]
+
+        # 未評価の候補に対して非同期で出力を取得
+        if unrated_candidates_indices:
+            unrated_prompts = [
+                self._replace_placeholders(candidates[i]["prompt"], demo_data)
+                for i in unrated_candidates_indices
+            ]
+            
+            # nest_asyncioが適用されているため、asyncio.run()を安全に呼び出せます
+            outputs = asyncio.run(self._get_outputs_parallel(unrated_prompts))
+
+            for i, output in zip(unrated_candidates_indices, outputs):
+                candidates[i]["input"] = self._replace_placeholders(candidates[i]["prompt"], demo_data)
+                candidates[i]["output"] = output
+
         # 元の指示プロンプトもデモデータで置換
-        for k, v in demo_data.items():
-            initial_prompt = initial_prompt.replace(k, v)
+        initial_prompt_filled = self._replace_placeholders(initial_prompt, demo_data)
+        
         # 評価を実行
-        rate = self.rater(initial_prompt, candidates)
+        rate = self.rater(initial_prompt_filled, candidates)
         logging.debug(f"Rater.__call__ return: {rate}\n")
         return rate
 
-    def get_output(self, prompt):
-        """指定されたプロンプトでGroqモデルを実行し、出力を取得します。"""
-        messages = [{"role": "user", "content": prompt}]
+    def _validate_inputs(self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]) -> None:
+        """
+        入力パラメータの検証を行います。
+        """
+        if not initial_prompt.strip():
+            raise ValueError("初期プロンプトが空です")
+        if not candidates:
+            raise ValueError("候補が提供されていません")
+        if not demo_data:
+            raise ValueError("デモデータが提供されていません")
+        for candidate in candidates:
+            if "prompt" not in candidate or not candidate["prompt"].strip():
+                raise ValueError("候補プロンプトが空または無効です")
+
+    def _replace_placeholders(self, text: str, data: Dict[str, str]) -> str:
+        """
+        テキスト内のプレースホルダをデモデータで置換します。
+        """
+        for k, v in data.items():
+            text = text.replace(k, v)
+        return text
+
+    async def _get_outputs_parallel(self, prompts: List[str]) -> List[Optional[str]]:
+        """
+        複数のプロンプトに対して非同期でGroqモデルを実行し、出力を取得します。
+        """
+        tasks = [self._get_output_async(prompt) for prompt in prompts]
+        return await asyncio.gather(*tasks, return_exceptions=True) # 例外を返すように設定
+
+    async def _get_output_async(self, prompt: str) -> Optional[str]:
+        """指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。"""
+        messages: List[Dict[str, str]] = [{"role": "user", "content": prompt}]
         try:
-            completion = groq_client.chat.completions.create(
-                model="compound-beta-mini",
+            completion = await async_groq_client.chat.completions.create(
+                model=self.config.get_output_model,
                 messages=messages,
-                max_completion_tokens=8192,
-                temperature=0.1,
+                max_completion_tokens=self.config.max_tokens,
+                temperature=self.config.temperature_get_output,
             )
-            result = completion.choices[0].message.content
-            logging.debug(f"Rater.get_output successful, result: \n{result}\n")
+            result: str = completion.choices[0].message.content
+            logging.debug(f"Rater._get_output_async successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
+            error_message: str = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            logging.error(f"Rater._get_output_async - Groq InternalServerError: {error_message} (Details: {e})")
+            return None
+        except groq.APIError as e:
             error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
-            logging.error(f"Rater.get_output - Groq InternalServerError: {error_message} (Details: {e})")
-            raise # 例外を再送出
-        except groq.APIError as e: # InternalServerError以外のAPIエラーも捕捉
-            error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
-            logging.error(f"Rater.get_output - Groq APIError: {error_message} (Details: {e})")
-            raise # 例外を再送出
-        except Exception as e: # その他の予期せぬエラー
-            logging.error(f"Rater.get_output - Unexpected error: {e}")
-            raise # 例外を再送出
+            logging.error(f"Rater._get_output_async - Groq APIError: {error_message} (Details: {e})")
+            return None
+        except Exception as e:
+            logging.error(f"Rater._get_output_async - Unexpected error: {e}")
+            return None
 
-    def rater(self, initial_prompt, candidates):
+    def rater(self, initial_prompt: str, candidates: List[Dict[str, str]]) -> Optional[int]:
         """
         Groqモデルを使用して、複数の候補応答の中から最も良いものを評価させます。
 
         Args:
             initial_prompt (str): 元の指示。
-            candidates (list[dict]): 評価対象の候補。各要素は {"input": "入力プロンプト", "output": "モデル出力"} を含む。
+            candidates (List[Dict[str, str]]): 評価対象の候補。各要素は {"input": "入力プロンプト", "output": "モデル出力"} を含む。
 
         Returns:
-            int: 最も良いと評価された候補のインデックス。エラー時はランダムなインデックス。
+            Optional[int]: 最も良いと評価された候補のインデックス。エラー時はNone。
         """
-        rater_example = json.dumps({"Preferred": "Response 1"})
-        Response_prompt = []
+        if not candidates:
+            logging.debug(f"Rater.rater - No candidates provided for LLM rating. Returning None.")
+            return None
+
+        rater_example: str = json.dumps({"Preferred": "Response 1"})
+        Response_prompt: List[str] = []
         for candidate_idx, candidate in enumerate(candidates):
             # 各候補の情報を整形して評価用プロンプトに含めます
-            Response_template = f"""
+            Response_template: str = f"""
 Response {candidate_idx+1}:
-{candidate}
+Input: {candidate.get('input', 'N/A')}
+Output: {candidate.get('output', 'N/A')}
 </response_{candidate_idx+1}>
 """.strip()
             Response_prompt.append(Response_template)
-        Response_prompt = "\n\n".join(Response_prompt)
+        Response_prompt_str: str = "\n\n".join(Response_prompt)
+        
         # 評価のための指示プロンプトテンプレート
-        rater_prompt = """
+        rater_prompt: str = """
 You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose the most helpful and honest response.
 Please pay particular attention to the response formatting requirements called for in the instruction.
 
@@ -110,47 +187,43 @@ Finally, select which response is the most helpful and honest.
 Use JSON format with key `Preferred` when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 Output example: {rater_example}
 """.strip()
-        messages = [
+        messages: List[Dict[str, str]] = [
             {
                 "role": "user",
                 "content": rater_prompt.format(
                     instruction=initial_prompt,
-                    Response_prompt=Response_prompt,
+                    Response_prompt=Response_prompt_str,
                     rater_example=rater_example,
                 ),
             },
         ]
-        # Groq APIを呼び出して評価を実行します
-        completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=messages,
-            max_completion_tokens=8192,
-            temperature=0.0,
-        )
-        if not candidates:
-            logging.debug(f"Rater.rater - No candidates provided for LLM rating. Returning None.")
-            return None # 候補が空の場合は早期に終了
-
-        result = None
         try:
-            # 結果のJSONをパースし、優先される応答のインデックスを取得します
-            result_json = json.loads(completion.choices[0].message.content)
+            # Groq APIを呼び出して評価を実行します
+            completion = sync_groq_client.chat.completions.create(
+                model=self.config.rater_model,
+                messages=messages,
+                max_completion_tokens=self.config.max_tokens,
+                temperature=self.config.temperature_rater,
+            )
+            result_json: Dict[str, str] = json.loads(completion.choices[0].message.content)
+            final_result: Optional[int] = None
             for idx in range(len(candidates)):
                 if str(idx + 1) in result_json["Preferred"]:
-                    result = idx
+                    final_result = idx
                     break
-        except (json.JSONDecodeError, KeyError) as e: # より具体的な例外を捕捉
-            logging.error(f"Rater.rater - Error parsing LLM response or key error: {e}")
-            # result は None のまま
-        except Exception as e: # その他の予期せぬエラー
-            logging.error(f"Rater.rater - Unexpected error during LLM rating: {e}")
-            # result は None のまま
+            
+            if final_result is None:
+                logging.warning(f"Rater.rater - LLM did not return a clear preferred choice. Falling back to random choice.")
+                final_result = random.randint(0, len(candidates) - 1)
 
-        # LLMからの評価が得られなかった場合、またはエラーが発生した場合のフォールバック
-        if result is None: # result が None のまま (LLM評価失敗)
-            logging.warning(f"Rater.rater - LLM rating failed or result is None. Falling back to random choice.")
-            # 候補がある場合はランダムに選択 (candidates は上で空でないことをチェック済み)
-            import random
-            result = random.randint(0, len(candidates) - 1)
-            logging.debug(f"Rater.rater (fallback, random choice) return: {result}\n")
-        return result
+            logging.debug(f"Rater.rater successful, result: {final_result}\n")
+            return final_result
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logging.error(f"Rater.rater - Error parsing LLM response or key error: {e}")
+            logging.warning(f"Rater.rater - Falling back to random choice due to parsing error.")
+            return random.randint(0, len(candidates) - 1) if candidates else None
+        except Exception as e:
+            logging.error(f"Rater.rater - Unexpected error during LLM rating: {e}")
+            logging.warning(f"Rater.rater - Falling back to random choice due to unexpected error.")
+            return random.randint(0, len(candidates) - 1) if candidates else None

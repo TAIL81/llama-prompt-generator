@@ -1,15 +1,28 @@
 import json
 import os
 import logging
-
 from groq import Groq
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import Dict, List, Optional, Union
+from dataclasses import dataclass
+from functools import lru_cache
+
 # 環境変数を .env ファイルから読み込みます
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+@dataclass
+class GroqConfig:
+    rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    detect_lang_model: str = "llama-3.1-8b-instant"
+    judge_model: str = "llama-3.3-70b-versatile"
+    max_tokens: int = 8192
+    temperature_rewrite: float = 0.3
+    temperature_detect_lang: float = 0.0
+    temperature_judge: float = 0.0
 
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
@@ -17,18 +30,27 @@ current_script_path = os.path.dirname(os.path.abspath(__file__))
 # PromptGuide.md へのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
-# PromptGuide.md を読み込みます
-with open(prompt_guide_path, "r", encoding="utf-8") as f:
-    PromptGuide = f.read()
+@lru_cache(maxsize=1)
+def load_prompt_guide(path: str) -> str:
+    """
+    PromptGuide.md ファイルを読み込み、キャッシュします。
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+PromptGuide = load_prompt_guide(prompt_guide_path)
 
 # プロンプトガイドに基づいてプロンプトを書き換えるクラス
 class GuideBased:
     def __init__(self):
-        # Groq APIキーを取得し、クライアントを初期化します
-        groq_api_key = os.getenv("GROQ_API_KEY")
+        groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
+        if not groq_api_key:
+            logging.error("GROQ_API_KEY環境変数が設定されていません。")
+            raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
         self.groq_client = Groq(api_key=groq_api_key)
+        self.config = GroqConfig()
 
-    def __call__(self, initial_prompt):
+    def __call__(self, initial_prompt: str) -> str:
         """
         初期プロンプトをプロンプトガイドに基づいて書き換えます。
         言語を検出し、適切な言語で書き換えを行うよう指示します。
@@ -39,10 +61,11 @@ class GuideBased:
         Returns:
             str: 書き換えられたプロンプト。
         """
-        lang = self.detect_lang(initial_prompt)
+        self._validate_initial_prompt(initial_prompt)
+        lang: str = self.detect_lang(initial_prompt)
         # 検出された言語に応じて、プロンプトの言語指示を設定します
         if lang == "ja":
-            lang_prompt = "Please use Japanese for rewriting. The xml tag name is still in English."
+            lang_prompt: str = "Please use Japanese for rewriting. The xml tag name is still in English."
         elif lang == "ch":
             lang_prompt = "Please use Chinese for rewriting. The xml tag name is still in English."
         elif lang == "en":
@@ -51,7 +74,7 @@ class GuideBased:
             lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."
 
         # プロンプト書き換えのための指示テンプレート
-        prompt = """
+        prompt: str = """
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
 This instruction is then sent to Llama to get the expected output.
 
@@ -118,7 +141,7 @@ If the question cannot be answered by the document, say "Cannot answer the quest
 </initial_instruction>
 """.strip()
 
-        messages = [
+        messages: List[Dict[str, str]] = [
             {
                 "role": "user",
                 "content": prompt.format(
@@ -128,12 +151,12 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         ]
         # Groq APIを使用してプロンプトの書き換えをリクエストします
         completion = self.groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=self.config.rewrite_model,
             messages=messages,
-            max_completion_tokens=8192,
-            temperature=0.3,
+            max_completion_tokens=self.config.max_tokens,
+            temperature=self.config.temperature_rewrite,
         )
-        result = completion.choices[0].message.content
+        result: str = completion.choices[0].message.content
         # LLMからの応答をデバッグ出力
         logging.debug(f"__call__ LLM response: \n{result}\n")
         # 結果から不要なXMLタグを除去します
@@ -144,7 +167,14 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         result = result.strip()
         return result
 
-    def detect_lang(self, initial_prompt):
+    def _validate_initial_prompt(self, initial_prompt: str) -> None:
+        """
+        initial_promptの入力検証を行います。
+        """
+        if not initial_prompt.strip():
+            raise ValueError("初期プロンプトが空です")
+
+    def detect_lang(self, initial_prompt: str) -> str:
         """
         与えられたプロンプトの言語を検出します (英語、中国語または日本語)。
 
@@ -154,8 +184,8 @@ If the question cannot be answered by the document, say "Cannot answer the quest
         Returns:
             str: 検出された言語コード ("en", "ch" または "ja")。エラーの場合は空文字列。
         """
-        lang_example = json.dumps({"lang": "ja"})
-        prompt = """
+        lang_example: str = json.dumps({"lang": "ja"})
+        prompt: str = """
 Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
 
 <document>
@@ -165,7 +195,7 @@ Please determine what language the document below is in? English (en), Chinese (
 Use JSON format with key `lang` when return result. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 Output example: {lang_example}
 """.strip()
-        messages = [
+        messages: List[Dict[str, str]] = [
             {
                 "role": "user",
                 "content": prompt.format(
@@ -175,40 +205,40 @@ Output example: {lang_example}
         ]
         # Groq APIを使用して言語検出をリクエストします
         completion = self.groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=self.config.detect_lang_model,
             messages=messages,
-            max_completion_tokens=8192,
-            temperature=0.0,
+            max_completion_tokens=self.config.max_tokens,
+            temperature=self.config.temperature_detect_lang,
         )
         # LLMからの応答をデバッグ出力
         logging.debug(f"detect_lang LLM response: {completion.choices[0].message.content}")
         try:
             # 結果のJSONをパースして言語コードを取得します
-            lang = json.loads(completion.choices[0].message.content)["lang"]
+            lang: str = json.loads(completion.choices[0].message.content)["lang"]
         except Exception as e:
             # エラーが発生した場合は空文字列を返します
             logging.error(f"Error detecting language: {e}")
             lang = ""
         return lang
 
-    def judge(self, candidates):
+    def judge(self, candidates: List[str]) -> Optional[int]:
         """
         複数のプロンプト候補を評価し、最も良いものを選択します。
 
         Args:
-            candidates (list[str]): 評価対象のプロンプト候補のリスト。
+            candidates (List[str]): 評価対象のプロンプト候補のリスト。
 
         Returns:
-            int or None: 最も良いと判断された候補のインデックス。エラーの場合はNone。
+            Optional[int]: 最も良いと判断された候補のインデックス。エラーの場合はNone。
         """
-        Instruction_prompts = []
+        Instruction_prompts: List[str] = []
         for idx, candidate in enumerate(candidates):
             Instruction_prompts.append(
                 f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>"
             )
-        example = json.dumps({"Preferred": "Instruction 1"})
+        example: str = json.dumps({"Preferred": "Instruction 1"})
 # プロンプト評価のための指示テンプレート
-        prompt = """
+        prompt: str = """
 You are a instruction engineer. Your task is to evaluate which of the three instructions given below is better based on guide in <guide> xml tag.
 
 Instruction guide:
@@ -223,7 +253,7 @@ You are a instruction engineer. Your task is to evaluate which of the three inst
 Use JSON format when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 {example}
 """.strip()
-        messages = [
+        messages: List[Dict[str, str]] = [
             {
                 "role": "user",
                 "content": prompt.format(
@@ -235,18 +265,18 @@ Use JSON format when returning results. Please only output the result in json fo
         ]
         # Groq APIを使用してプロンプト候補の評価をリクエストします
         completion = self.groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=self.config.judge_model,
             messages=messages,
-            max_completion_tokens=8192,
-            temperature=0.0,
+            max_completion_tokens=self.config.max_tokens,
+            temperature=self.config.temperature_judge,
         )
         # LLMからの応答をデバッグ出力
         logging.debug(f"judge LLM response (raw): {completion.choices[0].message.content}")
-        final_result = None
+        final_result: Optional[int] = None
         try:
-            result = json.loads(completion.choices[0].message.content)
+            result: Dict[str, str] = json.loads(completion.choices[0].message.content)
             # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
-            for idx in range(3):
+            for idx in range(len(candidates)): # candidatesの長さに合わせてループ
                 if str(idx + 1) in result["Preferred"]:
                     final_result = idx
                     break
