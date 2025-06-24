@@ -9,15 +9,19 @@ from groq import Groq
 from dotenv import load_dotenv
 from pathlib import Path
 
+# ロギング設定
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# 環境変数を .env ファイルから読み込みます
-# プロジェクトルートの .env ファイルから環境変数を読み込みます
+# 環境変数の読み込み
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
+# 定数の定義
+TEMPERATURE = 0.1
+MAX_TOKENS = 8192
+
 # デフォルトのシステムプロンプトのテンプレートを定義します
-default_system_template = "You are a helpful and knowledgeable assistant who is able to provide detailed and accurate information on a wide range of topics. You are also able to provide clear and concise answers to questions and are always willing to go the extra mile to help others."
+DEFAULT_SYSTEM_TEMPLATE = "You are a helpful and knowledgeable assistant who is able to provide detailed and accurate information on a wide range of topics. You are also able to provide clear and concise answers to questions and are always willing to go the extra mile to help others."
 
 # 応答評価用のプロンプトテンプレート
 evaluate_response_prompt_template = """
@@ -70,7 +74,7 @@ Here are the human feedback:
 Please analyze whether Llama's response strictly aligns with OpenAI's response based on the human feedback. Then, consider how the original Llama prompt can be improved accordingly. Your revised prompt should only involve slight adjustments and must not drastically change the original prompt. Use the human feedback to guide your revision.
 
 Finally, provide the revised prompt within the following XML tags:
-
+```xml
 <revised_prompt>
 [Your revised prompt]
 </revised_prompt>
@@ -78,88 +82,79 @@ Finally, provide the revised prompt within the following XML tags:
 
 # APIキーとベースURLを (.env ファイルからロードされた) 環境変数から取得します
 openai_api_key = os.getenv("OPENAI_API_KEY")
-openai_base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 groq_api_key = os.getenv("GROQ_API_KEY")
 
 # プロンプトの最適化と評価を行うクラス
 class Alignment:
     def __init__(self, lang_store=None, language='ja'):
+        self.lang_store = lang_store
+        self.language = language
+
         try:
-            self.lang_store = lang_store
-            self.language = language
             self.openrouter_client = OpenAI(
-                base_url=openai_base_url,
+                base_url=OPENAI_BASE_URL,
                 api_key=openai_api_key,
             )
         except Exception as e:
-            # APIキーがない場合、クライアントはNoneになります
-            logging.error(f"OpenRouter client initialization failed: {e}") # エラーログを追加
+            logging.error(f"OpenRouter client initialization failed: {e}")
             self.openrouter_client = None
+
         try:
             self.groq_client = Groq(api_key=groq_api_key)
         except Exception as e:
-            # APIキーがない場合、クライアントはNoneになります
-            logging.error(f"Groq client initialization failed: {e}") # エラーログを追加
+            logging.error(f"Groq client initialization failed: {e}")
             self.groq_client = None
 
-        # 言語に基づく指示を生成
-        self.default_system_prompt_base = default_system_template
-        if self.language == 'ja':
-            self.generation_language_instruction = "応答は日本語で生成してください。"
-            self.evaluation_language_instruction = "フィードバックと推奨事項は日本語で生成してください。"
-            self.revision_language_instruction = "改訂されたプロンプトは日本語で生成してください。XMLタグ名は英語のままにしてください。"
-        elif self.language == 'en':
-            self.generation_language_instruction = "Please generate the response in English."
-            self.evaluation_language_instruction = "Please generate the feedback and recommendations in English."
-            self.revision_language_instruction = "Please generate the revised prompt in English. XML tag names should remain in English."
+        if self.language == "ja":
+            language_instructions = {
+                "generation": "応答は日本語で生成してください。",
+                "evaluation": "フィードバックと推奨事項は日本語で生成してください。",
+                "revision": "改訂されたプロンプトは日本語で生成してください。XMLタグ名は英語のままにしてください。",
+            }
         else:
-            # デフォルトまたはサポート外言語の場合は英語の指示を使用
-            self.generation_language_instruction = "Please generate the response in English."
-            self.evaluation_language_instruction = "Please generate the feedback and recommendations in English."
-            self.revision_language_instruction = "Please generate the revised prompt in English. XML tag names should remain in English."
+            language_instructions = {}
 
-        # システムプロンプトの組み立て
-        self.groq_system_content = self.default_system_prompt_base
-        if self.generation_language_instruction:
-            self.groq_system_content += f"\n{self.generation_language_instruction}"
-        self.openrouter_system_content = self.default_system_prompt_base
-        if self.generation_language_instruction:
-            self.openrouter_system_content += f"\n{self.generation_language_instruction}"
+        # 英語の指示をデフォルトとして設定
+        self.generation_language_instruction = language_instructions.get("generation", "Please generate the response in English.")
+        system_prompt_suffix = f"\n{self.generation_language_instruction}" if hasattr(self, 'generation_language_instruction') else ""
+        self.groq_system_content = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
+        self.openrouter_system_content = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
 
-    def _get_translation(self, key, default_text):
-        """翻訳を取得するヘルパーメソッド"""
-        if self.lang_store and self.language in self.lang_store:
-            return self.lang_store[self.language].get(key, default_text)
-        return default_text
-
-    def generate_groq_response(self, prompt, model_id):
-        """
-        Groq APIを使用して応答を生成します。
-
-        Args:
-            prompt (str): ユーザープロンプト。
-            model_id (str): 使用するGroqモデルのID。
-
-        Returns:
-            str: Groqモデルからの応答、またはエラーメッセージ。
-        """
-        if not self.groq_client:
-            return "GroqError: API client not initialized. Check GROQ_API_KEY."
-        try:
-            completion = self.groq_client.chat.completions.create(
-                model=model_id,
-                messages=[
-                    {"role": "system", "content": self.groq_system_content},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.1,
-                max_tokens=8192
+        self.evaluate_response_prompt = evaluate_response_prompt_template
+        self.generate_revised_prompt_template = generate_revised_prompt_template
+        
+        if hasattr(self, 'evaluation_language_instruction'):
+            self.evaluate_response_prompt = self.evaluate_response_prompt.format(
+                language_instruction_for_evaluation=self.evaluation_language_instruction
             )
-            # レスポンス構造のバリデーションを追加
-            if not (hasattr(completion, 'choices') and completion.choices and
-                    len(completion.choices) > 0 and
-                    hasattr(completion.choices[0], 'message') and
-                    hasattr(completion.choices[0].message, 'content')):
+        if hasattr(self, 'revision_language_instruction'):
+            self.generate_revised_prompt_template = self.generate_revised_prompt_template.format(
+                language_instruction_for_revision=self.revision_language_instruction
+            )
+        self.evaluation_language_instruction = language_instructions.get("evaluation", "Please generate the feedback and recommendations in English.")
+        self.revision_language_instruction = language_instructions.get("revision", "Please generate the revised prompt in English. XML tag names should remain in English.")
+
+    def _validate_response(self, response):
+        """APIレスポンスの構造を検証するヘルパーメソッド"""
+        return (
+            hasattr(response, "choices")
+            and response.choices
+            and len(response.choices) > 0
+            and hasattr(response.choices[0], "message")
+            and hasattr(response.choices[0].message, "content")
+        )
+
+    def _generate_response(self, client, model_id, system_content, user_prompt):
+        """APIクライアントを使用して応答を生成する共通メソッド"""
+        try:
+            completion = client.chat.completions.create(
+                model=model_id,
+                messages=[{"role": "system", "content": system_content}, {"role": "user", "content": user_prompt}],
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+            )
+            if not self._validate_response(completion):
                 logging.error(f"Invalid response structure from Groq API: {completion}")
                 return "Error: Invalid response structure from Groq API"
             
@@ -168,65 +163,38 @@ class Alignment:
             logging.error(f"Groq API Error: {e}")
             return f"Groq API Error: {str(e)}"
 
+    def generate_groq_response(self, prompt, model_id):
+        """Groq APIを使用して応答を生成"""
+        if not self.groq_client:
+            return "GroqError: API client not initialized. Check GROQ_API_KEY."
+        return self._generate_response(self.groq_client, model_id, self.groq_system_content, prompt)
+
     def generate_openrouter_response(self, prompt, model_id):
-        """
-        OpenRouter API (OpenAI互換) を使用して応答を生成します。
-
-        Args:
-            prompt (str): ユーザープロンプト。
-            model_id (str): 使用するOpenRouterモデルのID。
-
-        Returns:
-            str: OpenRouterモデルからの応答、またはエラーメッセージ。
-        """
+        """OpenRouter APIを使用して応答を生成"""
         if not self.openrouter_client:
             return "OpenRouterError: API client not initialized. Check OPENAI_API_KEY."
-        try:
-            completion = self.openrouter_client.chat.completions.create(
-                model=model_id,
-                messages=[
-                    {"role": "system", "content": self.openrouter_system_content},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.1,
-                max_tokens=8192
-            )
-            if not (hasattr(completion, 'choices') and completion.choices and
-                    len(completion.choices) > 0 and
-                    hasattr(completion.choices[0], 'message') and
-                    hasattr(completion.choices[0].message, 'content')):
-                logging.error(f"Invalid response structure from OpenRouter API: {completion}")
-                return "Error: Invalid response structure from OpenRouter API."
-            
-            return completion.choices[0].message.content
-        except Exception as e:
-            logging.error(f"OpenRouter API Error: {e}")
-            return f"OpenRouter API Error: {str(e)}"
+        return self._generate_response(self.openrouter_client, model_id, self.openrouter_system_content, prompt)
 
-    def stream_groq_response(self, prompt, model_id, output_component):
-        # TODO: Gradioの出力コンポーネントへのストリーミング出力を実装する
-        if not self.groq_client:
-            logging.error("GroqError: API client not initialized. Check GROQ_API_KEY.")
-            output_component.update("GroqError: API client not initialized. Check GROQ_API_KEY.")
-            return
-        try:
-            stream = self.groq_client.chat.completions.create(
-                model=model_id,
-                messages=[
-                    {"role": "system", "content": self.groq_system_content},
-                    {"role": "user", "content": prompt},
-                ],
-                stream=True,
-                temperature=0.1,
-                max_tokens=8192
-            )
-            for chunk in stream:
-                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
-                    output_component.update(chunk.choices[0].delta.content, append=True)
-        except Exception as e:
-            logging.error(f"Groq API Error during streaming: {e}")
-            output_component.update(f"Groq API Error during streaming: {str(e)}")
-
+    # ストリーミング出力メソッド（未実装のためコメントアウト）
+    # def stream_groq_response(self, prompt, model_id, output_component):
+    #     if not self.groq_client:
+    #         logging.error("GroqError: API client not initialized. Check GROQ_API_KEY.")
+    #         output_component.update("GroqError: API client not initialized. Check GROQ_API_KEY.")
+    #         return
+    #     try:
+    #         stream = self.groq_client.chat.completions.create(
+    #             model=model_id,
+    #             messages=[
+    #                 {"role": "system", "content": self.groq_system_content},
+    #                 {"role": "user", "content": prompt},
+    #             ],
+    #             stream=True,
+    #             temperature=TEMPERATURE,
+    #             max_tokens=MAX_TOKENS,
+    #         )
+    #         for chunk in stream:
+    #             if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
+    #                 output_
     def stream_openrouter_response(self, prompt, model_id, output_component):
         # TODO: Gradioの出力コンポーネントへのストリーミング出力を実装する
         if not self.openrouter_client:
@@ -285,7 +253,7 @@ class Alignment:
         output1_result = ""
         output2_result = ""
 
-        processing_message = self._get_translation("Processing...", "Processing...")
+        processing_message = "Processing..."  # _get_translation を削除
 
         if model_provider_choice == "OpenRouter":
             if self.openrouter_client is None:
