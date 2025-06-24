@@ -82,30 +82,10 @@ This instruction is then sent to Llama to get the expected output.
 {guide}
 </instruction_guide>
 
-You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to Llama to get the expected output.
-
 Here are some important rules for rewrite:
 1. Something like `{{variable}}` is customizable text that will be replaced when sent to Llama. It needs to be retained in the rewrite.
 2. {lang_prompt}
 3. Only output the rewrite instruction return them in <rerwited></rerwited>XML tags
-4. If examples are already included in the initial prompt, do not remove the examples after the rewrite.
-
-You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to Llama to get the expected output.
-
-Example:
-<initial_instruction>
-You are a research assistant. You will answer the following question based on the document in triple quotes, if the question cannot be answered please output "Cannot answer the question from the document"
-```
-{{full_text}}
-```
-You will also need to find the original quote from the document that is most relevant to answering the question. If there is no relevant citation, output "No relevant quotes".
-Your output should start by listing all the quotes, putting one quote per line and starting with a numerical index. Then answer the question by adding the index of the quote where it is needed.
-
-The question is: 
-{{question}}
-</initial_instruction>
 
 <rerwited>
 You are an expert research assistant. Here is a document you will answer questions about:
@@ -130,6 +110,19 @@ Company X earned $12 million. [1] Almost 90% of it was from widget sales. [2]
 </example>
 
 If the question cannot be answered by the document, say "Cannot answer the question from the document".
+
+Example:
+<initial_instruction>
+You are a research assistant. You will answer the following question based on the document in triple quotes, if the question cannot be answered please output "Cannot answer the question from the document"
+```
+{{full_text}}
+```
+You will also need to find the original quote from the document that is most relevant to answering the question. If there is no relevant citation, output "No relevant quotes".
+Your output should start by listing all the quotes, putting one quote per line and starting with a numerical index. Then answer the question by adding the index of the quote where it is needed.
+
+The question is: 
+{{question}}
+</initial_instruction>
 
 <question>
 {{question}}
