@@ -317,7 +317,7 @@ def run_ape_on_metaprompt_output(metaprompt_template, metaprompt_variables_str):
     demo_data = {}
     for var_name in variable_names:
         # APEはプロンプト内の {{VAR_NAME}} 形式の変数を期待し、demo_dataのキーもそれに合わせる
-        placeholder_key_for_ape = f"{{${var_name}}}" # 例: {$CUSTOMER_COMPLAINT}
+        placeholder_key_for_ape = f"{{{{var_name}}}}" # 例: {{CUSTOMER_COMPLAINT}
         demo_data[placeholder_key_for_ape] = f"dummy_{var_name.lower()}" # APE評価用のダミーデータ
 
     # APEを実行 (epoch=1は固定)

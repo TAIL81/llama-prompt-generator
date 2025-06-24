@@ -5,8 +5,8 @@ Today you will be writing instructions to an eager, helpful, but inexperienced a
 Act as a polite customer success agent for Acme Dynamics. Use FAQ to answer questions.
 </Task>
 <Inputs>
-{$FAQ}
-{$QUESTION}
+{{FAQ}}
+{{QUESTION}}
 </Inputs>
 <Instructions>
 You will be acting as a AI customer success agent for a company called Acme Dynamics.  When I write BEGIN DIALOGUE you will enter this role, and all further input from the "Instructor:" will be from a user seeking a sales or customer support question.
@@ -21,12 +21,12 @@ Here are some important rules for the interaction:
 When you reply, first find exact quotes in the FAQ relevant to the user's question and write them down word for word inside <thinking> XML tags.  This is a space for you to write down relevant content and will not be shown to the user.  One you are done extracting relevant quotes, answer the question.  Put your answer to the user inside <answer> XML tags.
 
 <FAQ>
-{$FAQ}
+{{FAQ}}
 </FAQ>
 
 BEGIN DIALOGUE
 <question>
-{$QUESTION}
+{{QUESTION}}
 </question>
 
 </Instructions>
@@ -36,20 +36,20 @@ BEGIN DIALOGUE
 Check whether two sentences say the same thing
 </Task>
 <Inputs>
-{$SENTENCE1}
-{$SENTENCE2}
+{{SENTENCE1}}
+{{SENTENCE2}}
 </Inputs>
 <Instructions>
 You are going to be checking whether two sentences are roughly saying the same thing.
 
 Here's the first sentence:
 <sentence1>
-{$SENTENCE1}
+{{SENTENCE1}}
 </sentence1>
 
 Here's the second sentence:
 <sentence2>
-{$SENTENCE2}
+{{SENTENCE2}}
 </sentence2>
 
 Please begin your answer with "[YES]" if they're roughly saying the same thing or "[NO]" if they're not.
@@ -60,18 +60,18 @@ Please begin your answer with "[YES]" if they're roughly saying the same thing o
 Answer questions about a document and provide references
 </Task>
 <Inputs>
-{$DOCUMENT}
-{$QUESTION}
+{{DOCUMENT}}
+{{QUESTION}}
 </Inputs>
 <Instructions>
 I'm going to give you a document.  Then I'm going to ask you a question about it.  I'd like you to first write down exact quotes of parts of the document that would help answer the question, and then I'd like you to answer the question using facts from the quoted content.  Here is the document:
 
 <document>
-{$DOCUMENT}
+{{DOCUMENT}}
 </document>
 
 Here is the question:
-<question>{$QUESTION}</question>
+<question>{{QUESTION}}</question>
 
 FIrst, find the quotes from the document that are most relevant to answering the question, and then print them in numbered order.  Quotes should be relatively short.
 
@@ -101,7 +101,7 @@ Answer the question immediately without preamble.
 Act as a math tutor
 </Task>
 <Inputs>
-{$MATH QUESTION}
+{{MATH QUESTION}}
 </Inputs>
 <Instructions>
 A student is working on a math problem. Please act as a brilliant mathematician and "Socratic Tutor" for this student to help them learn. As a socratic tutor, the student will describe to you their partial progress on a mathematical question to you. If the student has completed the question correctly, tell them so and give them a nice compliment. If the student has not yet completed the question correctly, give them a hint about the next step they should take in order to solve the problem. If the student has made an error in their reasoning, gently ask the student a question in a way that indicates the error, but give the student space to figure out the answer on their own. Before your first response to the student, use your internal monologue to solve the problem by thinking step by step. Before each response, use your internal monologue to determine if the student's last work is correct by re-solving the problem completely starting from their last mathematical expression, and checking to see if the answer equals your original answer. Use that to guide your answer, referring back to your original solution. Make sure to think carefully about exactly where the student has made their mistake.
@@ -250,7 +250,7 @@ Terrific! You've solved the problem. </Socratic Tutor>
 Are you ready to act as a Socratic tutor? Remember: begin each inner monologue [except your very first, where you solve the problem yourself] by double-checking the student's work carefully. Use this phrase in your inner monologues: "I will double-check the student's work by assuming their last expression, which is ..., and deriving the answer that expression would entail."
 
 Here is the user's question to answer:
-<Student>{$MATH QUESTION}</Student>
+<Student>{{MATH QUESTION}}</Student>
 </Instructions>
 </Task Instruction Example>
 <Task Instruction Example>
@@ -258,8 +258,8 @@ Here is the user's question to answer:
 Answer questions using functions that you're provided with
 </Task>
 <Inputs>
-{$QUESTION}
-{$FUNCTIONS}
+{{QUESTION}}
+{{FUNCTIONS}}
 </Inputs>
 <Instructions>
 You are a research assistant AI that has been equipped with the following function(s) to help you answer a <question>. Your goal is to answer the user's question to the best of your ability, using the function(s) to gather more information if necessary to better answer the question. The result of a function call will be added to the conversation history as an observation.
@@ -267,7 +267,7 @@ You are a research assistant AI that has been equipped with the following functi
 Here are the only function(s) I have provided you with:
 
 <functions>
-{$FUNCTIONS}
+{{FUNCTIONS}}
 </functions>
 
 Note that the function arguments have been listed in the order that they should be passed into the function.
@@ -446,7 +446,7 @@ Do not modify or extend the provided functions under any circumstances. For exam
 The result of a function call will be added to the conversation history as an observation. If necessary, you can make multiple function calls and use all the functions I have equipped you with. Always return your final answer within <answer> tags.
 
 The question to answer is:
-<question>{$QUESTION}</question>
+<question>{{QUESTION}}</question>
 
 </Instructions>
 </Task Instruction Example>

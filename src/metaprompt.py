@@ -63,7 +63,7 @@ class MetaPrompt:
         # 変数リストをメタプロンプト用の文字列形式に変換します
         variable_string: str = ""
         for variable in parsed_variables:
-            variable_string += "\n{$" + variable.upper() + "}"
+            variable_string += "\n{{" + variable.upper() + "}}"
         
         prompt: str = self.metaprompt.replace("{{TASK}}", task)
         prompt += "Please use Japanese for rewriting. The xml tag name is still in English." # 指示文を追加
@@ -180,13 +180,13 @@ class MetaPrompt:
         Returns:
             Set[str]: 抽出された変数名のセット（重複なし）。
         """
-        # Matches {{VAR}}, {$VAR}, and {VAR} (case-insensitive for VAR content)
-        # Extracts only the content VAR.
-        # Order of patterns matters to avoid {{VAR}} being matched by {VAR} partially.
+        # {{変数名}}, {$変数名}, {変数名} (変数名の大文字・小文字を区別しない) にマッチする
+        # 変数名のみを抽出し、{{...}} などの記号は除く
+        # パターンの順序は重要で、{変数名} が {{変数名}} の一部にマッチしないようにする
         patterns: List[str] = [
-            r"\{\{([^{}]+?)\}\}",  # {{VAR}}
-            r"\{\$([^{}]+?)\}",   # {$VAR} (extracts VAR from {$VAR})
-            r"\{([^{}]+?)\}",    # {VAR}
+            r"\{\{([^{}]+?)\}\}",  # {{変数名}}
+            r"\{\$([^{}]+?)\}",   # {$変数名}
+            r"\{([^{}]+?)\}",    # {変数名}
         ]
         variables: Set[str] = set()
         temp_string: str = prompt_content
