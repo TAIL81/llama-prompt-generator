@@ -232,14 +232,12 @@ Output example: {lang_example}
         example: str = json.dumps({"Preferred": "Instruction 1"})
 # プロンプト評価のための指示テンプレート
         prompt: str = """
-You are a instruction engineer. Your task is to evaluate which of the three instructions given below is better based on guide in <guide> xml tag.
+You are an instruction engineer. Your task is to evaluate which of the three instructions given below is better based on the guide in the <guide> xml tag.
 
 Instruction guide:
 <guide>
 {guide}
 </guide>
-
-You are a instruction engineer. Your task is to evaluate which of the three instructions given below is better based on guide in <guide> xml tag.
 
 {Instruction_prompts}
 
