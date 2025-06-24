@@ -1,6 +1,8 @@
 import json
 import os
 import threading
+import logging
+from typing import List, Dict, Any, Optional
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -12,30 +14,145 @@ from optimize import Alignment
 from translate import GuideBased
 from application.soe_prompt import SOEPrompt
 
-## 各コンポーネントを初期化します
-## 環境変数を読み込みます
-env_path = Path(__file__).parent.parent / '.env'
-load_dotenv(env_path)
-language = os.getenv("LANGUAGE", "ja")
+# ロギング設定の改善
+def setup_logging():
+    log_level = os.getenv('LOG_LEVEL', 'INFO')
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('app.log'),
+            logging.StreamHandler()
+        ]
+    )
 
-## JSONファイルから翻訳を読み込みます
-translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
-with open(translations_path, 'r', encoding='utf-8') as f:
-    lang_store = json.load(f)
+setup_logging()
 
-ape = APE()
-rewrite = GuideBased()
-alignment = Alignment(lang_store=lang_store, language=language) # lang_storeとlanguageを渡す
-metaprompt = MetaPrompt()
-soeprompt = SOEPrompt()
-calibration = CalibrationPrompt()
+# 設定管理クラスの導入
+class AppConfig:
+    def __init__(self):
+        self.language: str = "ja"
+        self.lang_store: Dict[str, Any] = {}
+        self.load_env()
+        self.safe_load_translations()
+    
+    def load_env(self):
+        env_path = Path(__file__).parent.parent / '.env'
+        load_dotenv(env_path)
+        self.language = os.getenv("LANGUAGE", "ja")
+        logging.info(f"環境変数から言語設定を読み込みました: {self.language}")
+    
+    def safe_load_translations(self):
+        translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
+        try:
+            with open(translations_path, 'r', encoding='utf-8') as f:
+                self.lang_store = json.load(f)
+            logging.info(f"翻訳ファイルを読み込みました: {translations_path}")
+        except FileNotFoundError:
+            logging.error(f"翻訳ファイルが見つかりません: {translations_path}")
+            self.lang_store = {}
+        except json.JSONDecodeError:
+            logging.error(f"翻訳ファイルの形式が不正です: {translations_path}")
+            self.lang_store = {}
 
-## JSONファイルから翻訳を読み込みます
-translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
-with open(translations_path, 'r', encoding='utf-8') as f:
-    lang_store = json.load(f)
+# AppConfigのインスタンスを作成
+config = AppConfig()
+language = config.language
+lang_store = config.lang_store
 
-def generate_prompt(original_prompt, level):
+# コンポーネントの遅延初期化を管理するクラス
+class ComponentManager:
+    def __init__(self, config: AppConfig):
+        self._config = config
+        self._components: Dict[str, Any] = {
+            'ape': None,
+            'rewrite': None,
+            'alignment': None,
+            'metaprompt': None,
+            'soeprompt': None,
+            'calibration': None
+        }
+    
+    def __getattr__(self, name: str) -> Any:
+        if name in self._components:
+            if self._components[name] is None:
+                self._initialize_component(name)
+            return self._components[name]
+        raise AttributeError(f"Component {name} not found")
+    
+    def _initialize_component(self, name: str):
+        logging.info(f"Initializing component: {name}")
+        if name == 'ape':
+            self._components[name] = APE()
+        elif name == 'rewrite':
+            self._components[name] = GuideBased()
+        elif name == 'alignment':
+            self._components[name] = Alignment(lang_store=self._config.lang_store, language=self._config.language)
+        elif name == 'metaprompt':
+            self._components[name] = MetaPrompt()
+        elif name == 'soeprompt':
+            self._components[name] = SOEPrompt()
+        elif name == 'calibration':
+            self._components[name] = CalibrationPrompt()
+        else:
+            raise ValueError(f"Unknown component: {name}")
+
+# コンポーネントマネージャーのインスタンスを作成
+component_manager = ComponentManager(config)
+
+# 各コンポーネントへのアクセスは component_manager.ape のように変更
+# 例: ape = component_manager.ape
+# ただし、既存のコードの変更を最小限にするため、ここでは直接変数に割り当てます
+ape = component_manager.ape
+rewrite = component_manager.rewrite
+alignment = component_manager.alignment
+metaprompt = component_manager.metaprompt
+soeprompt = component_manager.soeprompt
+calibration = component_manager.calibration
+
+# generate_prompt関数の分割と型ヒントの追加
+from concurrent.futures import ThreadPoolExecutor
+
+def create_single_textbox(value: str) -> List[gr.Textbox]:
+    return [
+        gr.Textbox(
+            label=lang_store[language]["Prompt Template Generated"],
+            value=value,
+            lines=3,
+            show_copy_button=True,
+            interactive=False,
+        )
+    ] + [gr.Textbox(visible=False)] * 2
+
+def create_multiple_textboxes(candidates: List[str], judge_result: int) -> List[gr.Textbox]:
+    textboxes = []
+    for i in range(3):
+        is_best = "Y" if judge_result == i else "N"
+        textboxes.append(
+            gr.Textbox(
+                label=f"{lang_store[language]['Prompt Template Generated']} #{i+1} {is_best}",
+                value=candidates[i],
+                lines=3,
+                show_copy_button=True,
+                visible=True,
+                interactive=False,
+            )
+        )
+    return textboxes
+
+def generate_single_prompt(original_prompt: str) -> List[gr.Textbox]:
+    """一回生成モード"""
+    result = rewrite(original_prompt)
+    return create_single_textbox(result)
+
+def generate_multiple_prompts_async(original_prompt: str) -> List[str]:
+    """複数回生成モード (非同期実行用)"""
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(rewrite, original_prompt) for _ in range(3)]
+        candidates = [future.result() for future in futures]
+    return candidates
+
+def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
     """
     元のプロンプトと最適化レベルに基づいてプロンプトを生成します。
 
@@ -47,39 +164,110 @@ def generate_prompt(original_prompt, level):
         list: Gradioテキストボックスコンポーネントのリスト。
     """
     if level == "One-time Generation":
-        result = rewrite(original_prompt)
-        return [
-            gr.Textbox(
-                label=lang_store[language]["Prompt Template Generated"],
-                value=result,
-                lines=3,
-                show_copy_button=True,
-                interactive=False,
-            )
-        ] + [gr.Textbox(visible=False)] * 2 # 複数回生成用の非表示テキストボックス
+        return generate_single_prompt(original_prompt)
     elif level == "Multiple-time Generation":
-        candidates = []
-        for i in range(3):
-            result = rewrite(original_prompt)
-            candidates.append(result)
+        candidates = generate_multiple_prompts_async(original_prompt)
         judge_result = rewrite.judge(candidates)
-        textboxes = []
-        for i in range(3):
-            is_best = "Y" if judge_result == i else "N"
-            textboxes.append( # 生成された各プロンプト候補を表示するテキストボックス
-                gr.Textbox(
-                    label=f"{lang_store[language]['Prompt Template Generated']} #{i+1} {is_best}",
-                    value=candidates[i],
-                    lines=3,
-                    show_copy_button=True,
-                    visible=True,
-                    interactive=False,
-                )
-            )
-        return textboxes
+        return create_multiple_textboxes(candidates, judge_result)
+    return [] # デフォルトの戻り値
 
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# セキュリティ改善: 制限付きコード実行クラス
+import ast
+import operator
+
+class SafeCodeExecutor:
+    ALLOWED_NODES = (ast.Expression, ast.Call, ast.Name, ast.Load, ast.Constant, ast.Tuple, ast.List, ast.Dict, ast.Set, ast.Attribute, ast.Subscript, ast.Index, ast.Slice)
+    ALLOWED_FUNCTIONS = {
+        'len': len,
+        'str': str,
+        'int': int,
+        'float': float,
+        'bool': bool,
+        'list': list,
+        'dict': dict,
+        'set': set,
+        'tuple': tuple,
+        'min': min,
+        'max': max,
+        'sum': sum,
+        'abs': abs,
+        'round': round,
+        'range': range,
+        'zip': zip,
+        'map': map,
+        'filter': filter,
+        'sorted': sorted,
+        'all': all,
+        'any': any,
+        'getattr': getattr, # 属性アクセスを許可
+        'hasattr': hasattr,
+        'isinstance': isinstance,
+        'issubclass': issubclass,
+        'type': type,
+        'print': print, # デバッグ用にprintを許可
+    }
+    ALLOWED_OPERATORS = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
+        ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+        ast.LShift: operator.lshift,
+        ast.RShift: operator.rshift,
+        ast.BitOr: operator.or_,
+        ast.BitXor: operator.xor,
+        ast.BitAnd: operator.and_,
+        ast.USub: operator.neg,
+        ast.UAdd: operator.pos,
+        ast.Not: operator.not_,
+        ast.Eq: operator.eq,
+        ast.NotEq: operator.ne,
+        ast.Lt: operator.lt,
+        ast.LtE: operator.le,
+        ast.Gt: operator.gt,
+        ast.GtE: operator.ge,
+        ast.Is: operator.is_,
+        ast.IsNot: operator.is_not,
+        ast.In: operator.contains,
+        ast.NotIn: lambda a, b: not operator.contains(a, b),
+    }
+
+    def execute_safe_code(self, code_str: str, context: Dict[str, Any]) -> Any:
+        try:
+            tree = ast.parse(code_str, mode='eval')
+            
+            for node in ast.walk(tree):
+                if not isinstance(node, self.ALLOWED_NODES):
+                    raise ValueError(f"許可されていないASTノードタイプが含まれています: {type(node).__name__}")
+                if isinstance(node, ast.Call):
+                    if not isinstance(node.func, ast.Name) or node.func.id not in self.ALLOWED_FUNCTIONS:
+                        raise ValueError(f"許可されていない関数呼び出しが含まれています: {node.func.id if isinstance(node.func, ast.Name) else 'unknown'}")
+                if isinstance(node, (ast.Import, ast.ImportFrom, ast.Lambda, ast.GeneratorExp, ast.ListComp, ast.SetComp, ast.DictComp, ast.AsyncFunctionDef, ast.Await, ast.Yield, ast.YieldFrom, ast.Starred, ast.AnnAssign, ast.AugAssign, ast.For, ast.AsyncFor, ast.While, ast.If, ast.With, ast.AsyncWith, ast.Raise, ast.Try, ast.Assert, ast.Delete, ast.Pass, ast.Break, ast.Continue, ast.Global, ast.Nonlocal, ast.ClassDef, ast.FunctionDef)):
+                    raise ValueError(f"許可されていない操作が含まれています: {type(node).__name__}")
+                if isinstance(node, (ast.BinOp, ast.UnaryOp, ast.Compare)):
+                    op_type = type(node.op)
+                    if op_type not in self.ALLOWED_OPERATORS:
+                        raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
+
+            # 実行コンテキストを制限
+            safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}
+            safe_globals.update(context)
+            
+            return eval(compile(tree, '<string>', 'eval'), safe_globals, safe_globals)
+        except Exception as e:
+            logging.error(f"コード実行エラー: {e}")
+            return None
+
+# SafeCodeExecutorのインスタンスを作成
+safe_code_executor = SafeCodeExecutor()
+
+# calibration.optimize 関数内で postprocess_code の実行を safe_code_executor を使うように変更する必要がある
+# これは calibration.py ファイルの変更が必要になるため、ここでは app.py の変更のみに留める
+# ただし、app.py の calibration.optimize の呼び出し部分で postprocess_code が渡されているため、
+# calibration.py 側で SafeCodeExecutor を使用するように修正が必要であることをメモしておく。
+# 現時点では app.py の変更のみに集中する。
 
 def ape_prompt(original_prompt, user_data):
     logging.debug("ape_prompt function was called!")
