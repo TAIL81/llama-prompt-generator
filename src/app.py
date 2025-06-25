@@ -53,12 +53,15 @@ class AppConfig:
         try: 
             with open(translations_path, 'r', encoding='utf-8') as f:
                 self.lang_store = json.load(f)
-            logging.info(f"翻訳ファイルを読み込みました: {translations_path}")
+            logging.info(f"翻訳ファイルを正常に読み込みました: {translations_path}. lang_storeのキー: {self.lang_store.keys()}")
         except FileNotFoundError:
             logging.error(f"翻訳ファイルが見つかりません: {translations_path}")
             self.lang_store = {}
-        except json.JSONDecodeError:
-            logging.error(f"翻訳ファイルの形式が不正です: {translations_path}")
+        except json.JSONDecodeError as e:
+            logging.error(f"翻訳ファイルの形式が不正です: {translations_path}. エラー: {e}")
+            self.lang_store = {}
+        except Exception as e:
+            logging.error(f"翻訳ファイルの読み込み中に予期せぬエラーが発生しました: {translations_path}. エラー: {e}")
             self.lang_store = {}
 
 # AppConfigのインスタンスを作成
@@ -289,7 +292,23 @@ def ape_prompt(original_prompt, user_data):
     Returns:
         list: Gradioテキストボックスコンポーネントのリスト。
     """
-    result = ape(original_prompt, 1, json.loads(user_data))
+    try:
+        parsed_user_data = json.loads(user_data)
+    except json.JSONDecodeError as e:
+        logging.error(f"Error decoding user_data in ape_prompt: {e}. User data was: '{user_data}'")
+        # エラーが発生した場合、空の辞書を返すか、適切なエラー処理を行う
+        # ここでは、エラーメッセージを表示するために空のテキストボックスを返す
+        return [
+            gr.Textbox(
+                label="Error",
+                value=f"Error processing user data: {e}. Please ensure it's valid JSON.",
+                lines=3,
+                show_copy_button=True,
+                interactive=False,
+            )
+        ] + [gr.Textbox(visible=False)] * 2
+
+    result = ape(original_prompt, 1, parsed_user_data)
     return [
         gr.Textbox(
             label="Prompt Generated",
