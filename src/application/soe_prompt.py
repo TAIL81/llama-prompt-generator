@@ -1,13 +1,13 @@
 import os
 import base64
 import json
+from typing import List, Dict, Any, Optional
 from groq import Groq
-
 from dotenv import load_dotenv
 
 load_dotenv()
 
-groq_api_key = os.getenv("GROQ_API_KEY")
+groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
 
 class SOEPrompt:
     def __init__(self, model_id="meta-llama/llama-4-scout-17b-16e-instruct", system='You are an AI assistant that generates SEO-optimized product descriptions.'):
@@ -15,13 +15,13 @@ class SOEPrompt:
         self.model_id = model_id
         self.system = system
 
-    def encode_image(self, image_path):
+    def encode_image(self, image_path: str) -> str:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def run_multi_modal_prompt(self, messages, max_completion_tokens=8192):
+    def run_multi_modal_prompt(self, messages: List[Dict[str, List[Dict[str, str]]]], max_completion_tokens: int = 8192) -> Dict[str, List[Dict[str, str]]]:
         # Groqは画像入力未対応のため、テキストのみ対応
-        completion = self.groq_client.chat.completions.create(
+        completion: Any = self.groq_client.chat.completions.create(
             model=self.model_id,
             messages=messages,
             max_completion_tokens=max_completion_tokens,
@@ -29,7 +29,7 @@ class SOEPrompt:
         # Groqのレスポンス形式に合わせて返却
         return {"content": [{"text": completion.choices[0].message.content}]}
 
-    def generate_groq_response(self, prompt):
+    def generate_groq_response(self, prompt: str) -> str:
         messages = [
             {"role": "system", "content": self.system},
             {"role": "user", "content": prompt}
@@ -41,7 +41,7 @@ class SOEPrompt:
         )
         return completion.choices[0].message.content
 
-    def generate_product_description(self, product_category, brand_name, usage_description, target_customer, image_path=None, media_type="image/jpeg"):
+    def generate_product_description(self, product_category: str, brand_name: str, usage_description: str, target_customer: str, image_path: Optional[str] = None, media_type: str = "image/jpeg") -> str:
         image_description = None
         if image_path:
             encoded_image = self.encode_image(image_path)
@@ -93,7 +93,7 @@ class SOEPrompt:
         product_description = self.generate_groq_response(prompt_template)
         return product_description
 
-    def generate_description(self, product_category, brand_name, usage_description, target_customer, image_files):
+    def generate_description(self, product_category: str, brand_name: str, usage_description: str, target_customer: str, image_files: Optional[List[Any]]) -> str:
         media_type = None
         if image_files:
             images_paths = [file.name for file in image_files]

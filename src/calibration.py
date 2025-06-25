@@ -289,7 +289,7 @@ class CalibrationPrompt:
             history = step_result['history']
         return prompt.strip()
 
-    def step(self, task_description, prompt, dataset, postprocess_code, history):
+    def step(self, task_description: str, prompt: str, dataset: pd.DataFrame, postprocess_code: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
         # 1回の最適化ステップを実行します。エラー分析、履歴の追加、新しいプロンプトの提案を行います。
         num_errors = 5
         mean_score = self.eval_score(dataset)
@@ -310,7 +310,7 @@ class CalibrationPrompt:
         prompt_input["labels"] = json.dumps([str(label) for label in list(dataset['label'].unique())])
         # 新しいプロンプトを提案するモデルを呼び出します
         prompt_suggestion = self.invoke_model(step_prompt.format(**prompt_input), model='scout')
-        pattern = r"<new_prompt>(.*?)</new_prompt>"
+        pattern = r"&lt;new_prompt&gt;(.*?)&lt;/new_prompt&gt;"
         cur_prompt = re.findall(pattern, prompt_suggestion, re.DOTALL)[0]
         # 新しいプロンプトで出力を取得
         cur_dataset = self.get_output(cur_prompt, dataset, postprocess_code, return_df=True)
@@ -346,7 +346,7 @@ class CalibrationPrompt:
         """
         if is_score:
             return f"<example>\n<prompt_score>\n{sample['score']:.2f}\n</prompt_score>\n<prompt>\n{sample['prompt']}\n</prompt>\n<example>\n"
-        else:
+        else: 
             return f"####\n##Prompt:\n{sample['prompt']}\n{self.large_error_to_str(sample['errors'], num_errors_per_label)}####\n "
     def large_error_to_str(self, error_df: pd.DataFrame, num_large_errors_per_label: int) -> str:
         """
@@ -377,7 +377,7 @@ class CalibrationPrompt:
                     if k in ('label', 'predict', 'score'):
                         continue
                     Sample += f'{k}: {v}\n'
-                Sample = Sample.strip()
+                Sample = Sample.strip() 
                 txt_res += f"<Sample>\n{Sample}\n</Sample>\n<Prediction>\n{prediction}\n</Prediction>\n<GT>\n{label}\n</GT>\n"
         return txt_res.strip()
 
@@ -432,5 +432,5 @@ class CalibrationPrompt:
         pattern = r"<analysis>(.*?)</analysis>"
         analysis = re.findall(pattern, analysis, re.DOTALL)[0].strip()
         # 現在の情報を履歴に追加
-        history.append({'prompt': prompt, 'score': mean_score,'errors': errors, 'confusion_matrix': conf_matrix, 'analysis': analysis})
+        history.append({'prompt': prompt, 'score': mean_score,'errors': errors, 'confusion_matrix': conf_matrix, 'analysis': analysis}) 
         return history
