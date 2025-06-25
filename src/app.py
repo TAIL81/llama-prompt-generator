@@ -335,129 +335,6 @@ def metaprompt_wrapper(task: str, variables_str: str) -> Tuple[str, str, str, st
     return prompt, new_vars, "", ""
 
 ## Gradioインターフェースを定義します
-# 言語ストアの初期化とフォールバック
-# translations.jsonが存在しない、または不正な形式の場合に備えて、
-# 英語のデフォルト値を持つlang_storeを初期化します。
-# これにより、KeyErrorを回避し、アプリケーションの起動を可能にします。
-if not config.lang_store:
-    logging.warning("翻訳ファイルが読み込めなかったため、デフォルトの英語設定を使用します。")
-    config.lang_store = {
-        "en": {
-            "Automatic Prompt Engineering": "Automatic Prompt Engineering",
-            "Meta Prompt": "Meta Prompt",
-            "Task": "Task",
-            "Please input your task": "Please input your task",
-            "Draft an email responding to a customer complaint": "Draft an email responding to a customer complaint",
-            "Variables": "Variables",
-            "Please input your variables, one variable per line": "Please input your variables, one variable per line",
-            "CUSTOMER_COMPLAINT\nCOMPANY_NAME": "CUSTOMER_COMPLAINT\nCOMPANY_NAME",
-            "Generate Prompt": "Generate Prompt",
-            "APE on MetaPrompt Output": "APE on MetaPrompt Output",
-            "MetaPrompt Output: Prompt Template": "MetaPrompt Output: Prompt Template",
-            "MetaPrompt Output: Variables": "MetaPrompt Output: Variables",
-            "APE Output: Prompt Template": "APE Output: Prompt Template",
-            "APE Output: Variables": "APE Output: Variables",
-            "Prompt Translation": "Prompt Translation",
-            "Please input your original prompt": "Please input your original prompt",
-            "Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\"": "Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\"",
-            "Optimize Level": "Optimize Level",
-            "Generate Prompt": "Generate Prompt",
-            "Prompt Template Generated": "Prompt Template Generated",
-            "Prompt Evaluation": "Prompt Evaluation",
-            "[Optional]Input the template variable need to be replaced": "[Optional]Input the template variable need to be replaced",
-            "Replace Result": "Replace Result",
-            "Replace Variables in Original Prompt": "Replace Variables in Original Prompt",
-            "Replace Variables in Revised Prompt": "Replace Variables in Revised Prompt",
-            "Choose Model Provider for Comparison": "Choose Model Provider for Comparison",
-            "Choose OpenRouter Model": "Choose OpenRouter Model",
-            "Choose Groq Model": "Choose Groq Model",
-            "Execute prompt": "Execute prompt",
-            "Output for Original Prompt ({provider})": "Output for Original Prompt ({provider})",
-            "Output for Evaluation Prompt ({provider})": "Output for Evaluation Prompt ({provider})",
-            "Evaluate the Prompt Effect": "Evaluate the Prompt Effect",
-            "Input your feedback manually or by model": "Input your feedback manually or by model",
-            "Choose the Evaluation Model": "Choose the Evaluation Model",
-            "Auto-evaluate the Prompt Effect": "Auto-evaluate the Prompt Effect",
-            "Iterate the Prompt": "Iterate the Prompt",
-            "Revised Prompt": "Revised Prompt",
-            "SOE-Optimized Product Description": "SOE-Optimized Product Description",
-            "Product Category": "Product Category",
-            "Enter the product category": "Enter the product category",
-            "Brand Name": "Brand Name",
-            "Enter the brand name": "Enter the brand name",
-            "Usage Description": "Usage Description",
-            "Enter the usage description": "Enter the usage description",
-            "Target Customer": "Target Customer",
-            "Enter the target customer": "Enter the target customer",
-            "Uploaded Images": "Uploaded Images",
-            "Upload Product Image (Optional)": "Upload Product Image (Optional)",
-            "Generate Product Description": "Generate Product Description",
-            "Generated Product Description": "Generated Product Description",
-            "Prompt Calibration": "Prompt Calibration",
-            "Please input your postprocess code": "Please input your postprocess code",
-            "Task type": "Task type",
-            "Epoch": "Epoch",
-            "Optimization based on prediction": "Optimization based on prediction",
-        },
-        "ja": {
-            "Automatic Prompt Engineering": "自動プロンプトエンジニアリング",
-            "Meta Prompt": "メタプロンプト",
-            "Task": "タスク",
-            "Please input your task": "タスクを入力してください",
-            "Draft an email responding to a customer complaint": "顧客からの苦情メールへの返信を作成する",
-            "Variables": "変数",
-            "Please input your variables, one variable per line": "変数を1行に1つ入力してください",
-            "CUSTOMER_COMPLAINT\nCOMPANY_NAME": "CUSTOMER_COMPLAINT\nCOMPANY_NAME",
-            "Generate Prompt": "プロンプト生成",
-            "APE on MetaPrompt Output": "メタプロンプト出力にAPEを適用",
-            "MetaPrompt Output: Prompt Template": "メタプロンプト出力: プロンプトテンプレート",
-            "MetaPrompt Output: Variables": "メタプロンプト出力: 変数",
-            "APE Output: Prompt Template": "APE出力: プロンプトテンプレート",
-            "APE Output: Variables": "APE出力: 変数",
-            "Prompt Translation": "プロンプト書き換え",
-            "Please input your original prompt": "元のプロンプトを入力してください",
-            "Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\"": "三重引用符で区切られたテキストを要約してください。\n\n\"\"\"{{insert text here}}\"\"\"",
-            "Optimize Level": "最適化レベル",
-            "Generate Prompt": "プロンプト生成",
-            "Prompt Template Generated": "生成されたプロンプトテンプレート",
-            "Prompt Evaluation": "プロンプト評価",
-            "[Optional]Input the template variable need to be replaced": "[オプション]置換するテンプレート変数を入力してください",
-            "Replace Result": "置換結果",
-            "Replace Variables in Original Prompt": "元のプロンプトの変数を置換",
-            "Replace Variables in Revised Prompt": "改訂されたプロンプトの変数を置換",
-            "Choose Model Provider for Comparison": "比較するモデルプロバイダーを選択",
-            "Choose OpenRouter Model": "OpenRouterモデルを選択",
-            "Choose Groq Model": "Groqモデルを選択",
-            "Execute prompt": "プロンプト実行",
-            "Output for Original Prompt ({provider})": "元のプロンプトの出力 ({provider})",
-            "Output for Evaluation Prompt ({provider})": "評価プロンプトの出力 ({provider})",
-            "Evaluate the Prompt Effect": "プロンプト効果を評価",
-            "Input your feedback manually or by model": "フィードバックを手動またはモデルで入力",
-            "Choose the Evaluation Model": "評価モデルを選択",
-            "Auto-evaluate the Prompt Effect": "プロンプト効果を自動評価",
-            "Iterate the Prompt": "プロンプトを改善",
-            "Revised Prompt": "改善されたプロンプト",
-            "SOE-Optimized Product Description": "SOE最適化された商品説明",
-            "Product Category": "製品カテゴリ",
-            "Enter the product category": "製品カテゴリを入力してください",
-            "Brand Name": "ブランド名",
-            "Enter the brand name": "ブランド名を入力してください",
-            "Usage Description": "使用方法の説明",
-            "Enter the usage description": "使用方法の説明を入力してください",
-            "Target Customer": "ターゲット顧客",
-            "Enter the target customer": "ターゲット顧客を入力してください",
-            "Uploaded Images": "アップロードされた画像",
-            "Upload Product Image (Optional)": "製品画像をアップロード (オプション)",
-            "Generate Product Description": "商品説明を生成",
-            "Generated Product Description": "生成された商品説明",
-            "Prompt Calibration": "プロンプトキャリブレーション",
-            "Please input your postprocess code": "後処理コードを入力してください",
-            "Task type": "タスクタイプ",
-            "Epoch": "エポック",
-            "Optimization based on prediction": "予測に基づく最適化",
-        }
-    }
-
 # lang_storeが設定された後でGradioインターフェースを定義
 with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engineering"], theme="soft") as demo:
     gr.Markdown(f"## {config.lang_store[config.language]['Automatic Prompt Engineering']}")
@@ -655,7 +532,10 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
 
         ## プロンプト実行イベント
         invoke_button.click(
-            alignment.invoke_prompt,
+            lambda *args: list(alignment.invoke_prompt(*args)),  # ジェネレータをリストに変換
+
+            #  alignment.invoke_prompt,
+
             inputs=[
                 user_prompt_original_replaced,
                 user_prompt_eval_replaced,
@@ -759,4 +639,15 @@ def postprocess(llm_output):
             calibration.optimize, inputs=[calibration_task, calibration_prompt_original, dataset_file, postprocess_code, steps_num],
             outputs=calibration_prompt
         )
+
+import signal
+import time
+
+def signal_handler(sig, frame):
+    print("Shutting down gracefully...")
+    time.sleep(5)  # タスク完了のための猶予時間（必要に応じて調整）
+    exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
 demo.launch()
