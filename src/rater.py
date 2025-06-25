@@ -43,7 +43,7 @@ class GroqConfig:
 
 # プロンプト候補を評価するクラス
 class Rater:
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = GroqConfig()
 
     def __call__(self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]) -> Optional[int]:

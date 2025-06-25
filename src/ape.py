@@ -48,7 +48,7 @@ from rater import Rater
 
 # APE (Automatic Prompt Engineering) を行うクラス
 class APE:
-    def __init__(self):
+    def __init__(self) -> None:
         # プロンプト評価用のRaterクラスを初期化します
         self.rater = Rater()
         self.config = GroqConfig() # 設定を初期化

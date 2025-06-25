@@ -37,7 +37,7 @@ def load_metaprompt_content(path: str) -> str:
 
 # メタプロンプトを生成し、関連情報を抽出するクラス
 class MetaPrompt:
-    def __init__(self):
+    def __init__(self) -> None:
         self.metaprompt: str = load_metaprompt_content(metaprompt_txt_path)
         groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
         if not groq_api_key:

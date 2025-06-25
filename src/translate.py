@@ -42,7 +42,7 @@ PromptGuide = load_prompt_guide(prompt_guide_path)
 
 # プロンプトガイドに基づいてプロンプトを書き換えるクラス
 class GuideBased:
-    def __init__(self):
+    def __init__(self) -> None:
         groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
         if not groq_api_key:
             logging.error("GROQ_API_KEY環境変数が設定されていません。")

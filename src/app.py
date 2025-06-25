@@ -50,7 +50,7 @@ class AppConfig:
     
     def safe_load_translations(self):
         translations_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'translations.json')
-        try:
+        try: 
             with open(translations_path, 'r', encoding='utf-8') as f:
                 self.lang_store = json.load(f)
             logging.info(f"翻訳ファイルを読み込みました: {translations_path}")
@@ -78,7 +78,7 @@ class ComponentManager:
             'soeprompt': None,
             'calibration': None
         }
-    
+
     def __getattr__(self, name: str) -> Any:
         if name in self._components:
             if self._components[name] is None:
@@ -86,7 +86,7 @@ class ComponentManager:
             return self._components[name]
         raise AttributeError(f"Component {name} not found")
     
-    def _initialize_component(self, name: str):
+    def _initialize_component(self, name: str) -> None:
         logging.info(f"Initializing component: {name}")
         if name == 'ape':
             self._components[name] = APE()
@@ -119,7 +119,7 @@ calibration = component_manager.calibration
 # generate_prompt関数の分割と型ヒントの追加
 from concurrent.futures import ThreadPoolExecutor
 
-def create_single_textbox(value: str) -> List[gr.Textbox]:
+def create_single_textbox(value: str) -> List[gr.Textbox]: 
     return [
         gr.Textbox(
             label=lang_store[language]["Prompt Template Generated"],
@@ -130,7 +130,7 @@ def create_single_textbox(value: str) -> List[gr.Textbox]:
         )
     ] + [gr.Textbox(visible=False)] * 2
 
-def create_multiple_textboxes(candidates: List[str], judge_result: int) -> List[gr.Textbox]:
+def create_multiple_textboxes(candidates: List[str], judge_result: int) -> List[gr.Textbox]: 
     textboxes = []
     for i in range(3):
         is_best = "Y" if judge_result == i else "N"
@@ -146,13 +146,13 @@ def create_multiple_textboxes(candidates: List[str], judge_result: int) -> List[
         )
     return textboxes
 
-def generate_single_prompt(original_prompt: str) -> List[gr.Textbox]:
+def generate_single_prompt(original_prompt: str) -> List[gr.Textbox]: 
     """一回生成モード"""
     result = rewrite(original_prompt)
     return create_single_textbox(result)
 
-def generate_multiple_prompts_async(original_prompt: str) -> List[str]:
-    """複数回生成モード (非同期実行用)"""
+def generate_multiple_prompts_async(original_prompt: str) -> List[str]: 
+    """複数回生成モード (非同期実行用) """
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [executor.submit(rewrite, original_prompt) for _ in range(3)]
         candidates = [future.result() for future in futures]
@@ -257,7 +257,7 @@ class SafeCodeExecutor:
                     if op_type not in self.ALLOWED_OPERATORS:
                         raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
 
-            # 実行コンテキストを制限
+            # 実行コンテキストを制限 
             safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}
             safe_globals.update(context)
             
@@ -273,7 +273,7 @@ safe_code_executor = SafeCodeExecutor()
 # これは calibration.py ファイルの変更が必要になるため、ここでは app.py の変更のみに留める
 # ただし、app.py の calibration.optimize の呼び出し部分で postprocess_code が渡されているため、
 # calibration.py 側で SafeCodeExecutor を使用するように修正が必要であることをメモしておく。
-# 現時点では app.py の変更のみに集中する。
+# 現時点では app.py の変更のみに集中する。 
 
 def ape_prompt(original_prompt, user_data):
     logging.debug("ape_prompt function was called!")
