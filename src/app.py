@@ -18,7 +18,7 @@ from application.soe_prompt import SOEPrompt
 import logging.handlers
 
 def setup_logging():
-    log_level = os.getenv('LOG_LEVEL', 'INFO')
+    log_level = os.environ.get('LOG_LEVEL', 'INFO')  # os.getenv を os.environ.get に変更
     # RotatingFileHandlerを使用してログファイルを管理
     file_handler = logging.handlers.RotatingFileHandler(
         'app.log', maxBytes=10000, backupCount=5, encoding='utf-8'
@@ -45,7 +45,7 @@ class AppConfig:
     def load_env(self):
         env_path = Path(__file__).parent.parent / '.env'
         load_dotenv(env_path)
-        self.language = os.getenv("LANGUAGE", "ja")
+        self.language = os.environ.get("LANGUAGE", "ja")  # os.getenv を os.environ.get に変更
         logging.info(f"環境変数から言語設定を読み込みました: {self.language}")
     
     def safe_load_translations(self):
