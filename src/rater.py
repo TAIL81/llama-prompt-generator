@@ -167,11 +167,11 @@ class Rater:
             # 各候補の情報を整形して評価用プロンプトに含めます
             Response_template: str = (
                 f"""
-Response {candidate_idx+1}:
-Input: {candidate.get('input', 'N/A')}
-Output: {candidate.get('output', 'N/A')}
-</response_{candidate_idx+1}>
-""".strip()
+                Response {candidate_idx+1}:
+                Input: {candidate.get('input', 'N/A')}
+                Output: {candidate.get('output', 'N/A')}
+                </response_{candidate_idx+1}>
+                """.strip()
             )
             Response_prompt.append(Response_template)
         Response_prompt_str: str = "\n\n".join(Response_prompt)
@@ -179,21 +179,21 @@ Output: {candidate.get('output', 'N/A')}
         # 評価のための指示プロンプトテンプレート
         rater_prompt: str = (
             """
-You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose the most helpful and honest response.
-Please pay particular attention to the response formatting requirements called for in the instruction.
+            You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose the most helpful and honest response.
+            Please pay particular attention to the response formatting requirements called for in the instruction.
 
-Instruction:
-<instruction>
-{instruction}
-</instruction>
+            Instruction:
+            <instruction>
+            {instruction}
+            </instruction>
 
-{Response_prompt}
+            {Response_prompt}
 
-Finally, select which response is the most helpful and honest.
+            Finally, select which response is the most helpful and honest.
 
-Use JSON format with key `Preferred` when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
-Output example: {rater_example}
-""".strip()
+            Use JSON format with key `Preferred` when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
+            Output example: {rater_example}
+            """.strip()
         )
         messages: List[Dict[str, str]] = [
             {
