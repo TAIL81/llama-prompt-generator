@@ -75,7 +75,7 @@ class SOEPrompt:
         prompt_template = f"""
         Generate an SEO-optimized product description for a product published on e-commerce website, below are the basic information of such product:
         Product Category: {product_category}
-        Branch Name: {brand_name}. 
+        Branch Name: {brand_name}.
         Usage Description: {usage_description}
         Target customer: {target_customer}
         [Optional] Description of uploaded product image if available: {image_description}
