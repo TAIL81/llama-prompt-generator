@@ -159,16 +159,14 @@ class APE:
         """
         prompt: str = (
             """
-You are a instruction engineer.Your task is to rewrite the initial instruction in
- <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
+You are a instruction engineer.Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
 
 Instruction guide:
 <guide>
 {guide}
 </guide>
 
-which is included using double pointed brackets is customizable text that will be
- replaced at runtime. This needs to be kept as is.
+which is included using double pointed brackets is customizable text that will be replaced at runtime. This needs to be kept as is.
 Please same language as the initial instruction for rewriting.
 
 <instruction>
@@ -235,16 +233,14 @@ Please only output the rewrite result.
         """
         prompt: str = (
             """
-You are a instruction engineer. Your task is to rewrite the initial instruction in
- <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
+You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
 
 Instruction guide:
 <guide>
 {guide}
 </guide>
 
-which is included using double pointed brackets is customizable text that will be
- replaced at runtime. This needs to be kept as is.
+which is included using double pointed brackets is customizable text that will be replaced at runtime. This needs to be kept as is.
 Please same language as the initial instruction for rewriting.
 
 <instruction>

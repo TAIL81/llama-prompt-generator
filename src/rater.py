@@ -179,8 +179,7 @@ Output: {candidate.get('output', 'N/A')}
         # 評価のための指示プロンプトテンプレート
         rater_prompt: str = (
             """
-You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose
- the most helpful and honest response.
+You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose the most helpful and honest response.
 Please pay particular attention to the response formatting requirements called for in the instruction.
 
 Instruction:
@@ -192,8 +191,7 @@ Instruction:
 
 Finally, select which response is the most helpful and honest.
 
-Use JSON format with key `Preferred` when returning results. Please only output the result in json format, and do the
- json format check and return, don't include other extra text! An example of output is as follows:
+Use JSON format with key `Preferred` when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 Output example: {rater_example}
 """.strip()
         )
