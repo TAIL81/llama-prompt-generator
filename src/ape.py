@@ -1,14 +1,14 @@
-import json
 import logging
 import os
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import groq
 from dotenv import load_dotenv
 from groq import Groq
+
+from rater import Rater
 
 # 環境変数を読み込みます
 load_dotenv()
@@ -48,8 +48,6 @@ if not groq_api_key:
     logging.error("GROQ_API_KEY環境変数が設定されていません。")
     raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
 groq_client = Groq(api_key=groq_api_key)
-
-from rater import Rater
 
 
 # APE (Automatic Prompt Engineering) を行うクラス
@@ -161,15 +159,16 @@ class APE:
         """
         prompt: str = (
             """
-You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
+You are a instruction engineer.Your task is to rewrite the initial instruction in
+ <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
 
 Instruction guide:
 <guide>
 {guide}
 </guide>
 
-You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
-which is included using double pointed brackets is customizable text that will be replaced at runtime. This needs to be kept as is.
+which is included using double pointed brackets is customizable text that will be
+ replaced at runtime. This needs to be kept as is.
 Please same language as the initial instruction for rewriting.
 
 <instruction>
@@ -236,15 +235,16 @@ Please only output the rewrite result.
         """
         prompt: str = (
             """
-You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
+You are a instruction engineer. Your task is to rewrite the initial instruction in
+ <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
 
 Instruction guide:
 <guide>
 {guide}
 </guide>
 
-You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
-which is included using double pointed brackets is customizable text that will be replaced at runtime. This needs to be kept as is.
+which is included using double pointed brackets is customizable text that will be
+ replaced at runtime. This needs to be kept as is.
 Please same language as the initial instruction for rewriting.
 
 <instruction>

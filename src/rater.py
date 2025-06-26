@@ -4,7 +4,7 @@ import logging
 import os
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 import groq  # Import the groq module to access specific error types
 import nest_asyncio  # nest_asyncioをインポート
@@ -158,7 +158,7 @@ class Rater:
             Optional[int]: 最も良いと評価された候補のインデックス。エラー時はNone。
         """
         if not candidates:
-            logging.debug(f"Rater.rater - No candidates provided for LLM rating. Returning None.")
+            logging.debug("Rater.rater - No candidates provided for LLM rating. Returning None.")
             return None
 
         rater_example: str = json.dumps({"Preferred": "Response 1"})
@@ -179,7 +179,8 @@ Output: {candidate.get('output', 'N/A')}
         # 評価のための指示プロンプトテンプレート
         rater_prompt: str = (
             """
-You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose the most helpful and honest response.
+You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose
+ the most helpful and honest response.
 Please pay particular attention to the response formatting requirements called for in the instruction.
 
 Instruction:
@@ -191,7 +192,8 @@ Instruction:
 
 Finally, select which response is the most helpful and honest.
 
-Use JSON format with key `Preferred` when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
+Use JSON format with key `Preferred` when returning results. Please only output the result in json format, and do the
+ json format check and return, don't include other extra text! An example of output is as follows:
 Output example: {rater_example}
 """.strip()
         )
@@ -222,7 +224,7 @@ Output example: {rater_example}
 
             if final_result is None:
                 logging.warning(
-                    f"Rater.rater - LLM did not return a clear preferred choice. Falling back to random choice."
+                    "Rater.rater - LLM did not return a clear preferred choice. Falling back to random choice."
                 )
                 final_result = random.randint(0, len(candidates) - 1)
 
@@ -231,9 +233,9 @@ Output example: {rater_example}
 
         except (json.JSONDecodeError, KeyError) as e:
             logging.error(f"Rater.rater - Error parsing LLM response or key error: {e}")
-            logging.warning(f"Rater.rater - Falling back to random choice due to parsing error.")
+            logging.warning("Rater.rater - Falling back to random choice due to parsing error.")
             return random.randint(0, len(candidates) - 1) if candidates else None
         except Exception as e:
             logging.error(f"Rater.rater - Unexpected error during LLM rating: {e}")
-            logging.warning(f"Rater.rater - Falling back to random choice due to unexpected error.")
+            logging.warning("Rater.rater - Falling back to random choice due to unexpected error.")
             return random.randint(0, len(candidates) - 1) if candidates else None
