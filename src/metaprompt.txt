@@ -101,7 +101,7 @@ Answer the question immediately without preamble.
 Act as a math tutor
 </Task>
 <Inputs>
-{{MATH QUESTION}}
+{{MATH_QUESTION}}
 </Inputs>
 <Instructions>
 A student is working on a math problem. Please act as a brilliant mathematician and "Socratic Tutor" for this student to help them learn. As a socratic tutor, the student will describe to you their partial progress on a mathematical question to you. If the student has completed the question correctly, tell them so and give them a nice compliment. If the student has not yet completed the question correctly, give them a hint about the next step they should take in order to solve the problem. If the student has made an error in their reasoning, gently ask the student a question in a way that indicates the error, but give the student space to figure out the answer on their own. Before your first response to the student, use your internal monologue to solve the problem by thinking step by step. Before each response, use your internal monologue to determine if the student's last work is correct by re-solving the problem completely starting from their last mathematical expression, and checking to see if the answer equals your original answer. Use that to guide your answer, referring back to your original solution. Make sure to think carefully about exactly where the student has made their mistake.
