@@ -496,7 +496,7 @@ Now, please write a poem about a sunset, following the formatting of the example
 
 ## Long context window tips
 
-Llama's extended context window (200K tokens for Llama 3 models) enables it to handle complex tasks that require processing large amounts of information. Llama's extended context window also enables you to simplify workflows that previously required splitting inputs to fit within shorter context windows. By combining inputs into a single prompt, you can streamline your process and take full advantage of Llama's capabilities.
+Llama's extended context window (200K tokens for Llama 4 models) enables it to handle complex tasks that require processing large amounts of information. Llama's extended context window also enables you to simplify workflows that previously required splitting inputs to fit within shorter context windows. By combining inputs into a single prompt, you can streamline your process and take full advantage of Llama's capabilities.
 
 For example, if your previous application required splitting a long document into multiple parts and processing each part separately, you can now provide the entire document to Llama in a single prompt. This not only simplifies your code but also allows Llama to have a more comprehensive understanding of the context, potentially leading to better results.
 
