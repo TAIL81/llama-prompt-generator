@@ -1,8 +1,7 @@
 import json
 import os
-import threading
-import logging
-from typing import List, Dict, Any, Optional, Tuple
+import logging  # 既存のloggingをインポート
+from typing import List, Dict, Any, Tuple, cast # threading と Optional を削除
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -12,7 +11,7 @@ from calibration import CalibrationPrompt
 from metaprompt import MetaPrompt
 from optimize import Alignment
 from translate import GuideBased
-from application.soe_prompt import SOEPrompt
+from application.soe_prompt import SOEPrompt  # SOEPrompt をインポート
 
 # ロギング設定の改善
 import logging.handlers
@@ -35,7 +34,7 @@ def setup_logging():
 setup_logging()
 
 # 設定管理クラスの導入
-class AppConfig:
+class AppConfig:  # AppConfig クラス
     def __init__(self):
         self.language: str = "ja"
         self.lang_store: Dict[str, Any] = {}
@@ -53,14 +52,14 @@ class AppConfig:
         try: 
             with open(translations_path, 'r', encoding='utf-8') as f:
                 self.lang_store = json.load(f)
-            logging.info(f"翻訳ファイルを正常に読み込みました: {translations_path}. lang_storeのキー: {self.lang_store.keys()}")
+            logging.info(f"翻訳ファイルを正常に読み込みました: {translations_path}. lang_storeのキー: {self.lang_store.keys()}")  # ロギング
         except FileNotFoundError:
             logging.error(f"翻訳ファイルが見つかりません: {translations_path}")
             self.lang_store = {}
         except json.JSONDecodeError as e:
             logging.error(f"翻訳ファイルの形式が不正です: {translations_path}. エラー: {e}")
             self.lang_store = {}
-        except Exception as e:
+        except Exception as e:  # その他の例外をキャッチ
             logging.error(f"翻訳ファイルの読み込み中に予期せぬエラーが発生しました: {translations_path}. エラー: {e}")
             self.lang_store = {}
 
@@ -70,7 +69,7 @@ language = config.language
 lang_store = config.lang_store
 
 # コンポーネントの遅延初期化を管理するクラス
-class ComponentManager:
+class ComponentManager:  # ComponentManager クラス
     def __init__(self, config: AppConfig):
         self._config = config
         self._components: Dict[str, Any] = {
@@ -98,7 +97,7 @@ class ComponentManager:
         elif name == 'alignment':
             self._components[name] = Alignment(lang_store=self._config.lang_store, language=self._config.language)
         elif name == 'metaprompt':
-            self._components[name] = MetaPrompt()
+            self._components[name] = MetaPrompt()  # MetaPrompt のインスタンス化
         elif name == 'soeprompt':
             self._components[name] = SOEPrompt()
         elif name == 'calibration':
@@ -119,25 +118,25 @@ metaprompt = component_manager.metaprompt
 soeprompt = component_manager.soeprompt
 calibration = component_manager.calibration
 
-# generate_prompt関数の分割と型ヒントの追加
 from concurrent.futures import ThreadPoolExecutor
 
-def create_single_textbox(value: str) -> List[gr.Textbox]: 
+# generate_prompt関数の分割と型ヒントの追加
+
+def create_single_textbox(value: str) -> List[gr.Textbox]:
     return [
-        gr.Textbox(
-            label=lang_store[language]["Prompt Template Generated"],
+        cast(gr.Textbox, gr.Textbox(label=lang_store[language]["Prompt Template Generated"],
             value=value,
             lines=3,
             show_copy_button=True,
             interactive=False,
-        )
-    ] + [gr.Textbox(visible=False)] * 2
+        )) # 閉じ括弧を追加
+    ] + [gr.Textbox(visible=False)] * 2  # テキストボックスのリストを返す
 
-def create_multiple_textboxes(candidates: List[str], judge_result: int) -> List[gr.Textbox]: 
+def create_multiple_textboxes(candidates: List[str], judge_result: int) -> List[gr.Textbox]:
     textboxes = []
     for i in range(3):
         is_best = "Y" if judge_result == i else "N"
-        textboxes.append(
+        textboxes.append(cast(gr.Textbox,
             gr.Textbox(
                 label=f"{lang_store[language]['Prompt Template Generated']} #{i+1} {is_best}",
                 value=candidates[i],
@@ -145,17 +144,17 @@ def create_multiple_textboxes(candidates: List[str], judge_result: int) -> List[
                 show_copy_button=True,
                 visible=True,
                 interactive=False,
-            )
+            )) # 閉じ括弧を追加
         )
     return textboxes
 
-def generate_single_prompt(original_prompt: str) -> List[gr.Textbox]: 
+def generate_single_prompt(original_prompt: str) -> List[gr.Textbox]:
     """一回生成モード"""
     result = rewrite(original_prompt)
     return create_single_textbox(result)
 
-def generate_multiple_prompts_async(original_prompt: str) -> List[str]: 
-    """複数回生成モード (非同期実行用) """
+def generate_multiple_prompts_async(original_prompt: str) -> List[str]:
+    """複数回生成モード (非同期実行用)"""
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [executor.submit(rewrite, original_prompt) for _ in range(3)]
         candidates = [future.result() for future in futures]
@@ -172,7 +171,7 @@ def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
     Returns:
         list: Gradioテキストボックスコンポーネントのリスト。
     """
-    if level == "One-time Generation":
+    if level == "One-time Generation":  # 一回生成モードの場合
         return generate_single_prompt(original_prompt)
     elif level == "Multiple-time Generation":
         candidates = generate_multiple_prompts_async(original_prompt)
@@ -180,10 +179,11 @@ def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
         return create_multiple_textboxes(candidates, judge_result)
     return [] # デフォルトの戻り値
 
-# セキュリティ改善: 制限付きコード実行クラス
 import ast
 import operator
 
+
+# セキュリティ改善: 制限付きコード実行クラス
 class SafeCodeExecutor:
     ALLOWED_NODES = (ast.Expression, ast.Call, ast.Name, ast.Load, ast.Constant, ast.Tuple, ast.List, ast.Dict, ast.Set, ast.Attribute, ast.Subscript, ast.Index, ast.Slice)
     ALLOWED_FUNCTIONS = {
@@ -245,15 +245,24 @@ class SafeCodeExecutor:
 
     def execute_safe_code(self, code_str: str, context: Dict[str, Any]) -> Any:
         try:
-            tree = ast.parse(code_str, mode='eval')
-            
+            tree = ast.parse(code_str, mode='eval')  # コードをASTにパース
+
             for node in ast.walk(tree):
                 if not isinstance(node, self.ALLOWED_NODES):
+                    # 許可されていないノードタイプが含まれているかチェック
                     raise ValueError(f"許可されていないASTノードタイプが含まれています: {type(node).__name__}")
                 if isinstance(node, ast.Call):
                     if not isinstance(node.func, ast.Name) or node.func.id not in self.ALLOWED_FUNCTIONS:
                         raise ValueError(f"許可されていない関数呼び出しが含まれています: {node.func.id if isinstance(node.func, ast.Name) else 'unknown'}")
-                if isinstance(node, (ast.Import, ast.ImportFrom, ast.Lambda, ast.GeneratorExp, ast.ListComp, ast.SetComp, ast.DictComp, ast.AsyncFunctionDef, ast.Await, ast.Yield, ast.YieldFrom, ast.Starred, ast.AnnAssign, ast.AugAssign, ast.For, ast.AsyncFor, ast.While, ast.If, ast.With, ast.AsyncWith, ast.Raise, ast.Try, ast.Assert, ast.Delete, ast.Pass, ast.Break, ast.Continue, ast.Global, ast.Nonlocal, ast.ClassDef, ast.FunctionDef)):
+                if isinstance(node, (
+                    ast.Import, ast.ImportFrom, ast.Lambda, ast.GeneratorExp, 
+                    ast.ListComp, ast.SetComp, ast.DictComp, ast.AsyncFunctionDef, 
+                    ast.Await, ast.Yield, ast.YieldFrom, ast.Starred, ast.AnnAssign, 
+                    ast.AugAssign, ast.For, ast.AsyncFor, ast.While, ast.If, 
+                    ast.With, ast.AsyncWith, ast.Raise, ast.Try, ast.Assert, 
+                    ast.Delete, ast.Pass, ast.Break, ast.Continue, ast.Global, 
+                    ast.Nonlocal, ast.ClassDef, ast.FunctionDef
+                )):
                     raise ValueError(f"許可されていない操作が含まれています: {type(node).__name__}")
                 if isinstance(node, (ast.BinOp, ast.UnaryOp, ast.Compare)):
                     op_type = type(node.op)
@@ -263,13 +272,13 @@ class SafeCodeExecutor:
             # 実行コンテキストを制限 
             safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}
             safe_globals.update(context)
-            
+
             return eval(compile(tree, '<string>', 'eval'), safe_globals, safe_globals)
         except Exception as e:
             logging.error(f"コード実行エラー: {e}")
             return None
 
-# SafeCodeExecutorのインスタンスを作成
+# SafeCodeExecutor のインスタンスを作成
 safe_code_executor = SafeCodeExecutor()
 
 # calibration.optimize 関数内で postprocess_code の実行を safe_code_executor を使うように変更する必要がある
@@ -300,7 +309,7 @@ def ape_prompt(original_prompt, user_data):
         # ここでは、エラーメッセージを表示するために空のテキストボックスを返す
         return [
             gr.Textbox(
-                label="Error",
+                label="Error",  # この行に "label=" が追加されました
                 value=f"Error processing user data: {e}. Please ensure it's valid JSON.",
                 lines=3,
                 show_copy_button=True,
@@ -318,7 +327,7 @@ def ape_prompt(original_prompt, user_data):
             interactive=False,
         )
     ] + [gr.Textbox(visible=False)] * 2 # 他のタブとの互換性のための非表示テキストボックス
-
+    
 ## メタプロンプト出力に対してAPEを実行する関数
 def run_ape_on_metaprompt_output(metaprompt_template, metaprompt_variables_str):
     """
@@ -353,7 +362,7 @@ def metaprompt_wrapper(task: str, variables_str: str) -> Tuple[str, str, str, st
     # Gradioの出力コンポーネント数に合わせて4つの値を返す
     return prompt, new_vars, "", ""
 
-## Gradioインターフェースを定義します
+## Gradioインターフェースを定義
 # lang_storeが設定された後でGradioインターフェースを定義
 with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engineering"], theme="soft") as demo:
     gr.Markdown(f"## {config.lang_store[config.language]['Automatic Prompt Engineering']}")
@@ -370,7 +379,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             label=config.lang_store[config.language]["Variables"],
             info=config.lang_store[config.language]["Please input your variables, one variable per line"],
             lines=5,
-            placeholder=config.lang_store[config.language]["CUSTOMER_COMPLAINT\nCOMPANY_NAME"],
+            placeholder=config.lang_store[config.language]["CUSTOMER_COMPLAINT\nCOMPANY_NAME"]
         )        
         with gr.Column(scale=2):
             with gr.Row():
@@ -431,7 +440,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 level = gr.Radio(
                     ["One-time Generation", "Multiple-time Generation"],
                     label=config.lang_store[config.language]["Optimize Level"],
-                    value="One-time Generation",
+                    value="One-time Generation"
                 )
                 b1 = gr.Button(config.lang_store[config.language]["Generate Prompt"])
                 textboxes = []
@@ -462,7 +471,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             )
             user_prompt_eval = gr.Textbox(
                 label=config.lang_store[config.language]["Please input the prompt need to be evaluate"], lines=3
-            )
+            )  # 評価用プロンプト入力
             kv_input_eval = gr.Textbox(
                 label=config.lang_store[config.language]["[Optional]Input the template variable need to be replaced"],
                 placeholder="Ref format: key1:value1;key2:value2",
@@ -484,7 +493,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             insert_button_revise = gr.Button(config.lang_store[config.language]["Replace Variables in Revised Prompt"])
             insert_button_revise.click(
                 alignment.insert_kv,
-                inputs=[user_prompt_eval, kv_input_eval],
+                inputs=[user_prompt_eval, kv_input_eval],  # 評価用プロンプトと変数を入力
                 outputs=user_prompt_eval_replaced,
             )
 
@@ -592,8 +601,8 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             )
 
             # プロンプト改善ボタン
-            revise_button = gr.Button(config.lang_store[config.language]["Iterate the Prompt"])
-            revised_prompt_output = gr.Textbox(
+            revise_button = gr.Button(config.lang_store[config.language]["Iterate the Prompt"])  # 改善ボタン
+            revised_prompt_output = gr.Textbox(  # 改善後プロンプト表示
                 label=config.lang_store[config.language]["Revised Prompt"], lines=3, interactive=False, show_copy_button=True
             )
             revise_button.click(
@@ -603,7 +612,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                     user_prompt_eval,
                     openrouter_output,
                     groq_output,
-                    eval_model_dropdown,
+                    eval_model_dropdown
                     ],
                 outputs=revised_prompt_output,
             )
@@ -621,16 +630,16 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 image_preview = gr.Gallery(label=config.lang_store[config.language]["Uploaded Images"], show_label=False, elem_id="image_preview")
                 image_upload = gr.UploadButton(config.lang_store[config.language]["Upload Product Image (Optional)"], file_types=["image", "video"], file_count="multiple")
                 generate_button = gr.Button(config.lang_store[config.language]["Generate Product Description"])
-        
+
         with gr.Row():
             product_description = gr.Textbox(label=config.lang_store[config.language]["Generated Product Description"], lines=10, interactive=False)
-            ## 商品説明生成イベント
-            generate_button.click(
+        ## 商品説明生成イベント
+        generate_button.click(
                 soeprompt.generate_description,
                 inputs=[product_category, brand_name, usage_description, target_customer, image_upload],
                 outputs=product_description,
             )
-            image_upload.upload(lambda images: images, inputs=image_upload, outputs=image_preview)
+        image_upload.upload(lambda images: images, inputs=image_upload, outputs=image_preview)
 
     ## 「プロンプトキャリブレーション」タブ
     with gr.Tab(config.lang_store[config.language]["Prompt Calibration"]): # 例: タブ名の変更（必要に応じて）
@@ -639,19 +648,17 @@ def postprocess(llm_output):
     return llm_output
 '''.strip()
         with gr.Row():
-            with gr.Column(scale=2):
+            with gr.Column(scale=2):  # カラムの定義
                 calibration_task = gr.Textbox(label=config.lang_store[config.language]["Please input your task"], lines=3)
                 calibration_prompt_original = gr.Textbox(label=config.lang_store[config.language]["Please input your original prompt"], lines=5, placeholder=config.lang_store[config.language]["Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\""])
-            with gr.Column(scale=2):
+            with gr.Column(scale=2):  # カラムの定義
                 postprocess_code = gr.Textbox(label=config.lang_store[config.language]["Please input your postprocess code"], lines=3, value=default_code) # 例: ラベルの変更（より明確に）
                 dataset_file = gr.File(file_types=['csv'], type='binary')
-        with gr.Row(): # 例: 入力フィールドの配置変更
-            calibration_task_type = gr.Radio(["classification"], value="classification", label=config.lang_store[config.language]["Task type"])
+        with gr.Row():  # 行の定義
+            calibration_task_type = gr.Radio(["classification"], value="classification", label=config.lang_store[config.language]["Task type"])  # タスクタイプ選択
             steps_num = gr.Slider(1, 5, value=1, step=1, label=config.lang_store[config.language]["Epoch"])
         # 例: 不要なラベルの削除（またはより具体的なラベルに変更）
         #  calibration_prompt = gr.Textbox(label=config.lang_store[config.language]["Revised Prompt"], lines=3, show_copy_button=True, interactive=False)
-        calibration_prompt = gr.Textbox(lines=3, show_copy_button=True, interactive=False)
-
         calibration_optimization = gr.Button(config.lang_store[config.language]["Optimization based on prediction"])
         calibration_prompt = gr.Textbox(label=config.lang_store[config.language]["Revised Prompt"], lines=3, show_copy_button=True, interactive=False)
         calibration_optimization.click(
@@ -669,4 +676,5 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-demo.launch()
+if __name__ == "__main__":
+    demo.launch()
