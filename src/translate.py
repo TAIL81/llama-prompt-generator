@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -127,7 +127,7 @@ You are a research assistant. You will answer the following question based on th
 You will also need to find the original quote from the document that is most relevant to answering the question. If there is no relevant citation, output "No relevant quotes".
 Your output should start by listing all the quotes, putting one quote per line and starting with a numerical index. Then answer the question by adding the index of the quote where it is needed.
 
-The question is: 
+The question is:
 {{question}}
 </initial_instruction>
 
@@ -191,7 +191,7 @@ Please determine what language the document below is in? English (en), Chinese (
 <document>
 {document}
 </document>
-    
+
 Use JSON format with key `lang` when return result. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 Output example: {lang_example}
 """.strip()
