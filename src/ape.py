@@ -1,18 +1,20 @@
 import json
-import os
 import logging
-import groq
-from groq import Groq
-from dotenv import load_dotenv
-from pathlib import Path
-from typing import Dict, List, Optional, Union
+import os
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
+import groq
+from dotenv import load_dotenv
+from groq import Groq
 
 # 環境変数を読み込みます
 load_dotenv()
 
-logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 @dataclass
 class GroqConfig:
@@ -21,11 +23,13 @@ class GroqConfig:
     max_tokens: int = 8192
     temperature: float = 0.1
 
+
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 
 # PromptGuide.md へのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
+
 
 @lru_cache(maxsize=1)
 def load_prompt_guide(path: str) -> str:
@@ -34,6 +38,7 @@ def load_prompt_guide(path: str) -> str:
     """
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
+
 
 PromptGuide = load_prompt_guide(prompt_guide_path)
 
@@ -46,12 +51,13 @@ groq_client = Groq(api_key=groq_api_key)
 
 from rater import Rater
 
+
 # APE (Automatic Prompt Engineering) を行うクラス
 class APE:
     def __init__(self) -> None:
         # プロンプト評価用のRaterクラスを初期化します
         self.rater = Rater()
-        self.config = GroqConfig() # 設定を初期化
+        self.config = GroqConfig()  # 設定を初期化
 
     def __call__(self, initial_prompt: str, epoch: int, demo_data: Dict[str, str]) -> Dict[str, Union[str, None]]:
         """
@@ -70,10 +76,10 @@ class APE:
         candidates: List[str] = []
         for _ in range(2):
             rewritten_prompt: Optional[str] = self.rewrite(initial_prompt)
-            if rewritten_prompt: # rewriteが成功した場合のみ追加
+            if rewritten_prompt:  # rewriteが成功した場合のみ追加
                 candidates.append(rewritten_prompt)
 
-        if not candidates: # 2回のrewriteが両方失敗した場合
+        if not candidates:  # 2回のrewriteが両方失敗した場合
             logging.error("Initial prompt rewriting failed for all attempts. Returning initial prompt.")
             return {"prompt": initial_prompt, "error": "Initial prompt rewriting failed."}
 
@@ -82,12 +88,7 @@ class APE:
             {"prompt": candidate}
             # カスタマイズ可能な変数がすべて含まれている候補のみをフィルタリングします
             for candidate in candidates
-            if all(
-                [
-                    customizable_variable in candidate
-                    for customizable_variable in customizable_variable_list
-                ]
-            )
+            if all([customizable_variable in candidate for customizable_variable in customizable_variable_list])
         ]
         if not filtered_candidates:
             logging.warning("No candidates left after filtering for customizable variables. Returning initial prompt.")
@@ -103,14 +104,17 @@ class APE:
         else:
             best_candidate_obj = filtered_candidates[best_candidate_idx]
 
-        for i in range(epoch): # epoch の回数だけループ
+        for i in range(epoch):  # epoch の回数だけループ
             # 最良の候補を基にさらに候補を生成します
             more_candidate_prompt: Optional[str] = self.generate_more(
-                initial_prompt, best_candidate_obj["prompt"] # オブジェクトのプロンプトを使用
+                initial_prompt, best_candidate_obj["prompt"]  # オブジェクトのプロンプトを使用
             )
-            if more_candidate_prompt: # generate_moreが成功した場合
+            if more_candidate_prompt:  # generate_moreが成功した場合
                 # 新しい候補と現在の最良候補でリストを作成
-                current_rating_candidates: List[Dict[str, str]] = [best_candidate_obj, {"prompt": more_candidate_prompt}]
+                current_rating_candidates: List[Dict[str, str]] = [
+                    best_candidate_obj,
+                    {"prompt": more_candidate_prompt},
+                ]
 
                 # 再度評価し、最良のものを選択します
                 rated_idx_loop: Optional[int] = self.rater(initial_prompt, current_rating_candidates, demo_data)
@@ -155,7 +159,8 @@ class APE:
         Returns:
             Optional[str]: 書き換えられたプロンプト。エラーの場合はNone。
         """
-        prompt: str = """
+        prompt: str = (
+            """
 You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
 
 Instruction guide:
@@ -174,6 +179,7 @@ Please same language as the initial instruction for rewriting.
 
 Please only output the rewrite result.
 """.strip()
+        )
         messages: List[Dict[str, str]] = [
             {
                 "role": "user",
@@ -198,11 +204,19 @@ Please only output the rewrite result.
             logging.debug(f"APE.rewrite successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
-            error_message: str = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            error_message: str = (
+                e.body.get("error", {}).get("message", str(e))
+                if hasattr(e, "body") and isinstance(e.body, dict)
+                else str(e)
+            )
             logging.error(f"APE.rewrite - Groq InternalServerError: {error_message} (Details: {e})")
             return None
         except groq.APIError as e:
-            error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            error_message = (
+                e.body.get("error", {}).get("message", str(e))
+                if hasattr(e, "body") and isinstance(e.body, dict)
+                else str(e)
+            )
             logging.error(f"APE.rewrite - Groq APIError: {error_message} (Details: {e})")
             return None
         except Exception as e:
@@ -220,7 +234,8 @@ Please only output the rewrite result.
         Returns:
             Optional[str]: 新たに生成されたプロンプト。エラーの場合はNone。
         """
-        prompt: str = """
+        prompt: str = (
+            """
 You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
 
 Instruction guide:
@@ -242,12 +257,11 @@ Please same language as the initial instruction for rewriting.
 
 Please only output the rewrite result.
 """.strip()
+        )
         messages: List[Dict[str, str]] = [
             {
                 "role": "user",
-                "content": prompt.format(
-                    guide=PromptGuide, initial=initial_prompt, demo=example
-                ),
+                "content": prompt.format(guide=PromptGuide, initial=initial_prompt, demo=example),
             }
         ]
         try:
@@ -268,11 +282,19 @@ Please only output the rewrite result.
             logging.debug(f"APE.generate_more successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
-            error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            error_message = (
+                e.body.get("error", {}).get("message", str(e))
+                if hasattr(e, "body") and isinstance(e.body, dict)
+                else str(e)
+            )
             logging.error(f"APE.generate_more - Groq InternalServerError: {error_message} (Details: {e})")
             return None
         except groq.APIError as e:
-            error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            error_message = (
+                e.body.get("error", {}).get("message", str(e))
+                if hasattr(e, "body") and isinstance(e.body, dict)
+                else str(e)
+            )
             logging.error(f"APE.generate_more - Groq APIError: {error_message} (Details: {e})")
             return None
         except Exception as e:

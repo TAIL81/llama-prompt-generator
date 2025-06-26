@@ -1,21 +1,14 @@
-import json
-import logging
-import os
-import random
-from typing import Dict, List, Optional, Union
-from dataclasses import dataclass
-from groq import Groq
-import groq # Import the groq module to access specific error types
-import json
-import logging
-import os
-import random
-from typing import Dict, List, Optional, Union
-from dataclasses import dataclass
-from groq import Groq
-import groq
 import asyncio
-import nest_asyncio # nest_asyncioをインポート
+import json
+import logging
+import os
+import random
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Union
+
+import groq  # Import the groq module to access specific error types
+import nest_asyncio  # nest_asyncioをインポート
+from groq import Groq
 
 # nest_asyncioを適用して、既に実行中のイベントループ内で新しいイベントループをネストできるようにします
 nest_asyncio.apply()
@@ -31,7 +24,8 @@ async_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 # 同期Groqクライアントを初期化
 sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 
-logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 @dataclass
 class GroqConfig:
@@ -41,12 +35,15 @@ class GroqConfig:
     temperature_get_output: float = 0.1
     temperature_rater: float = 0.0
 
+
 # プロンプト候補を評価するクラス
 class Rater:
     def __init__(self) -> None:
         self.config = GroqConfig()
 
-    def __call__(self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]) -> Optional[int]:
+    def __call__(
+        self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]
+    ) -> Optional[int]:
         """
         複数のプロンプト候補を評価し、最も良いものを選択します。
 
@@ -62,17 +59,14 @@ class Rater:
         self._validate_inputs(initial_prompt, candidates, demo_data)
 
         # 既に評価済みの候補を特定
-        unrated_candidates_indices = [
-            i for i, candidate in enumerate(candidates) if "output" not in candidate
-        ]
+        unrated_candidates_indices = [i for i, candidate in enumerate(candidates) if "output" not in candidate]
 
         # 未評価の候補に対して非同期で出力を取得
         if unrated_candidates_indices:
             unrated_prompts = [
-                self._replace_placeholders(candidates[i]["prompt"], demo_data)
-                for i in unrated_candidates_indices
+                self._replace_placeholders(candidates[i]["prompt"], demo_data) for i in unrated_candidates_indices
             ]
-            
+
             # nest_asyncioが適用されているため、asyncio.run()を安全に呼び出せます
             outputs = asyncio.run(self._get_outputs_parallel(unrated_prompts))
 
@@ -82,13 +76,15 @@ class Rater:
 
         # 元の指示プロンプトもデモデータで置換
         initial_prompt_filled = self._replace_placeholders(initial_prompt, demo_data)
-        
+
         # 評価を実行
         rate = self.rater(initial_prompt_filled, candidates)
         logging.debug(f"Rater.__call__ return: {rate}\n")
         return rate
 
-    def _validate_inputs(self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]) -> None:
+    def _validate_inputs(
+        self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]
+    ) -> None:
         """
         入力パラメータの検証を行います。
         """
@@ -115,7 +111,7 @@ class Rater:
         複数のプロンプトに対して非同期でGroqモデルを実行し、出力を取得します。
         """
         tasks = [self._get_output_async(prompt) for prompt in prompts]
-        return await asyncio.gather(*tasks, return_exceptions=True) # 例外を返すように設定
+        return await asyncio.gather(*tasks, return_exceptions=True)  # 例外を返すように設定
 
     async def _get_output_async(self, prompt: str) -> Optional[str]:
         """指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。"""
@@ -131,11 +127,19 @@ class Rater:
             logging.debug(f"Rater._get_output_async successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
-            error_message: str = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            error_message: str = (
+                e.body.get("error", {}).get("message", str(e))
+                if hasattr(e, "body") and isinstance(e.body, dict)
+                else str(e)
+            )
             logging.error(f"Rater._get_output_async - Groq InternalServerError: {error_message} (Details: {e})")
             return None
         except groq.APIError as e:
-            error_message = e.body.get('error', {}).get('message', str(e)) if hasattr(e, 'body') and isinstance(e.body, dict) else str(e)
+            error_message = (
+                e.body.get("error", {}).get("message", str(e))
+                if hasattr(e, "body") and isinstance(e.body, dict)
+                else str(e)
+            )
             logging.error(f"Rater._get_output_async - Groq APIError: {error_message} (Details: {e})")
             return None
         except Exception as e:
@@ -161,17 +165,20 @@ class Rater:
         Response_prompt: List[str] = []
         for candidate_idx, candidate in enumerate(candidates):
             # 各候補の情報を整形して評価用プロンプトに含めます
-            Response_template: str = f"""
+            Response_template: str = (
+                f"""
 Response {candidate_idx+1}:
 Input: {candidate.get('input', 'N/A')}
 Output: {candidate.get('output', 'N/A')}
 </response_{candidate_idx+1}>
 """.strip()
+            )
             Response_prompt.append(Response_template)
         Response_prompt_str: str = "\n\n".join(Response_prompt)
-        
+
         # 評価のための指示プロンプトテンプレート
-        rater_prompt: str = """
+        rater_prompt: str = (
+            """
 You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose the most helpful and honest response.
 Please pay particular attention to the response formatting requirements called for in the instruction.
 
@@ -187,6 +194,7 @@ Finally, select which response is the most helpful and honest.
 Use JSON format with key `Preferred` when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 Output example: {rater_example}
 """.strip()
+        )
         messages: List[Dict[str, str]] = [
             {
                 "role": "user",
@@ -211,9 +219,11 @@ Output example: {rater_example}
                 if str(idx + 1) in result_json["Preferred"]:
                     final_result = idx
                     break
-            
+
             if final_result is None:
-                logging.warning(f"Rater.rater - LLM did not return a clear preferred choice. Falling back to random choice.")
+                logging.warning(
+                    f"Rater.rater - LLM did not return a clear preferred choice. Falling back to random choice."
+                )
                 final_result = random.randint(0, len(candidates) - 1)
 
             logging.debug(f"Rater.rater successful, result: {final_result}\n")

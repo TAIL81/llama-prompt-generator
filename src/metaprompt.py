@@ -1,19 +1,21 @@
 import json
+import logging
 import os
 import re
-import logging
-from groq import Groq
-from dotenv import load_dotenv
-from pathlib import Path
-from typing import Dict, List, Set, Tuple, Optional
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple
+
+from dotenv import load_dotenv
+from groq import Groq
 
 # 環境変数を .env ファイルから読み込みます
-env_path = Path(__file__).parent.parent / '.env'
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 @dataclass
 class GroqConfig:
@@ -21,11 +23,13 @@ class GroqConfig:
     max_tokens: int = 8192
     temperature: float = 0.1
 
+
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 
 # metaprompt.txt へのフルパスを構築します
 metaprompt_txt_path = os.path.join(current_script_path, "metaprompt.txt")
+
 
 @lru_cache(maxsize=1)
 def load_metaprompt_content(path: str) -> str:
@@ -34,6 +38,7 @@ def load_metaprompt_content(path: str) -> str:
     """
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
+
 
 # メタプロンプトを生成し、関連情報を抽出するクラス
 class MetaPrompt:
@@ -64,21 +69,19 @@ class MetaPrompt:
         variable_string: str = ""
         for variable in parsed_variables:
             variable_string += "\n{{" + variable.upper() + "}}"
-        
+
         prompt: str = self.metaprompt.replace("{{TASK}}", task)
-        prompt += "Please use Japanese for rewriting. The xml tag name is still in English." # 指示文を追加
-        
+        prompt += "Please use Japanese for rewriting. The xml tag name is still in English."  # 指示文を追加
+
         assistant_partial: str = "<Inputs>"
         if variable_string:
-            assistant_partial += (
-                variable_string + "\n</Inputs>\n<Instructions Structure>"
-            )
-        
+            assistant_partial += variable_string + "\n</Inputs>\n<Instructions Structure>"
+
         messages: List[Dict[str, str]] = [
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": assistant_partial},
         ]
-        
+
         # Groq APIを使用してメタプロンプトから指示を生成します
         completion = self.groq_client.chat.completions.create(
             model=self.config.metaprompt_model,
@@ -96,12 +99,7 @@ class MetaPrompt:
             """
             print(
                 "\n\n".join(
-                    "\n".join(
-                        line.strip()
-                        for line in re.findall(
-                            r".{1,100}(?:\s+|$)", paragraph.strip("\n")
-                        )
-                    )
+                    "\n".join(line.strip() for line in re.findall(r".{1,100}(?:\s+|$)", paragraph.strip("\n")))
                     for paragraph in re.split(r"\n\n+", message_content)
                 )
             )
@@ -124,9 +122,7 @@ class MetaPrompt:
         if not variables.strip():
             raise ValueError("変数が空です")
 
-    def extract_between_tags(
-        self, tag: str, string: str, strip: bool = False
-    ) -> List[str]:
+    def extract_between_tags(self, tag: str, string: str, strip: bool = False) -> List[str]:
         """
         文字列内から指定されたタグに囲まれた部分を抽出します。
 
@@ -185,8 +181,8 @@ class MetaPrompt:
         # パターンの順序は重要で、{変数名} が {{変数名}} の一部にマッチしないようにする
         patterns: List[str] = [
             r"\{\{([^{}]+?)\}\}",  # {{変数名}}
-            r"\{\$([^{}]+?)\}",   # {$変数名}
-            r"\{([^{}]+?)\}",    # {変数名}
+            r"\{\$([^{}]+?)\}",  # {$変数名}
+            r"\{([^{}]+?)\}",  # {変数名}
         ]
         variables: Set[str] = set()
         temp_string: str = prompt_content

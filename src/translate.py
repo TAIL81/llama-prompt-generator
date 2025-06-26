@@ -1,18 +1,20 @@
 import json
-import os
 import logging
-from groq import Groq
-from dotenv import load_dotenv
-from pathlib import Path
-from typing import Dict, List, Optional, Union
+import os
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
+from dotenv import load_dotenv
+from groq import Groq
 
 # 環境変数を .env ファイルから読み込みます
-env_path = Path(__file__).parent.parent / '.env'
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 @dataclass
 class GroqConfig:
@@ -24,11 +26,13 @@ class GroqConfig:
     temperature_detect_lang: float = 0.0
     temperature_judge: float = 0.0
 
+
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 
 # PromptGuide.md へのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
+
 
 @lru_cache(maxsize=1)
 def load_prompt_guide(path: str) -> str:
@@ -38,7 +42,9 @@ def load_prompt_guide(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
+
 PromptGuide = load_prompt_guide(prompt_guide_path)
+
 
 # プロンプトガイドに基づいてプロンプトを書き換えるクラス
 class GuideBased:
@@ -74,7 +80,8 @@ class GuideBased:
             lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."
 
         # プロンプト書き換えのための指示テンプレート
-        prompt: str = """
+        prompt: str = (
+            """
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
 This instruction is then sent to Llama to get the expected output.
 
@@ -133,13 +140,12 @@ The question is:
 {initial}
 </initial_instruction>
 """.strip()
+        )
 
         messages: List[Dict[str, str]] = [
             {
                 "role": "user",
-                "content": prompt.format(
-                    guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt
-                ),
+                "content": prompt.format(guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt),
             },
         ]
         # Groq APIを使用してプロンプトの書き換えをリクエストします
@@ -178,7 +184,8 @@ The question is:
             str: 検出された言語コード ("en", "ch" または "ja")。エラーの場合は空文字列。
         """
         lang_example: str = json.dumps({"lang": "ja"})
-        prompt: str = """
+        prompt: str = (
+            """
 Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
 
 <document>
@@ -188,12 +195,11 @@ Please determine what language the document below is in? English (en), Chinese (
 Use JSON format with key `lang` when return result. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 Output example: {lang_example}
 """.strip()
+        )
         messages: List[Dict[str, str]] = [
             {
                 "role": "user",
-                "content": prompt.format(
-                    document=initial_prompt, lang_example=lang_example
-                ),
+                "content": prompt.format(document=initial_prompt, lang_example=lang_example),
             },
         ]
         # Groq APIを使用して言語検出をリクエストします
@@ -226,12 +232,11 @@ Output example: {lang_example}
         """
         Instruction_prompts: List[str] = []
         for idx, candidate in enumerate(candidates):
-            Instruction_prompts.append(
-                f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>"
-            )
+            Instruction_prompts.append(f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>")
         example: str = json.dumps({"Preferred": "Instruction 1"})
-# プロンプト評価のための指示テンプレート
-        prompt: str = """
+        # プロンプト評価のための指示テンプレート
+        prompt: str = (
+            """
 You are an instruction engineer. Your task is to evaluate which of the three instructions given below is better based on the guide in the <guide> xml tag.
 
 Instruction guide:
@@ -244,6 +249,7 @@ Instruction guide:
 Use JSON format when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 {example}
 """.strip()
+        )
         messages: List[Dict[str, str]] = [
             {
                 "role": "user",
@@ -267,7 +273,7 @@ Use JSON format when returning results. Please only output the result in json fo
         try:
             result: Dict[str, str] = json.loads(completion.choices[0].message.content)
             # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
-            for idx in range(len(candidates)): # candidatesの長さに合わせてループ
+            for idx in range(len(candidates)):  # candidatesの長さに合わせてループ
                 if str(idx + 1) in result["Preferred"]:
                     final_result = idx
                     break

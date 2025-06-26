@@ -1,19 +1,20 @@
 import json
+import logging
 import os
 import re
-import logging
-from typing import Optional, Dict, Any, Union, Generator, Tuple
-import gradio as gr # Gradioをインポート
-from openai import OpenAI
-from groq import Groq
-from dotenv import load_dotenv
 from pathlib import Path
+from typing import Any, Dict, Generator, Optional, Tuple, Union
+
+import gradio as gr  # Gradioをインポート
+from dotenv import load_dotenv
+from groq import Groq
+from openai import OpenAI
 
 # ロギング設定
-logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # 環境変数の読み込み
-env_path = Path(__file__).parent.parent / '.env'
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # 定数の定義
@@ -85,9 +86,10 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 groq_api_key = os.getenv("GROQ_API_KEY")
 
+
 # プロンプトの最適化と評価を行うクラス
 class Alignment:
-    def __init__(self, lang_store: Optional[Dict[str, Any]] = None, language: str = 'ja') -> None:
+    def __init__(self, lang_store: Optional[Dict[str, Any]] = None, language: str = "ja") -> None:
         self.lang_store = lang_store
         self.language = language
 
@@ -116,24 +118,32 @@ class Alignment:
             language_instructions = {}
 
         # 英語の指示をデフォルトとして設定
-        self.generation_language_instruction = language_instructions.get("generation", "Please generate the response in English.")
-        system_prompt_suffix = f"\n{self.generation_language_instruction}" if hasattr(self, 'generation_language_instruction') else ""
+        self.generation_language_instruction = language_instructions.get(
+            "generation", "Please generate the response in English."
+        )
+        system_prompt_suffix = (
+            f"\n{self.generation_language_instruction}" if hasattr(self, "generation_language_instruction") else ""
+        )
         self.groq_system_content = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
         self.openrouter_system_content = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
 
         self.evaluate_response_prompt = evaluate_response_prompt_template
         self.generate_revised_prompt_template = generate_revised_prompt_template
-        
-        if hasattr(self, 'evaluation_language_instruction'):
+
+        if hasattr(self, "evaluation_language_instruction"):
             self.evaluate_response_prompt = self.evaluate_response_prompt.format(
                 language_instruction_for_evaluation=self.evaluation_language_instruction
             )
-        if hasattr(self, 'revision_language_instruction'):
+        if hasattr(self, "revision_language_instruction"):
             self.generate_revised_prompt_template = self.generate_revised_prompt_template.format(
                 language_instruction_for_revision=self.revision_language_instruction
             )
-        self.evaluation_language_instruction = language_instructions.get("evaluation", "Please generate the feedback and recommendations in English.")
-        self.revision_language_instruction = language_instructions.get("revision", "Please generate the revised prompt in English. XML tag names should remain in English.")
+        self.evaluation_language_instruction = language_instructions.get(
+            "evaluation", "Please generate the feedback and recommendations in English."
+        )
+        self.revision_language_instruction = language_instructions.get(
+            "revision", "Please generate the revised prompt in English. XML tag names should remain in English."
+        )
 
     def _validate_response(self, response: Any) -> bool:
         """APIレスポンスの構造を検証するヘルパーメソッド"""
@@ -145,7 +155,9 @@ class Alignment:
             and hasattr(response.choices[0].message, "content")
         )
 
-    def _generate_response(self, client: Union[OpenAI, Groq], model_id: str, system_content: str, user_prompt: str) -> str:
+    def _generate_response(
+        self, client: Union[OpenAI, Groq], model_id: str, system_content: str, user_prompt: str
+    ) -> str:
         """APIクライアントを使用して応答を生成する共通メソッド"""
         try:
             completion = client.chat.completions.create(
@@ -157,7 +169,7 @@ class Alignment:
             if not self._validate_response(completion):
                 logging.error(f"Invalid response structure from Groq API: {completion}")
                 return "Error: Invalid response structure from Groq API"
-            
+
             return completion.choices[0].message.content
         except Exception as e:
             logging.error(f"Groq API Error: {e}")
@@ -210,10 +222,10 @@ class Alignment:
                 ],
                 stream=True,
                 temperature=0.1,
-                max_tokens=8192
+                max_tokens=8192,
             )
             for chunk in stream:
-                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
+                if hasattr(chunk.choices[0].delta, "content") and chunk.choices[0].delta.content is not None:
                     output_component.update(chunk.choices[0].delta.content, append=True)
         except Exception as e:
             logging.error(f"OpenRouter API Error during streaming: {e}")
@@ -262,19 +274,19 @@ class Alignment:
                 yield gr.update(value=error_msg), gr.update(value=error_msg)
                 return
 
-            output1_result = self.generate_openrouter_response(
-                original_prompt_replace, openrouter_model_id
-            )
+            output1_result = self.generate_openrouter_response(original_prompt_replace, openrouter_model_id)
             # 1つ目の結果をyieldし、2つ目は処理中と表示
             yield gr.update(value=output1_result), gr.update(value=processing_message)
 
             # 1つ目のAPI呼び出しでエラーが発生した場合
-            if isinstance(output1_result, str) and (output1_result.startswith("OpenRouterError:") or output1_result.startswith("Error:")):
-                yield gr.update(value=output1_result), gr.update(value=output1_result) # エラーを両方に表示
+            if isinstance(output1_result, str) and (
+                output1_result.startswith("OpenRouterError:") or output1_result.startswith("Error:")
+            ):
+                yield gr.update(value=output1_result), gr.update(value=output1_result)  # エラーを両方に表示
                 return
 
             output2_result = self.generate_openrouter_response(
-                revised_prompt_replace, openrouter_model_id # 同じOpenRouterモデルを使用
+                revised_prompt_replace, openrouter_model_id  # 同じOpenRouterモデルを使用
             )
             # 両方の結果をyield
             yield gr.update(value=output1_result), gr.update(value=output2_result)
@@ -286,20 +298,18 @@ class Alignment:
                 yield gr.update(value=error_msg), gr.update(value=error_msg)
                 return
 
-            output1_result = self.generate_groq_response(
-                original_prompt_replace, groq_model_id
-            )
+            output1_result = self.generate_groq_response(original_prompt_replace, groq_model_id)
             # 1つ目の結果をyieldし、2つ目は処理中と表示
             yield gr.update(value=output1_result), gr.update(value=processing_message)
 
             # 1つ目のAPI呼び出しでエラーが発生した場合
-            if isinstance(output1_result, str) and (output1_result.startswith("GroqError:") or output1_result.startswith("Error:")):
+            if isinstance(output1_result, str) and (
+                output1_result.startswith("GroqError:") or output1_result.startswith("Error:")
+            ):
                 yield gr.update(value=output1_result), gr.update(value=output1_result)
                 return
 
-            output2_result = self.generate_groq_response(
-                revised_prompt_replace, groq_model_id # 同じGroqモデルを使用
-            )
+            output2_result = self.generate_groq_response(revised_prompt_replace, groq_model_id)  # 同じGroqモデルを使用
             # 両方の結果をyield
             yield gr.update(value=output1_result), gr.update(value=output2_result)
 
@@ -322,17 +332,16 @@ class Alignment:
         if not self.groq_client:
             logging.error("GroqError: API client for evaluation not initialized. Check GROQ_API_KEY.")
             return "GroqError: API client for evaluation not initialized. Check GROQ_API_KEY."
-        
+
         current_eval_instruction = self.evaluation_language_instruction
         formatted_evaluate_prompt = evaluate_response_prompt_template.format(
-            _OpenAI=openai_output, _Groq=groq_output,
-            language_instruction_for_evaluation=current_eval_instruction
+            _OpenAI=openai_output, _Groq=groq_output, language_instruction_for_evaluation=current_eval_instruction
         )
         # generate_groq_responseからの戻り値をチェック
         groq_result = self.generate_groq_response(formatted_evaluate_prompt, eval_model_id)
         if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
-             logging.error(f"Evaluation Error: {groq_result}")
-             return f"Evaluation Error: {groq_result}" # エラーメッセージを返す
+            logging.error(f"Evaluation Error: {groq_result}")
+            return f"Evaluation Error: {groq_result}"  # エラーメッセージを返す
 
         # 生成された結果からフィードバックと推奨事項を抽出します
         pattern = r"<auto_feedback>(.*?)</auto_feedback>"
@@ -364,9 +373,7 @@ class Alignment:
                 user_prompt = user_prompt.replace(f"{{{key}}}", value)
         return user_prompt
 
-    def generate_revised_prompt( 
-        self, feedback, prompt, openai_response, groq_response, eval_model_id
-    ):
+    def generate_revised_prompt(self, feedback, prompt, openai_response, groq_response, eval_model_id):
         """
         フィードバック、元のプロンプト、および両モデルの応答に基づいて、改訂されたプロンプトを生成します。
 
@@ -391,7 +398,7 @@ class Alignment:
             _prompt=prompt,
             _OpenAI=openai_response,
             _Groq=groq_response,
-            language_instruction_for_revision=current_revision_instruction
+            language_instruction_for_revision=current_revision_instruction,
         )
         if not self.groq_client:
             logging.error("GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY.")
@@ -399,8 +406,8 @@ class Alignment:
         # generate_groq_responseからの戻り値をチェック
         groq_result = self.generate_groq_response(formatted_revised_prompt_content, eval_model_id)
         if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
-             logging.error(f"Prompt Revision Error: {groq_result}")
-             return f"Prompt Revision Error: {groq_result}" # エラーメッセージを返す
+            logging.error(f"Prompt Revision Error: {groq_result}")
+            return f"Prompt Revision Error: {groq_result}"  # エラーメッセージを返す
 
         # 生成された結果から改訂プロンプトを抽出します
         pattern = r"<revised_prompt>(.*?)</revised_prompt>"

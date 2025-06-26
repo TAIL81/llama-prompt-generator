@@ -1,9 +1,11 @@
 import os
+
+from dotenv import load_dotenv
 from groq import Groq
 from openai import OpenAI
 
-from dotenv import load_dotenv
 load_dotenv()
+
 
 def check_groq_connection():
     try:
@@ -16,12 +18,10 @@ def check_groq_connection():
         print(f"Groq connection failed: {str(e)}")
         return False
 
+
 def check_openrouter_connection():
     try:
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENAI_API_KEY")
-        )
+        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENAI_API_KEY"))
         # 軽いAPIリクエストで接続確認
         client.models.list()
         print("OpenRouter connection successful")
@@ -30,6 +30,7 @@ def check_openrouter_connection():
         print(f"OpenRouter connection failed: {str(e)}")
         return False
 
+
 def main():
     groq_ok = check_groq_connection()
     openrouter_ok = check_openrouter_connection()
@@ -37,6 +38,7 @@ def main():
         print("\033[92mPre-flight validation passed. You can proceed with Groq/OpenRouter.\033[0m")
     else:
         print("\033[91mPre-flight validation failed. Check your Groq/OpenRouter credentials.\033[0m")
+
 
 if __name__ == "__main__":
     main()

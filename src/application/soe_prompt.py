@@ -1,25 +1,33 @@
-import os
 import base64
 import json
-from typing import List, Dict, Any, Optional
-from groq import Groq
+import os
+from typing import Any, Dict, List, Optional
+
 from dotenv import load_dotenv
+from groq import Groq
 
 load_dotenv()
 
 groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
 
+
 class SOEPrompt:
-    def __init__(self, model_id="meta-llama/llama-4-scout-17b-16e-instruct", system='You are an AI assistant that generates SEO-optimized product descriptions.'):
+    def __init__(
+        self,
+        model_id="meta-llama/llama-4-scout-17b-16e-instruct",
+        system="You are an AI assistant that generates SEO-optimized product descriptions.",
+    ):
         self.groq_client = Groq(api_key=groq_api_key)
         self.model_id = model_id
         self.system = system
 
     def encode_image(self, image_path: str) -> str:
         with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
+            return base64.b64encode(image_file.read()).decode("utf-8")
 
-    def run_multi_modal_prompt(self, messages: List[Dict[str, List[Dict[str, str]]]], max_completion_tokens: int = 8192) -> Dict[str, List[Dict[str, str]]]:
+    def run_multi_modal_prompt(
+        self, messages: List[Dict[str, List[Dict[str, str]]]], max_completion_tokens: int = 8192
+    ) -> Dict[str, List[Dict[str, str]]]:
         # Groqは画像入力未対応のため、テキストのみ対応
         completion: Any = self.groq_client.chat.completions.create(
             model=self.model_id,
@@ -30,10 +38,7 @@ class SOEPrompt:
         return {"content": [{"text": completion.choices[0].message.content}]}
 
     def generate_groq_response(self, prompt: str) -> str:
-        messages = [
-            {"role": "system", "content": self.system},
-            {"role": "user", "content": prompt}
-        ]
+        messages = [{"role": "system", "content": self.system}, {"role": "user", "content": prompt}]
         completion = self.groq_client.chat.completions.create(
             model=self.model_id,
             messages=messages,
@@ -41,7 +46,15 @@ class SOEPrompt:
         )
         return completion.choices[0].message.content
 
-    def generate_product_description(self, product_category: str, brand_name: str, usage_description: str, target_customer: str, image_path: Optional[str] = None, media_type: str = "image/jpeg") -> str:
+    def generate_product_description(
+        self,
+        product_category: str,
+        brand_name: str,
+        usage_description: str,
+        target_customer: str,
+        image_path: Optional[str] = None,
+        media_type: str = "image/jpeg",
+    ) -> str:
         image_description = None
         if image_path:
             encoded_image = self.encode_image(image_path)
@@ -49,12 +62,15 @@ class SOEPrompt:
                 "role": "user",
                 "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": encoded_image}},
-                    {"type": "text", "text": "Describe the uploaded product image including the colors, patterns, textures, and any other relevant details."}
-                ]
+                    {
+                        "type": "text",
+                        "text": "Describe the uploaded product image including the colors, patterns, textures, and any other relevant details.",
+                    },
+                ],
             }
             messages = [message]
             response = self.run_multi_modal_prompt(messages, max_completion_tokens=8192)
-            image_description = response['content'][0]['text']
+            image_description = response["content"][0]["text"]
             print("Image description generated: {}".format(image_description))
 
         prompt_template = f"""
@@ -93,7 +109,14 @@ class SOEPrompt:
         product_description = self.generate_groq_response(prompt_template)
         return product_description
 
-    def generate_description(self, product_category: str, brand_name: str, usage_description: str, target_customer: str, image_files: Optional[List[Any]]) -> str:
+    def generate_description(
+        self,
+        product_category: str,
+        brand_name: str,
+        usage_description: str,
+        target_customer: str,
+        image_files: Optional[List[Any]],
+    ) -> str:
         media_type = None
         if image_files:
             images_paths = [file.name for file in image_files]
