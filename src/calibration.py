@@ -1,23 +1,22 @@
-import json
-import os
-import re
-from pathlib import Path
-
-from dotenv import load_dotenv  # .envファイルから環境変数を読み込むために使用
-from groq import Groq
-
-env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(env_path)
 import ast
 import io
+import json
 import operator
+import os
 import pathlib
+import re
 import time
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List
 
 import gradio as gr
 import pandas as pd
+from dotenv import load_dotenv  # .envファイルから環境変数を読み込むために使用
+from groq import Groq
 from sklearn.metrics import confusion_matrix  # 混同行列の計算に使用
+
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
 
 # スクリプト (calibration.py) が置かれているディレクトリの絶対パス
 _CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -282,7 +281,6 @@ class CalibrationPrompt:
 
         results = []
         for row_idx, row in dataset.iterrows():
-            label = row["label"]
             variables = {}
             for key, value in dict(row).items():
                 if key == "label":
@@ -336,10 +334,10 @@ class CalibrationPrompt:
         if isinstance(dataset, bytes):
             data_io = io.BytesIO(dataset)
             dataset = pd.read_csv(data_io)
-        # 初期プロンプトで出力を取得
-        cur_dataset = self.get_output(prompt, dataset, postprocess_code, return_df=True)
+        # 初期プロンプトで出力を取得し、それを現在のデータセットとして使用
+        dataset = self.get_output(prompt, dataset, postprocess_code, return_df=True)
         history = []
-        for _ in range(step_num):
+        for _ in range(step_num):  # cur_dataset はループ内で更新されるため、ここでは使用しない
             # 最適化の1ステップを実行
             step_result = self.step(task_description, prompt, dataset, postprocess_code, history)
             prompt = step_result["cur_prompt"]
@@ -361,12 +359,6 @@ class CalibrationPrompt:
         errors = self.extract_errors(dataset)
         large_error_to_str = self.large_error_to_str(errors, num_errors)
         history = self.add_history(prompt, dataset, task_description, history, mean_score, errors)
-        sorted_history = sorted(history, key=lambda x: x["score"], reverse=False)
-        last_history = sorted_history[-3:]
-        # 履歴からプロンプト入力を作成
-        history_prompt = "\n".join(
-            [self.sample_to_text(sample, num_errors_per_label=num_errors, is_score=True) for sample in last_history]
-        )
         prompt_input = {
             "original_instruction": history[-1]["prompt"].strip(),
             "task_description": task_description,
@@ -425,7 +417,6 @@ class CalibrationPrompt:
         """
         required_columns = error_df.columns.tolist()  # エラー分析に必要な列
         label_schema = error_df["label"].unique()
-        gt_name = "GT"
         error_res_df_list = []
         txt_res = ""
         for label in label_schema:

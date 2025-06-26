@@ -1,5 +1,4 @@
 import base64
-import json
 import os
 from typing import Any, Dict, List, Optional
 
@@ -119,7 +118,6 @@ class SOEPrompt:
     ) -> str:
         media_type = None
         if image_files:
-            images_paths = [file.name for file in image_files]
             # use the first image for now
             image_path = image_files[0]
             # extract the media type from the image path e.g. format like "image/jpeg"
