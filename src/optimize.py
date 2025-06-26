@@ -28,7 +28,7 @@ evaluate_response_prompt_template = """
 You are an expert in linguistics and able to observe subtle differences in content between two paragraphs. Your task is to analyze responses from OpenAI and Llama and provide detailed feedback.
 {language_instruction_for_evaluation}
 
-Here are the OpenAI response: 
+Here are the OpenAI response:
 <response>
 {_OpenAI}
 </response>
@@ -51,7 +51,7 @@ generate_revised_prompt_template = """
 You are an expert in prompt engineering for both OpenAI and Llama model and able to follow the human feedback to adjust the prompt to attain the optimal effect, you will be given the original Llama prompt, responses from OpenAI, responses from Llama and human feedback to revise the Llama prompt.
 {language_instruction_for_revision}
 
-Here are the original Llama prompt: 
+Here are the original Llama prompt:
 <prompt>
 {_prompt}
 </prompt>
@@ -74,7 +74,7 @@ Here are the human feedback:
 Please analyze whether Llama's response strictly aligns with OpenAI's response based on the human feedback. Then, consider how the original Llama prompt can be improved accordingly. Your revised prompt should only involve slight adjustments and must not drastically change the original prompt. Use the human feedback to guide your revision.
 
 Finally, provide the revised prompt within the following XML tags:
-```xml
+
 <revised_prompt>
 [Your revised prompt]
 </revised_prompt>
