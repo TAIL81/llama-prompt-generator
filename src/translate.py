@@ -82,64 +82,71 @@ class GuideBased:
         # プロンプト書き換えのための指示テンプレート
         prompt: str = (
             """
-You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
-This instruction is then sent to Llama to get the expected output.
+            You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
+            This instruction is then sent to Llama to get the expected output.
 
-<instruction_guide>
-{guide}
-</instruction_guide>
+            <instruction_guide>
+            {guide}
+            </instruction_guide>
 
-Here are some important rules for rewrite:
-1. Something like `{{variable}}` is customizable text that will be replaced when sent to Llama. It needs to be retained in the rewrite.
-2. {lang_prompt}
-3. Only output the rewrite instruction return them in <rerwited></rerwited>XML tags
+            You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
+            This instruction is then sent to claude to get the expected output.
 
-<rerwited>
-You are an expert research assistant. Here is a document you will answer questions about:
-<doc>
-{{full_text}}
-</doc>
+            Here are some important rules for rewrite:
+            1. Something like `{{variable}}` is customizable text that will be replaced when sent to Llama. It needs to be retained in the rewrite.
+            2. {lang_prompt}
+            3. Only output the rewrite instruction return them in <rerwited></rerwited>XML tags
+            4. If examples are already included in the initial prompt, do not remove the examples after the rewrite.
 
-First, find the quotes from the document that are most relevant to answering the question, and then print them in numbered order. Quotes should be relatively short.
+            You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
+            This instruction is then sent to claude to get the expected output.
 
-If there are no relevant quotes, write "No relevant quotes" instead.
+            Example:
+            <initial_instruction>
+            You are a research assistant. You will answer the following question based on the document in triple quotes, if the question cannot be answered please output "Cannot answer the question from the document"
+            ```
+            {{full_text}}
+            ```
+            You will also need to find the original quote from the document that is most relevant to answering the question. If there is no relevant citation, output "No relevant quotes".
+            Your output should start by listing all the quotes, putting one quote per line and starting with a numerical index. Then answer the question by adding the index of the quote where it is needed.
 
-Then, answer the question, starting with "Answer:". Do not include or reference quoted content verbatim in the answer. Don't say "According to Quote [1]" when answering. Instead make references to quotes relevant to each section of the answer solely by adding their bracketed numbers at the end of relevant sentences.
+            The question is:
+            {{question}}
+            </initial_instruction>
 
-Thus, the format of your overall response should look like what's shown between the <example></example> tags. Make sure to follow the formatting and spacing exactly.
-<example>
-Quotes:
-[1] "Company X reported revenue of $12 million in 2021."
-[2] "Almost 90% of revenue came from widget sales, with gadget sales making up the remaining 10%."
+            <rerwited>
+            You are an expert research assistant. Here is a document you will answer questions about:
+            <doc>
+            {{full_text}}
+            </doc>
 
-Answer:
-Company X earned $12 million. [1] Almost 90% of it was from widget sales. [2]
-</example>
+            First, find the quotes from the document that are most relevant to answering the question, and then print them in numbered order. Quotes should be relatively short.
 
-If the question cannot be answered by the document, say "Cannot answer the question from the document".
+            If there are no relevant quotes, write "No relevant quotes" instead.
 
-Example:
-<initial_instruction>
-You are a research assistant. You will answer the following question based on the document in triple quotes, if the question cannot be answered please output "Cannot answer the question from the document"
-```
-{{full_text}}
-```
-You will also need to find the original quote from the document that is most relevant to answering the question. If there is no relevant citation, output "No relevant quotes".
-Your output should start by listing all the quotes, putting one quote per line and starting with a numerical index. Then answer the question by adding the index of the quote where it is needed.
+            Then, answer the question, starting with "Answer:". Do not include or reference quoted content verbatim in the answer. Don't say "According to Quote [1]" when answering. Instead make references to quotes relevant to each section of the answer solely by adding their bracketed numbers at the end of relevant sentences.
 
-The question is:
-{{question}}
-</initial_instruction>
+            Thus, the format of your overall response should look like what's shown between the <example></example> tags. Make sure to follow the formatting and spacing exactly.
+            <example>
+            Quotes:
+            [1] "Company X reported revenue of $12 million in 2021."
+            [2] "Almost 90% of revenue came from widget sales, with gadget sales making up the remaining 10%."
 
-<question>
-{{question}}
-</question>
-</rerwited>
+            Answer:
+            Company X earned $12 million. [1] Almost 90% of it was from widget sales. [2]
+            </example>
 
-<initial_instruction>
-{initial}
-</initial_instruction>
-""".strip()
+            If the question cannot be answered by the document, say "Cannot answer the question from the document".
+
+            <question>
+            {{question}}
+            </question>
+            </rerwited>
+
+            <initial_instruction>
+            {initial}
+            </initial_instruction>
+            """.strip()
         )
 
         messages: List[Dict[str, str]] = [
@@ -186,15 +193,15 @@ The question is:
         lang_example: str = json.dumps({"lang": "ja"})
         prompt: str = (
             """
-Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
+            Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
 
-<document>
-{document}
-</document>
+            <document>
+            {document}
+            </document>
 
-Use JSON format with key `lang` when return result. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
-Output example: {lang_example}
-""".strip()
+            Use JSON format with key `lang` when return result. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
+            Output example: {lang_example}
+            """.strip()
         )
         messages: List[Dict[str, str]] = [
             {
@@ -237,18 +244,18 @@ Output example: {lang_example}
         # プロンプト評価のための指示テンプレート
         prompt: str = (
             """
-You are an instruction engineer. Your task is to evaluate which of the three instructions given below is better based on the guide in the <guide> xml tag.
+            You are an instruction engineer. Your task is to evaluate which of the three instructions given below is better based on the guide in the <guide> xml tag.
 
-Instruction guide:
-<guide>
-{guide}
-</guide>
+            Instruction guide:
+            <guide>
+            {guide}
+            </guide>
 
-{Instruction_prompts}
+            {Instruction_prompts}
 
-Use JSON format when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
-{example}
-""".strip()
+            Use JSON format when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
+            {example}
+            """.strip()
         )
         messages: List[Dict[str, str]] = [
             {
