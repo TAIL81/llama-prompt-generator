@@ -527,6 +527,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                     textboxes.append(t)
                 b1.click(generate_prompt, inputs=[original_prompt, level], outputs=textboxes)
 
+    # プロンプト評価タブの定義
     with gr.Tab(config.lang_store[config.language]["Prompt Evaluation"]):
         with gr.Row():
             user_prompt_original = gr.Textbox(
@@ -572,14 +573,6 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
 
         # モデル選択と実行ボタンの定義
         with gr.Row():
-            model_provider_radio = gr.Radio(
-                choices=["OpenRouter", "Groq"],
-                label=config.lang_store[config.language].get(
-                    "Choose Model Provider for Comparison", "Choose Model Provider for Comparison"
-                ),
-                value="OpenRouter",
-                interactive=True,
-            )
             openrouter_model_dropdown = gr.Dropdown(
                 label=config.lang_store[config.language].get("Choose OpenRouter Model", "Choose OpenRouter Model"),
                 choices=[
@@ -601,58 +594,27 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
 
         # モデル実行結果表示エリア
         with gr.Row():
-            default_provider = model_provider_radio.value
-            initial_label_original_key = "Original Prompt Output by {provider}"
-            initial_label_eval_key = "Evaluation Prompt Output by {provider}"
-
             openrouter_output = gr.Textbox(
-                label=config.lang_store[config.language]
-                .get(initial_label_original_key, "Output for Original Prompt ({provider})")
-                .format(provider=default_provider),
+                label=config.lang_store[config.language]["元のプロンプトの出力 (OpenRouter)"],
                 lines=3,
                 interactive=False,
                 show_copy_button=True,
             )
             groq_output = gr.Textbox(
-                label=config.lang_store[config.language]
-                .get(initial_label_eval_key, "Output for Evaluation Prompt ({provider})")
-                .format(provider=default_provider),
+                label=config.lang_store[config.language]["評価が必要なプロンプトの出力 (Groq)"],
                 lines=3,
                 interactive=False,
                 show_copy_button=True,
             )
 
-        def update_output_labels(provider_choice):
-            label_original_key = "Original Prompt Output by {provider}"
-            label_eval_key = "Evaluation Prompt Output by {provider}"
-
-            new_label_original = (
-                config.lang_store[config.language]
-                .get(label_original_key, "Output for Original Prompt ({provider})")
-                .format(provider=provider_choice)
-            )
-            new_label_eval = (
-                config.lang_store[config.language]
-                .get(label_eval_key, "Output for Evaluation Prompt ({provider})")
-                .format(provider=provider_choice)
-            )
-
-            return gr.update(label=new_label_original), gr.update(label=new_label_eval)
-
-        model_provider_radio.change(
-            update_output_labels, inputs=[model_provider_radio], outputs=[openrouter_output, groq_output]
-        )
-
         # プロンプト実行イベント
         invoke_button.click(
-            lambda *args: list(alignment.invoke_prompt(*args)),  # ジェネレータをリストに変換
-            #  alignment.invoke_prompt,
+            alignment.invoke_prompt,
             inputs=[
                 user_prompt_original_replaced,
                 user_prompt_eval_replaced,
                 user_prompt_original,
                 user_prompt_eval,
-                model_provider_radio,
                 openrouter_model_dropdown,
                 groq_model_dropdown,
             ],
@@ -792,7 +754,7 @@ def postprocess(llm_output):
 
 def signal_handler(sig, frame):
     print("Shutting down gracefully...")
-    time.sleep(5)  # タスク完了のための猶予時間（必要に応じて調整）
+    time.sleep(3)  # タスク完了のための猶予時間（必要に応じて調整）
     exit(0)
 
 

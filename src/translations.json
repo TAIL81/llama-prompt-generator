@@ -63,7 +63,9 @@
         "MetaPrompt Output: Prompt Template": "MetaPrompt Output: Prompt Template",
         "MetaPrompt Output: Variables": "MetaPrompt Output: Variables",
         "APE Output: Prompt Template": "APE Output: Prompt Template",
-        "APE Output: Variables": "APE Output: Variables"
+        "APE Output: Variables": "APE Output: Variables",
+        "Original Prompt Output (OpenRouter)": "Original Prompt Output (OpenRouter)",
+        "Evaluation Prompt Output (Groq)": "Prompt to Evaluate Output (Groq)"
     },
     "zh": {
         "Submit": "提交",
@@ -190,6 +192,8 @@
         "MetaPrompt Output: Prompt Template": "メタプロンプト出力: プロンプトテンプレート",
         "MetaPrompt Output: Variables": "メタプロンプト出力: 変数",
         "APE Output: Prompt Template": "APE出力: プロンプトテンプレート",
-        "APE Output: Variables": "APE出力: 変数"
+        "APE Output: Variables": "APE出力: 変数",
+        "元のプロンプトの出力 (OpenRouter)": "元のプロンプトの出力 (OpenRouter)",
+        "評価が必要なプロンプトの出力 (Groq)": "評価が必要なプロンプトの出力 (Groq)"
     }
 }
