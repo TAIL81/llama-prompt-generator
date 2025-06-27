@@ -61,7 +61,7 @@ lang_store = config.lang_store
 
 
 def setup_logging():
-    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 setup_logging()

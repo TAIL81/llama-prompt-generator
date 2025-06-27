@@ -24,7 +24,7 @@ async_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 # 同期Groqクライアントを初期化
 sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 @dataclass

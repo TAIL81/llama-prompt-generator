@@ -13,7 +13,7 @@ from groq import Groq
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 @dataclass

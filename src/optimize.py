@@ -10,7 +10,7 @@ from groq import Groq
 from openai import OpenAI
 
 # ロギング設定
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # 環境変数の読み込み
 env_path = Path(__file__).parent.parent / ".env"

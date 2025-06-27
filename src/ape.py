@@ -13,7 +13,7 @@ from rater import Rater
 # 環境変数を読み込みます
 load_dotenv()
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 @dataclass
