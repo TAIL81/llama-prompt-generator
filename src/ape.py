@@ -144,8 +144,10 @@ class APE:
         """
         if not initial_prompt.strip():
             raise ValueError("初期プロンプトが空です")
+        # demo_dataが空の場合でもエラーをスローしないように変更
+        # ただし、空の場合は警告をログに出力する
         if not demo_data:
-            raise ValueError("デモデータが提供されていません")
+            logging.warning("デモデータが提供されていません。APEの実行に影響する可能性があります。")
 
     def rewrite(self, initial_prompt: str) -> Optional[str]:
         """

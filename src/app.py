@@ -398,14 +398,25 @@ def run_ape_on_metaprompt_output(metaprompt_template, metaprompt_variables_str):
     """
     variable_names = [var for var in metaprompt_variables_str.split("\n") if var]
     demo_data = {}
-    for var_name in variable_names:
-        # APEはプロンプト内の {{VAR_NAME}} 形式の変数を期待し、demo_dataのキーもそれに合わせる
-        placeholder_key_for_ape = "{{{{var_name}}}}"  # 例: {{CUSTOMER_COMPLAINT}
-        demo_data[placeholder_key_for_ape] = f"dummy_{var_name.lower()}"  # APE評価用のダミーデータ
+    if not variable_names:
+        # 変数がない場合、APEが実行できるようにダミーデータを生成
+        # このダミーデータはAPEのバリデーションを通過させるためのもので、実際の評価には影響しない
+        demo_data = {"{{DUMMY_VARIABLE}}": "dummy_value"}
+        logging.warning("メタプロンプトの変数が空のため、APE用にダミーデータを生成しました。")
+    else:
+        for var_name in variable_names:
+            # APEはプロンプト内の {{VAR_NAME}} 形式の変数を期待し、demo_dataのキーもそれに合わせる
+            placeholder_key_for_ape = f"{{{{{var_name}}}}}"  # 例: {{CUSTOMER_COMPLAINT}}
+            demo_data[placeholder_key_for_ape] = f"dummy_{var_name.lower()}"  # APE評価用のダミーデータ
 
-    # APEを実行 (epoch=1は固定)
-    result_dict = ape(initial_prompt=metaprompt_template, epoch=1, demo_data=demo_data)
-    return result_dict["prompt"], metaprompt_variables_str  # variables_result は変更しない
+    try:
+        # APEを実行 (epoch=1は固定)
+        result_dict = ape(initial_prompt=metaprompt_template, epoch=1, demo_data=demo_data)
+        return result_dict["prompt"], metaprompt_variables_str  # variables_result は変更しない
+    except ValueError as e:
+        error_message = str(e)
+        logging.error(f"APE実行エラー: {error_message}")
+        return f"エラー: {error_message}", metaprompt_variables_str
 
 
 # メタプロンプト生成ボタンクリック時のラッパー関数
@@ -413,10 +424,15 @@ def metaprompt_wrapper(task: str, variables_str: str) -> Tuple[str, str, str, st
     """
     metapromptを実行し、APE結果表示用のテキストボックスをクリアするための値を返すラッパー。
     """
-    prompt, new_vars = metaprompt(task, variables_str)
-    # メタプロンプトの出力と、APE側をクリアするための空文字列を返す
-    # Gradioの出力コンポーネント数に合わせて4つの値を返す
-    return prompt, new_vars, "", ""
+    try:
+        prompt, new_vars = metaprompt(task, variables_str)
+        # メタプロンプトの出力と、APE側をクリアするための空文字列を返す
+        # Gradioの出力コンポーネント数に合わせて4つの値を返す
+        return prompt, new_vars, "", ""
+    except ValueError as e:
+        error_message = str(e)
+        # エラーメッセージをユーザーに表示し、他のフィールドをクリア
+        return f"エラー: {error_message}", "", "", ""
 
 
 # Gradioインターフェースを定義
