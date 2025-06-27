@@ -261,8 +261,8 @@ class Alignment:
         if len(revised_prompt_replace) == 0:
             revised_prompt_replace = revised_prompt
 
-        output1_result = ""
-        output2_result = ""
+        original_prompt_output = ""
+        evaluation_prompt_output = ""
 
         processing_message = "Processing..."  # _get_translation を削除
 
@@ -273,22 +273,26 @@ class Alignment:
                 yield gr.update(value=error_msg), gr.update(value=error_msg)
                 return
 
-            output1_result = self.generate_openrouter_response(original_prompt_replace, openrouter_model_id)
+            original_prompt_output = self.generate_openrouter_response(
+                original_prompt_replace, openrouter_model_id
+            )
             # 1つ目の結果をyieldし、2つ目は処理中と表示
-            yield gr.update(value=output1_result), gr.update(value=processing_message)
+            yield gr.update(value=original_prompt_output), gr.update(value=processing_message)
 
             # 1つ目のAPI呼び出しでエラーが発生した場合
-            if isinstance(output1_result, str) and (
-                output1_result.startswith("OpenRouterError:") or output1_result.startswith("Error:")
+            if isinstance(original_prompt_output, str) and (
+                original_prompt_output.startswith("OpenRouterError:") or original_prompt_output.startswith("Error:")
             ):
-                yield gr.update(value=output1_result), gr.update(value=output1_result)  # エラーを両方に表示
+                yield gr.update(value=original_prompt_output), gr.update(
+                    value=original_prompt_output
+                )  # エラーを両方に表示
                 return
 
-            output2_result = self.generate_openrouter_response(
-                revised_prompt_replace, openrouter_model_id  # 同じOpenRouterモデルを使用
-            )
+            evaluation_prompt_output = self.generate_openrouter_response(
+                revised_prompt_replace, openrouter_model_id
+            )  # 同じOpenRouterモデルを使用
             # 両方の結果をyield
-            yield gr.update(value=output1_result), gr.update(value=output2_result)
+            yield gr.update(value=original_prompt_output), gr.update(value=evaluation_prompt_output)
 
         elif model_provider_choice == "Groq":
             if self.groq_client is None:
@@ -297,20 +301,20 @@ class Alignment:
                 yield gr.update(value=error_msg), gr.update(value=error_msg)
                 return
 
-            output1_result = self.generate_groq_response(original_prompt_replace, groq_model_id)
+            original_prompt_output = self.generate_groq_response(original_prompt_replace, groq_model_id)
             # 1つ目の結果をyieldし、2つ目は処理中と表示
-            yield gr.update(value=output1_result), gr.update(value=processing_message)
+            yield gr.update(value=original_prompt_output), gr.update(value=processing_message)
 
             # 1つ目のAPI呼び出しでエラーが発生した場合
-            if isinstance(output1_result, str) and (
-                output1_result.startswith("GroqError:") or output1_result.startswith("Error:")
+            if isinstance(original_prompt_output, str) and (
+                original_prompt_output.startswith("GroqError:") or original_prompt_output.startswith("Error:")
             ):
-                yield gr.update(value=output1_result), gr.update(value=output1_result)
+                yield gr.update(value=original_prompt_output), gr.update(value=original_prompt_output)
                 return
 
-            output2_result = self.generate_groq_response(revised_prompt_replace, groq_model_id)  # 同じGroqモデルを使用
+            evaluation_prompt_output = self.generate_groq_response(revised_prompt_replace, groq_model_id)  # 同じGroqモデルを使用
             # 両方の結果をyield
-            yield gr.update(value=output1_result), gr.update(value=output2_result)
+            yield gr.update(value=original_prompt_output), gr.update(value=evaluation_prompt_output)
 
         else:
             error_msg = "Error: Invalid model provider selected."
