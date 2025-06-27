@@ -459,7 +459,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             with gr.Column():
                 prompt_result_meta = gr.Textbox(
                     label=config.lang_store[config.language]["MetaPrompt Output: Prompt Template"],
-                    lines=5,
+                    lines=30,
                     show_copy_button=True,
                     interactive=False,
                 )
@@ -472,7 +472,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             with gr.Column():
                 prompt_result_ape = gr.Textbox(
                     label=config.lang_store[config.language]["APE Output: Prompt Template"],
-                    lines=5,
+                    lines=30,
                     show_copy_button=True,
                     interactive=False,
                     scale=1,
