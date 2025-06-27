@@ -21,20 +21,6 @@ from optimize import Alignment
 from translate import GuideBased
 
 
-def setup_logging():
-    log_level = os.environ.get("LOG_LEVEL", "INFO")  # os.getenv を os.environ.get に変更
-    # RotatingFileHandlerを使用してログファイルを管理
-    file_handler = logging.handlers.RotatingFileHandler("app.log", maxBytes=10000, backupCount=5, encoding="utf-8")
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[file_handler, logging.StreamHandler()],
-    )
-
-
-setup_logging()
-
-
 # 設定管理クラスの導入
 class AppConfig:  # AppConfig クラス
     def __init__(self):
@@ -42,11 +28,14 @@ class AppConfig:  # AppConfig クラス
         self.lang_store: Dict[str, Any] = {}
         self.load_env()
         self.safe_load_translations()
+        # ログレベルをAppConfigで管理
+        self.log_level: str = os.environ.get("LOG_LEVEL", "INFO")  # os.environ.getを使用
 
     def load_env(self):
         env_path = Path(__file__).parent.parent / ".env"
         load_dotenv(env_path)
-        self.language = os.environ.get("LANGUAGE", "ja")  # os.getenv を os.environ.get に変更
+        # 言語設定を読み込む (既存の機能)
+        self.language = os.environ.get("LANGUAGE", "ja")
         logging.info(f"環境変数から言語設定を読み込みました: {self.language}")
 
     def safe_load_translations(self):
@@ -72,6 +61,20 @@ class AppConfig:  # AppConfig クラス
 config = AppConfig()
 language = config.language
 lang_store = config.lang_store
+
+
+def setup_logging():
+    # AppConfigからログレベルを取得
+    log_level = config.log_level
+    # RotatingFileHandlerを使用してログファイルを管理
+    file_handler = logging.handlers.RotatingFileHandler("app.log", maxBytes=10000, backupCount=5, encoding="utf-8")
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        handlers=[file_handler, logging.StreamHandler()],
+    )
+
+
+setup_logging()
 
 
 # コンポーネントの遅延初期化を管理するクラス
@@ -127,8 +130,6 @@ calibration = component_manager.calibration
 
 
 # generate_prompt関数の分割と型ヒントの追加
-
-
 def create_single_textbox(value: str) -> List[gr.Textbox]:
     return [
         cast(
@@ -342,13 +343,12 @@ class SafeCodeExecutor:
 # SafeCodeExecutor のインスタンスを作成
 safe_code_executor = SafeCodeExecutor()
 
+
 # calibration.optimize 関数内で postprocess_code の実行を safe_code_executor を使うように変更する必要がある
 # これは calibration.py ファイルの変更が必要になるため、ここでは app.py の変更のみに留める
 # ただし、app.py の calibration.optimize の呼び出し部分で postprocess_code が渡されているため、
 # calibration.py 側で SafeCodeExecutor を使用するように修正が必要であることをメモしておく。
 # 現時点では app.py の変更のみに集中する。
-
-
 def ape_prompt(original_prompt, user_data):
     logging.debug("ape_prompt function was called!")
     logging.debug(f"original_prompt = {original_prompt}")
@@ -754,7 +754,7 @@ def postprocess(llm_output):
 
 def signal_handler(sig, frame):
     print("Shutting down gracefully...")
-    time.sleep(3)  # タスク完了のための猶予時間（必要に応じて調整）
+    time.sleep(2)  # タスク完了のための猶予時間（必要に応じて調整）
     exit(0)
 
 
