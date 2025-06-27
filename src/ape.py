@@ -90,7 +90,7 @@ class APE:
         ]
         if not filtered_candidates:
             logging.warning("No candidates left after filtering for customizable variables. Returning initial prompt.")
-            return {"prompt": initial_prompt, "error": "No valid candidates after filtering."}
+            return {"prompt": initial_prompt, "error": "No valid candidates after filtering. The rewritten prompts might be missing some required variables."}
 
         # 候補プロンプトを評価し、最良のものを選択します
         best_candidate_idx: Optional[int] = self.rater(initial_prompt, filtered_candidates, demo_data)
