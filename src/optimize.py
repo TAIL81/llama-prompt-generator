@@ -17,7 +17,7 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # 定数の定義
-TEMPERATURE = 0.1
+TEMPERATURE: float = 0.2
 MAX_TOKENS = 8192
 
 # デフォルトのシステムプロンプトのテンプレートを定義します
@@ -220,7 +220,7 @@ class Alignment:
                     {"role": "user", "content": prompt},
                 ],
                 stream=True,
-                temperature=0.1,
+                temperature=TEMPERATURE,
                 max_tokens=8192,
             )
             for chunk in stream:

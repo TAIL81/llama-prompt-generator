@@ -21,7 +21,7 @@ class GroqConfig:
     rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     rating_model: str = "llama-3.3-70b-versatile"
     max_tokens: int = 8192
-    temperature: float = 0.1
+    temperature: float = 0.2
 
 
 # 現在のスクリプトが配置されているディレクトリを取得します

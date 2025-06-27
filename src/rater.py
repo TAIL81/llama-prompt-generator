@@ -32,7 +32,7 @@ class GroqConfig:
     get_output_model: str = "compound-beta-mini"
     rater_model: str = "llama-3.3-70b-versatile"
     max_tokens: int = 8192
-    temperature_get_output: float = 0.1
+    temperature_get_output: float = 0.2
     temperature_rater: float = 0.0
 
 
