@@ -89,22 +89,7 @@ class MetaPrompt:
             temperature=self.config.temperature,
         )
         message: str = completion.choices[0].message.content
-
-        # デバッグ用の整形出力関数
-        def pretty_print(message_content: str) -> None:
-            """
-            この関数は、与えられたメッセージを整形し、コンソールに出力します。
-            長い行を100文字で折り返し、段落ごとに改行を挿入して可読性を高めます。
-            """
-            print(
-                "\n\n".join(
-                    "\n".join(line.strip() for line in re.findall(r".{1,100}(?:\s+|$)", paragraph.strip("\n")))
-                    for paragraph in re.split(r"\n\n+", message_content)
-                )
-            )
-
-        # pretty_print関数を呼び出して整形されたメッセージをコンソールに出力します
-        pretty_print(message)
+        logging.debug(message)
 
         # 生成されたメッセージからプロンプトテンプレートと変数を抽出します
         extracted_prompt_template: str = self.extract_prompt(message)
