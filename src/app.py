@@ -1,7 +1,6 @@
 import ast
 import json
 import logging
-import logging.handlers
 import operator
 import os
 import signal
@@ -28,8 +27,6 @@ class AppConfig:  # AppConfig クラス
         self.lang_store: Dict[str, Any] = {}
         self.load_env()
         self.safe_load_translations()
-        # ログレベルをAppConfigで管理
-        self.log_level: str = os.environ.get("LOG_LEVEL", "INFO")  # os.environ.getを使用
 
     def load_env(self):
         env_path = Path(__file__).parent.parent / ".env"
@@ -64,14 +61,7 @@ lang_store = config.lang_store
 
 
 def setup_logging():
-    # AppConfigからログレベルを取得
-    log_level = config.log_level
-    # RotatingFileHandlerを使用してログファイルを管理
-    file_handler = logging.handlers.RotatingFileHandler("app.log", maxBytes=10000, backupCount=5, encoding="utf-8")
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        handlers=[file_handler, logging.StreamHandler()],
-    )
+    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 setup_logging()

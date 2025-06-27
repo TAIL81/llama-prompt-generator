@@ -10,7 +10,7 @@ from groq import Groq
 from openai import OpenAI
 
 # ロギング設定
-logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # 環境変数の読み込み
 env_path = Path(__file__).parent.parent / ".env"
@@ -271,9 +271,7 @@ class Alignment:
             yield gr.update(value=error_msg), gr.update(value=error_msg)
             return
 
-        original_prompt_output = self.generate_openrouter_response(
-            original_prompt_replace, openrouter_model_id
-        )
+        original_prompt_output = self.generate_openrouter_response(original_prompt_replace, openrouter_model_id)
         yield gr.update(value=original_prompt_output), gr.update(value=processing_message)
 
         if isinstance(original_prompt_output, str) and (
