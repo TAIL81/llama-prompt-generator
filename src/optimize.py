@@ -81,7 +81,7 @@ Finally, provide the revised prompt within the following XML tags:
 """.strip()
 
 # 評価モデルIDの定数定義
-EVAL_MODEL_ID: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+EVAL_MODEL_ID: str = "llama-3.3-70b-versatile"
 
 # APIキーとベースURLを (.env ファイルからロードされた) 環境変数から取得します
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -295,8 +295,6 @@ class Alignment:
     def evaluate_response(self, openai_output: str, groq_output: str) -> str:
         """
         固定モデルを使用して OpenAI と Groq の応答を比較評価し、フィードバックと推奨事項を生成します。
-
-
 
         OpenAIとGroqの応答を比較評価し、フィードバックと推奨事項を生成します。
 
