@@ -639,7 +639,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             openrouter_output = gr.Textbox(
                 label=config.lang_store[config.language]["元のプロンプトの出力 (OpenRouter)"],
                 lines=3,
-                interactive=False,
+                interactive=True,
                 show_copy_button=True,
             )
             groq_output = gr.Textbox(
