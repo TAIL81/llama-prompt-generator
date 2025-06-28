@@ -467,7 +467,6 @@ def metaprompt_wrapper(task: str, variables_str: str) -> Tuple[str, str, str, st
 
 
 # Gradioインターフェースを定義
-# lang_storeが設定された後でGradioインターフェースを定義
 with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engineering"], theme="soft") as demo:
     gr.Markdown(f"# {config.lang_store[config.language]['Automatic Prompt Engineering']}")
 
@@ -566,50 +565,69 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
 
     # プロンプト評価タブの定義
     with gr.Tab(config.lang_store[config.language]["Prompt Evaluation"]):
+        # プロンプト入力と変数置換のセクション
         with gr.Row():
+            # 元のプロンプト入力欄（OpenAIモデル用）
             user_prompt_original = gr.Textbox(
                 label=config.lang_store[config.language]["Please input your original prompt"], lines=3
             )
+            # 変数置換入力欄（元のプロンプト用）
+            # 形式: "key1:value1;key2:value2"
+            # user_prompt_original 内のプレースホルダ（例: {key1}）を置換するために使用
             kv_input_original = gr.Textbox(
                 label=config.lang_store[config.language]["[Optional]Input the template variable need to be replaced"],
                 placeholder="Ref format: key1:value1;key2:value2",
                 lines=3,
             )
+            # 変数置換後の元のプロンプト表示欄 (インタラクティブではない)
             user_prompt_original_replaced = gr.Textbox(
                 label=config.lang_store[config.language]["Replace Result"], lines=3, interactive=False
             )
+
+            # 評価対象プロンプトの入力と変数置換のセクション
+            # 評価対象プロンプト入力欄
             user_prompt_eval = gr.Textbox(
                 label=config.lang_store[config.language]["Please input the prompt need to be evaluate"], lines=3
-            )  # 評価用プロンプト入力
+            )
+            # 変数置換入力欄（評価対象のプロンプト用）
+            # 形式: "key1:value1;key2:value2"
+            # user_prompt_eval 内のプレースホルダ（例: {key1}）を置換するために使用
             kv_input_eval = gr.Textbox(
                 label=config.lang_store[config.language]["[Optional]Input the template variable need to be replaced"],
                 placeholder="Ref format: key1:value1;key2:value2",
                 lines=3,
             )
+            # 変数置換後の評価対象プロンプト表示欄 (インタラクティブではない)
             user_prompt_eval_replaced = gr.Textbox(
                 label=config.lang_store[config.language]["Replace Result"], lines=3, interactive=False
             )
 
         # 変数置換ボタンの定義
         with gr.Row():
+            # 元のプロンプトの変数置換ボタン
             insert_button_original = gr.Button(
                 config.lang_store[config.language]["Replace Variables in Original Prompt"]
             )
+            # 元のプロンプトの変数置換イベントハンドラ
             insert_button_original.click(
                 alignment.insert_kv,
                 inputs=[user_prompt_original, kv_input_original],
                 outputs=user_prompt_original_replaced,
             )
 
+            # 改訂されたプロンプトの変数置換ボタン
             insert_button_revise = gr.Button(config.lang_store[config.language]["Replace Variables in Revised Prompt"])
+
+            # 改訂されたプロンプトの変数置換イベントハンドラ
             insert_button_revise.click(
                 alignment.insert_kv,
-                inputs=[user_prompt_eval, kv_input_eval],  # 評価用プロンプトと変数を入力
+                inputs=[user_prompt_eval, kv_input_eval],
                 outputs=user_prompt_eval_replaced,
             )
 
         # モデル選択と実行ボタンの定義
         with gr.Row():
+            # OpenAIモデル選択ドロップダウン
             OpenAI_model_dropdown = gr.Dropdown(
                 label=config.lang_store[config.language].get("Choose OpenAI Model", "Choose OpenAI Model"),
                 choices=[
@@ -618,6 +636,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 ],
                 value="deepseek/deepseek-chat-v3-0324:free",
             )
+            # Groqモデル選択ドロップダウン
             groq_model_dropdown = gr.Dropdown(
                 label=config.lang_store[config.language].get("Choose Groq Model", "Choose Groq Model"),
                 choices=[
@@ -627,16 +646,21 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 value="compound-beta-mini",
             )
 
+            # プロンプト実行ボタン
             invoke_button = gr.Button(config.lang_store[config.language]["Execute prompt"])
 
         # モデル実行結果表示エリア
         with gr.Row():
+            # OpenAIモデルの出力表示
+            # OpenAIモデルの出力表示テキストボックス
             OpenAI_output = gr.Textbox(
                 label=config.lang_store[config.language]["Original Prompt Output (OpenAI)"],
                 lines=3,
                 interactive=True,
                 show_copy_button=True,
             )
+            # Groqモデルの出力表示
+            # Groqモデルの出力表示テキストボックス
             groq_output = gr.Textbox(
                 label=config.lang_store[config.language]["Evaluation Prompt Output (Groq)"],
                 lines=3,
@@ -644,28 +668,30 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 show_copy_button=True,
             )
 
-        # プロンプト実行イベント
-        invoke_button.click(
-            alignment.invoke_prompt,
-            inputs=[
-                user_prompt_original_replaced,
-                user_prompt_eval_replaced,
-                user_prompt_original,
-                user_prompt_eval,
-                OpenAI_model_dropdown,
-                groq_model_dropdown,
-            ],
-            outputs=[OpenAI_output, groq_output],
-        )
+            # プロンプト実行イベント
+            invoke_button.click(
+                alignment.invoke_prompt,
+                inputs=[
+                    user_prompt_original_replaced,
+                    user_prompt_eval_replaced,
+                    user_prompt_original,
+                    user_prompt_eval,
+                    OpenAI_model_dropdown,
+                    groq_model_dropdown,
+                ],
+                outputs=[OpenAI_output, groq_output],
+            )
 
         # フィードバックと評価、改善プロンプト生成エリアのUI定義
         with gr.Row():
+            # フィードバック入力欄（手動入力または自動生成）
             feedback_input = gr.Textbox(
                 label=config.lang_store[config.language]["Evaluate the Prompt Effect"],
                 placeholder=config.lang_store[config.language]["Input your feedback manually or by model"],
                 lines=3,
                 show_copy_button=True,
             )
+            # 評価モデル選択ドロップダウン
             eval_model_dropdown = gr.Dropdown(
                 label=config.lang_store[config.language]["Choose the Evaluation Model"],
                 choices=[
@@ -674,22 +700,27 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 ],
                 value="meta-llama/llama-4-scout-17b-16e-instruct",
             )
-            # 自動評価ボタン
+            # 自動評価ボタン（OpenAIとGroqの出力を比較してフィードバックを生成）
             evaluate_button = gr.Button(config.lang_store[config.language]["Auto-evaluate the Prompt Effect"])
+
+            # 自動評価ボタンがクリックされたときのイベントハンドラ
             evaluate_button.click(
                 alignment.evaluate_response,
                 inputs=[OpenAI_output, groq_output, eval_model_dropdown],
                 outputs=[feedback_input],
             )
 
-            # プロンプト改善ボタン
+            # プロンプト改善ボタン（フィードバックに基づいてプロンプトを改訂）
             revise_button = gr.Button(config.lang_store[config.language]["Iterate the Prompt"])  # 改善ボタン
-            revised_prompt_output = gr.Textbox(  # 改善後プロンプト表示
+            # 改訂されたプロンプトの出力表示テキストボックス
+            revised_prompt_output = gr.Textbox(
                 label=config.lang_store[config.language]["Revised Prompt"],
                 lines=3,
                 interactive=False,
                 show_copy_button=True,
             )
+
+            # プロンプト改善ボタンがクリックされたときのイベントハンドラ
             revise_button.click(
                 alignment.generate_revised_prompt,
                 inputs=[feedback_input, user_prompt_eval, OpenAI_output, groq_output, eval_model_dropdown],
