@@ -19,25 +19,25 @@ def check_groq_connection():
         return False
 
 
-def check_openrouter_connection():
+def check_OpenAI_connection():
     try:
         client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENAI_API_KEY"))
         # 軽いAPIリクエストで接続確認
         client.models.list()
-        print("OpenRouter connection successful")
+        print("OpenAI connection successful")
         return True
     except Exception as e:
-        print(f"OpenRouter connection failed: {str(e)}")
+        print(f"OpenAI connection failed: {str(e)}")
         return False
 
 
 def main():
     groq_ok = check_groq_connection()
-    openrouter_ok = check_openrouter_connection()
-    if groq_ok and openrouter_ok:
-        print("\033[92mPre-flight validation passed. You can proceed with Groq/OpenRouter.\033[0m")
+    OpenAI_ok = check_OpenAI_connection()
+    if groq_ok and OpenAI_ok:
+        print("\033[92mPre-flight validation passed. You can proceed with Groq/OpenAI.\033[0m")
     else:
-        print("\033[91mPre-flight validation failed. Check your Groq/OpenRouter credentials.\033[0m")
+        print("\033[91mPre-flight validation failed. Check your Groq/OpenAI credentials.\033[0m")
 
 
 if __name__ == "__main__":

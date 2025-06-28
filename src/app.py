@@ -79,6 +79,7 @@ class ComponentManager:
 
     必要な時にコンポーネントを初期化し、リソースを効率的に利用します。
     """
+
     def __init__(self, config: AppConfig):
         self._config = config
         self._components: Dict[str, Any] = {
@@ -212,6 +213,7 @@ class SafeCodeExecutor:
     許可されたASTノード、関数、演算子のみを含むコードを実行します。
     これにより、悪意のあるコードの実行を防ぎます。
     """
+
     ALLOWED_NODES = (
         ast.Expression,
         ast.Call,
@@ -301,7 +303,9 @@ class SafeCodeExecutor:
                     # 許可されていないノードタイプが含まれているかチェック
                     raise ValueError(f"許可されていないASTノードタイプが含まれています: {type(node).__name__}")
                 if isinstance(node, ast.Call):
-                    if not isinstance(node.func, ast.Name) or node.func.id not in self.ALLOWED_FUNCTIONS:  # 許可されていない関数呼び出し
+                    if (
+                        not isinstance(node.func, ast.Name) or node.func.id not in self.ALLOWED_FUNCTIONS
+                    ):  # 許可されていない関数呼び出し
                         raise ValueError(
                             f"許可されていない関数呼び出しが含まれています: {node.func.id if isinstance(node.func, ast.Name) else 'unknown'}"
                         )
@@ -606,8 +610,8 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
 
         # モデル選択と実行ボタンの定義
         with gr.Row():
-            openrouter_model_dropdown = gr.Dropdown(
-                label=config.lang_store[config.language].get("Choose OpenRouter Model", "Choose OpenRouter Model"),
+            OpenAI_model_dropdown = gr.Dropdown(
+                label=config.lang_store[config.language].get("Choose OpenAI Model", "Choose OpenAI Model"),
                 choices=[
                     "deepseek/deepseek-chat-v3-0324:free",
                     "deepseek/deepseek-r1-0528:free",
@@ -627,8 +631,8 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
 
         # モデル実行結果表示エリア
         with gr.Row():
-            openrouter_output = gr.Textbox(
-                label=config.lang_store[config.language]["元のプロンプトの出力 (OpenRouter)"],
+            OpenAI_output = gr.Textbox(
+                label=config.lang_store[config.language]["元のプロンプトの出力 (OpenAI)"],
                 lines=3,
                 interactive=True,
                 show_copy_button=True,
@@ -648,10 +652,10 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 user_prompt_eval_replaced,
                 user_prompt_original,
                 user_prompt_eval,
-                openrouter_model_dropdown,
+                OpenAI_model_dropdown,
                 groq_model_dropdown,
             ],
-            outputs=[openrouter_output, groq_output],
+            outputs=[OpenAI_output, groq_output],
         )
 
         # フィードバックと評価、改善プロンプト生成エリアのUI定義
@@ -674,7 +678,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             evaluate_button = gr.Button(config.lang_store[config.language]["Auto-evaluate the Prompt Effect"])
             evaluate_button.click(
                 alignment.evaluate_response,
-                inputs=[openrouter_output, groq_output, eval_model_dropdown],
+                inputs=[OpenAI_output, groq_output, eval_model_dropdown],
                 outputs=[feedback_input],
             )
 
@@ -688,7 +692,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             )
             revise_button.click(
                 alignment.generate_revised_prompt,
-                inputs=[feedback_input, user_prompt_eval, openrouter_output, groq_output, eval_model_dropdown],
+                inputs=[feedback_input, user_prompt_eval, OpenAI_output, groq_output, eval_model_dropdown],
                 outputs=revised_prompt_output,
             )
 
@@ -769,7 +773,9 @@ def postprocess(llm_output):
                 value="classification",
                 label=config.lang_store[config.language]["Task type"],
             )  # タスクタイプ選択
-            steps_num = gr.Slider(1, 5, value=1, step=1, label=config.lang_store[config.language]["Epoch"])  # 最適化ステップ数
+            steps_num = gr.Slider(
+                1, 5, value=1, step=1, label=config.lang_store[config.language]["Epoch"]
+            )  # 最適化ステップ数
         # 例: 不要なラベルの削除（またはより具体的なラベルに変更）
         #  calibration_prompt = gr.Textbox(label=config.lang_store[config.language]["Revised Prompt"],
         #                                  lines=3, show_copy_button=True, interactive=False)

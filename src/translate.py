@@ -73,11 +73,11 @@ class GuideBased:
         if lang == "ja":
             lang_prompt: str = "Please use Japanese for rewriting. The xml tag name is still in English."
         elif lang == "ch":
-            lang_prompt = "Please use Chinese for rewriting. The xml tag name is still in English."
+            lang_prompt: str = "Please use Chinese for rewriting. The xml tag name is still in English."
         elif lang == "en":
-            lang_prompt = "Please use English for rewriting."
+            lang_prompt: str = "Please use English for rewriting."
         else:
-            lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."  # 初期指示と同じ言語を使用
+            lang_prompt: str = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."  # 初期指示と同じ言語を使用
 
         # プロンプト書き換えのための指示テンプレート
         prompt: str = (

@@ -93,13 +93,13 @@ class Alignment:
         self.language = language
 
         try:
-            self.openrouter_client = OpenAI(
+            self.OpenAI_client = OpenAI(
                 base_url=OPENAI_BASE_URL,
                 api_key=openai_api_key,
             )
         except Exception as e:
-            logging.error(f"OpenRouter client initialization failed: {e}")
-            self.openrouter_client = None
+            logging.error(f"OpenAI client initialization failed: {e}")
+            self.OpenAI_client = None
 
         try:
             self.groq_client = Groq(api_key=groq_api_key)
@@ -124,7 +124,7 @@ class Alignment:
             f"\n{self.generation_language_instruction}" if hasattr(self, "generation_language_instruction") else ""
         )
         self.groq_system_content = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
-        self.openrouter_system_content = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
+        self.OpenAI_system_content = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
 
         self.evaluate_response_prompt = evaluate_response_prompt_template
         self.generate_revised_prompt_template = generate_revised_prompt_template
@@ -180,11 +180,11 @@ class Alignment:
             return "GroqError: API client not initialized. Check GROQ_API_KEY."
         return self._generate_response(self.groq_client, model_id, self.groq_system_content, prompt)
 
-    def generate_openrouter_response(self, prompt: str, model_id: str) -> str:
-        """OpenRouter APIを使用して応答を生成"""
-        if not self.openrouter_client:
-            return "OpenRouterError: API client not initialized. Check OPENAI_API_KEY."
-        return self._generate_response(self.openrouter_client, model_id, self.openrouter_system_content, prompt)
+    def generate_OpenAI_response(self, prompt: str, model_id: str) -> str:
+        """OpenAI APIを使用して応答を生成"""
+        if not self.OpenAI_client:
+            return "OpenAIError: API client not initialized. Check OPENAI_API_KEY."
+        return self._generate_response(self.OpenAI_client, model_id, self.OpenAI_system_content, prompt)
 
     # ストリーミング出力メソッド（未実装のためコメントアウト）
     # def stream_groq_response(self, prompt, model_id, output_component):
@@ -206,17 +206,17 @@ class Alignment:
     #         for chunk in stream:
     #             if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
     #                 output_
-    def stream_openrouter_response(self, prompt, model_id, output_component):
+    def stream_OpenAI_response(self, prompt, model_id, output_component):
         # TODO: Gradio の出力コンポーネントへのストリーミング出力を実装する
-        if not self.openrouter_client:
-            logging.error("OpenRouterError: API client not initialized. Check OPENAI_API_KEY.")
-            output_component.update("OpenRouterError: API client not initialized. Check OPENAI_API_KEY.")
+        if not self.OpenAI_client:
+            logging.error("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
+            output_component.update("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
             return
         try:
-            stream = self.openrouter_client.chat.completions.create(
+            stream = self.OpenAI_client.chat.completions.create(
                 model=model_id,
                 messages=[
-                    {"role": "system", "content": self.openrouter_system_content},
+                    {"role": "system", "content": self.OpenAI_system_content},
                     {"role": "user", "content": prompt},
                 ],
                 stream=True,
@@ -227,8 +227,8 @@ class Alignment:
                 if hasattr(chunk.choices[0].delta, "content") and chunk.choices[0].delta.content is not None:
                     output_component.update(chunk.choices[0].delta.content, append=True)
         except Exception as e:
-            logging.error(f"OpenRouter API Error during streaming: {e}")
-            output_component.update(f"OpenRouter API Error during streaming: {str(e)}")
+            logging.error(f"OpenAI API Error during streaming: {e}")
+            output_component.update(f"OpenAI API Error during streaming: {str(e)}")
 
     def invoke_prompt(
         self,
@@ -236,22 +236,22 @@ class Alignment:
         revised_prompt_replace,
         original_prompt,
         revised_prompt,
-        openrouter_model_id,
+        OpenAI_model_id,
         groq_model_id,
     ) -> Generator[Tuple[Any, Any], None, None]:
         """
-        元のプロンプトと改訂されたプロンプトをそれぞれOpenRouterとGroqで実行し、結果を返します。ジェネレータを使用して、途中結果をyieldする。
+        元のプロンプトと改訂されたプロンプトをそれぞれOpenAIとGroqで実行し、結果を返します。ジェネレータを使用して、途中結果をyieldする。
 
         Args:
             original_prompt_replace (str): 変数が置換された元のプロンプト。
             revised_prompt_replace (str): 変数が置換された改訂プロンプト。
             original_prompt (str): 元のプロンプト（置換前）。
             revised_prompt (str): 改訂プロンプト（置換前）。
-            openrouter_model_id (str): OpenRouterで使用するモデルID。
+            OpenAI_model_id (str): OpenAIで使用するモデルID。
             groq_model_id (str): Groqで使用するモデルID。
 
         Returns:
-            tuple: (OpenRouterからの応答, Groqからの応答)
+            tuple: (OpenAIからの応答, Groqからの応答)
         """
         # 置換後のプロンプトが空の場合、置換前のプロンプトを使用します
         if len(original_prompt_replace) == 0:
@@ -264,18 +264,18 @@ class Alignment:
 
         processing_message = "Processing..."
 
-        # 元のプロンプトはOpenRouterで実行
-        if self.openrouter_client is None:
-            error_msg = "OpenRouterError: API client not initialized. Check OPENAI_API_KEY and OPENAI_BASE_URL."
+        # 元のプロンプトはOpenAIで実行
+        if self.OpenAI_client is None:
+            error_msg = "OpenAIError: API client not initialized. Check OPENAI_API_KEY and OPENAI_BASE_URL."
             logging.error(error_msg)
             yield gr.update(value=error_msg), gr.update(value=error_msg)
             return
-        # OpenRouter API を呼び出し、応答を生成
-        original_prompt_output = self.generate_openrouter_response(original_prompt_replace, openrouter_model_id)
+        # OpenAI API を呼び出し、応答を生成
+        original_prompt_output = self.generate_OpenAI_response(original_prompt_replace, OpenAI_model_id)
         yield gr.update(value=original_prompt_output), gr.update(value=processing_message)
 
         if isinstance(original_prompt_output, str) and (
-            original_prompt_output.startswith("OpenRouterError:") or original_prompt_output.startswith("Error:")
+            original_prompt_output.startswith("OpenAIError:") or original_prompt_output.startswith("Error:")
         ):
             yield gr.update(value=original_prompt_output), gr.update(value=original_prompt_output)
             return
@@ -295,7 +295,7 @@ class Alignment:
         OpenAIとGroqの応答を比較評価し、フィードバックと推奨事項を生成します。
 
         Args:
-            openai_output (str): OpenAI (OpenRouter) からの応答。
+            openai_output (str): OpenAI (OpenAI) からの応答。
             groq_output (str): Groqからの応答。
             eval_model_id (str): 評価に使用するGroqモデルのID。
 
@@ -353,7 +353,7 @@ class Alignment:
         Args:
             feedback (str): プロンプト改善のためのフィードバック。
             prompt (str): 元のLlama (Groq) プロンプト。
-            openai_response (str): OpenAI (OpenRouter) からの応答。
+            openai_response (str): OpenAI (OpenAI) からの応答。
             groq_response (str): Llama (Groq) からの応答。
             eval_model_id (str): プロンプト改訂に使用するGroqモデルのID。
 

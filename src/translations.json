@@ -54,7 +54,7 @@
         "CUSTOMER_COMPLAINT\nCOMPANY_NAME": "CUSTOMER_COMPLAINT\nCOMPANY_NAME",
         "Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\"": "Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\"",
         "Choose Model Provider for Comparison": "Choose Model Provider for Comparison",
-        "OpenRouter": "OpenRouter",
+        "OpenAI": "OpenAI",
         "Groq": "Groq",
         "Original Prompt Output by {provider}": "Output for Original Prompt by {provider}",
         "Evaluation Prompt Output by {provider}": "Output for Evaluation Prompt by {provider}",
@@ -64,7 +64,7 @@
         "MetaPrompt Output: Variables": "MetaPrompt Output: Variables",
         "APE Output: Prompt Template": "APE Output: Prompt Template",
         "APE Output: Variables": "APE Output: Variables",
-        "Original Prompt Output (OpenRouter)": "Original Prompt Output (OpenRouter)",
+        "Original Prompt Output (OpenAI)": "Original Prompt Output (OpenAI)",
         "Evaluation Prompt Output (Groq)": "Prompt to Evaluate Output (Groq)"
     },
     "zh": {
@@ -122,7 +122,7 @@
         "CUSTOMER_COMPLAINT\nCOMPANY_NAME": "客户投诉\n公司名称",
         "Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\"": "总结由三引号分隔的文本。\n\n\"\"\"{{在此插入文本}}\"\"\"",
         "Choose Model Provider for Comparison": "选择比较模型提供商",
-        "OpenRouter": "OpenRouter",
+        "OpenAI": "OpenAI",
         "Groq": "Groq",
         "Original Prompt Output by {provider}": "原始提示的输出 ({provider})",
         "Evaluation Prompt Output by {provider}": "评估提示的输出 ({provider})",
@@ -183,7 +183,7 @@
         "CUSTOMER_COMPLAINT\nCOMPANY_NAME": "顧客の苦情\n会社名",
         "Summarize the text delimited by triple quotes.\n\n\"\"\"{{insert text here}}\"\"\"": "三重引用符で区切られたテキストを要約します。\n\n\"\"\"{{ここにテキストを挿入}}\"\"\"",
         "Choose Model Provider for Comparison": "比較に使用するモデルプロバイダ",
-        "OpenRouter": "OpenRouter",
+        "OpenAI": "OpenAI",
         "Groq": "Groq",
         "Original Prompt Output by {provider}": "元のプロンプトの出力 ({provider})",
         "Evaluation Prompt Output by {provider}": "評価が必要なプロンプトの出力 ({provider})",
@@ -193,7 +193,7 @@
         "MetaPrompt Output: Variables": "メタプロンプト出力: 変数",
         "APE Output: Prompt Template": "APE出力: プロンプトテンプレート",
         "APE Output: Variables": "APE出力: 変数",
-        "元のプロンプトの出力 (OpenRouter)": "元のプロンプトの出力 (OpenRouter)",
+        "元のプロンプトの出力 (OpenAI)": "元のプロンプトの出力 (OpenAI)",
         "評価が必要なプロンプトの出力 (Groq)": "評価が必要なプロンプトの出力 (Groq)"
     }
 }
