@@ -193,7 +193,7 @@
         "MetaPrompt Output: Variables": "メタプロンプト出力: 変数",
         "APE Output: Prompt Template": "APE出力: プロンプトテンプレート",
         "APE Output: Variables": "APE出力: 変数",
-        "元のプロンプトの出力 (OpenAI)": "元のプロンプトの出力 (OpenAI)",
-        "評価が必要なプロンプトの出力 (Groq)": "評価が必要なプロンプトの出力 (Groq)"
+        "Original Prompt Output (OpenAI)": "元のプロンプトの出力 (OpenAI)",
+        "Evaluation Prompt Output (Groq)": "評価が必要なプロンプトの出力 (Groq)"
     }
 }

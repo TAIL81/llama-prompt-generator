@@ -632,13 +632,13 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
         # モデル実行結果表示エリア
         with gr.Row():
             OpenAI_output = gr.Textbox(
-                label=config.lang_store[config.language]["元のプロンプトの出力 (OpenAI)"],
+                label=config.lang_store[config.language]["Original Prompt Output (OpenAI)"],
                 lines=3,
                 interactive=True,
                 show_copy_button=True,
             )
             groq_output = gr.Textbox(
-                label=config.lang_store[config.language]["評価が必要なプロンプトの出力 (Groq)"],
+                label=config.lang_store[config.language]["Evaluation Prompt Output (Groq)"],
                 lines=3,
                 interactive=False,
                 show_copy_button=True,
