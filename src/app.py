@@ -586,7 +586,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 label=config.lang_store[config.language]["Replace Result"], lines=3, interactive=False
             )
 
-        # 変数置換ボタンと編集可能化の定義
+        # 変数置換ボタンの定義
         with gr.Row():
             insert_button_original = gr.Button(
                 config.lang_store[config.language]["Replace Variables in Original Prompt"]
@@ -597,19 +597,10 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 outputs=user_prompt_original_replaced,
             )
 
-            # 元のプロンプトを編集可能にするチェックボックスを追加
-            edit_original_checkbox = gr.Checkbox(label="元のプロンプトを編集可能にする", value=False)
-            # チェックボックスの状態に応じて、user_prompt_original_replacedのinteractive属性を更新
-            edit_original_checkbox.change(
-                lambda x: gr.Textbox(interactive=x),
-                inputs=[edit_original_checkbox],
-                outputs=[user_prompt_original_replaced],
-            )
-
-            insert_button_eval = gr.Button(config.lang_store[config.language]["Replace Variables in Revised Prompt"])
-            insert_button_eval.click(
+            insert_button_revise = gr.Button(config.lang_store[config.language]["Replace Variables in Revised Prompt"])
+            insert_button_revise.click(
                 alignment.insert_kv,
-                inputs=[user_prompt_eval, kv_input_eval],
+                inputs=[user_prompt_eval, kv_input_eval],  # 評価用プロンプトと変数を入力
                 outputs=user_prompt_eval_replaced,
             )
 
@@ -800,7 +791,7 @@ def postprocess(llm_output):
 # シグナルハンドラ
 def signal_handler(sig, frame):
     print("Shutting down gracefully...")
-    time.sleep(1)  # タスク完了のための猶予時間（必要に応じて調整）
+    time.sleep(2)  # タスク完了のための猶予時間（必要に応じて調整）
     exit(0)
 
 
