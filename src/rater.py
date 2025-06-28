@@ -64,7 +64,7 @@ class Rater:
         # 未評価の候補に対して非同期で出力を取得
         if unrated_candidates_indices:
             unrated_prompts = [
-                self._replace_placeholders(candidates[i]["prompt"], demo_data) for i in unrated_candidates_indices
+                self._replace_placeholders(candidates[i]["prompt"], demo_data) for i in unrated_candidates_indices  # 未評価のプロンプトをデモデータで置換
             ]
 
             # nest_asyncioが適用されているため、asyncio.run()を安全に呼び出せます
@@ -72,7 +72,7 @@ class Rater:
 
             for i, output in zip(unrated_candidates_indices, outputs):
                 candidates[i]["input"] = self._replace_placeholders(candidates[i]["prompt"], demo_data)
-                candidates[i]["output"] = output
+                candidates[i]["output"] = output  # 候補の入力と出力を格納
 
         # 元の指示プロンプトもデモデータで置換
         initial_prompt_filled = self._replace_placeholders(initial_prompt, demo_data)
@@ -102,7 +102,7 @@ class Rater:
         """
         テキスト内のプレースホルダをデモデータで置換します。
         """
-        for k, v in data.items():
+        for k, v in data.items():  # デモデータのキーと値のペアでプレースホルダを置換
             text = text.replace(k, v)
         return text
 
@@ -117,7 +117,7 @@ class Rater:
         """指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。"""
         messages: List[Dict[str, str]] = [{"role": "user", "content": prompt}]
         try:
-            completion = await async_groq_client.chat.completions.create(
+            completion = await async_groq_client.chat.completions.create(  # Groq APIを呼び出し
                 model=self.config.get_output_model,
                 messages=messages,
                 max_completion_tokens=self.config.max_tokens,

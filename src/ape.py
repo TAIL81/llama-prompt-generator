@@ -16,7 +16,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-@dataclass
+@dataclass  # データクラス。API設定を保持
 class GroqConfig:
     rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     rating_model: str = "llama-3.3-70b-versatile"
@@ -32,7 +32,7 @@ prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
 
 @lru_cache(maxsize=1)
-def load_prompt_guide(path: str) -> str:
+def load_prompt_guide(path: str) -> str:  # プロンプトガイドを読み込み、キャッシュ
     """
     PromptGuide.md ファイルを読み込み、キャッシュします。
     """
@@ -40,7 +40,7 @@ def load_prompt_guide(path: str) -> str:
         return f.read()
 
 
-PromptGuide = load_prompt_guide(prompt_guide_path)
+PromptGuide = load_prompt_guide(prompt_guide_path)  # プロンプトガイドをロード
 
 # Groq APIキーを取得し、クライアントを初期化します
 groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
@@ -52,7 +52,7 @@ groq_client = Groq(api_key=groq_api_key)
 
 # APE (Automatic Prompt Engineering) を行うクラス
 class APE:
-    def __init__(self) -> None:
+    def __init__(self) -> None:  # 初期化
         # プロンプト評価用のRaterクラスを初期化します
         self.rater = Rater()
         self.config = GroqConfig()  # 設定を初期化
@@ -69,18 +69,19 @@ class APE:
         Returns:
             Dict[str, Union[str, None]]: 最も評価の高かったプロンプト候補。
         """
-        self._validate_inputs(initial_prompt, demo_data)
+        self._validate_inputs(initial_prompt, demo_data)  # 入力を検証
 
-        candidates: List[str] = []
-        for _ in range(2):
-            rewritten_prompt: Optional[str] = self.rewrite(initial_prompt)
-            if rewritten_prompt:  # rewriteが成功した場合のみ追加
-                candidates.append(rewritten_prompt)
+        candidates: List[str] = []  # プロンプト候補を格納するリスト
+        for _ in range(2):  # 2回プロンプトを書き換え
+            rewritten_prompt: Optional[str] = self.rewrite(initial_prompt)  # プロンプトを書き換え
+            if rewritten_prompt:  # 書き換えに成功した場合
+                candidates.append(rewritten_prompt)  # 候補リストに追加
 
-        if not candidates:  # 2回のrewriteが両方失敗した場合
+        if not candidates:  # 書き換え候補が1つも生成されなかった場合
             logging.error("Initial prompt rewriting failed for all attempts. Returning initial prompt.")
             return {"prompt": initial_prompt, "error": "Initial prompt rewriting failed."}
 
+        # デモデータからカスタマイズ可能な変数のリストを取得
         customizable_variable_list: List[str] = list(demo_data.keys())
         filtered_candidates: List[Dict[str, str]] = [
             {"prompt": candidate}
@@ -88,9 +89,13 @@ class APE:
             for candidate in candidates
             if all([customizable_variable in candidate for customizable_variable in customizable_variable_list])
         ]
+        # フィルタリングの結果、候補が残らなかった場合
         if not filtered_candidates:
             logging.warning("No candidates left after filtering for customizable variables. Returning initial prompt.")
-            return {"prompt": initial_prompt, "error": "No valid candidates after filtering. The rewritten prompts might be missing some required variables."}
+            return {
+                "prompt": initial_prompt,
+                "error": "No valid candidates after filtering. The rewritten prompts might be missing some required variables.",
+            }
 
         # 候補プロンプトを評価し、最良のものを選択します
         best_candidate_idx: Optional[int] = self.rater(initial_prompt, filtered_candidates, demo_data)
@@ -126,17 +131,15 @@ class APE:
                 logging.warning(f"generate_more failed in epoch {i+1}. Keeping previous best candidate.")
                 # generate_more に失敗した場合も、現在の best_candidate_obj を維持
 
-        logging.debug("APE.__call__ return:")
-        for key, value in best_candidate_obj.items():
-            logging.debug(f"  {key}:")
-            # 値が文字列の場合、改行を維持してインデント付きで表示
-            if isinstance(value, str):
-                for line in value.splitlines():
-                    logging.debug(f"    {line}")
-            else:
-                # 文字列以外の場合は、そのままインデント付きで表示
-                logging.debug(f"    {value}")
-        return best_candidate_obj
+        logging.debug("APE.__call__ return:")  # デバッグログ出力
+        for key, value in best_candidate_obj.items():  # 最良の候補の情報をログ出力
+            logging.debug(f"  {key}:")  # キーを出力
+            if isinstance(value, str):  # 値が文字列の場合
+                for line in value.splitlines():  # 改行ごとに
+                    logging.debug(f"    {line}")  # インデントして出力
+            else:  # 文字列以外の場合
+                logging.debug(f"    {value}")  # そのままインデントして出力
+        return best_candidate_obj  # 最良の候補を返す
 
     def _validate_inputs(self, initial_prompt: str, demo_data: Dict[str, str]) -> None:
         """
@@ -150,15 +153,15 @@ class APE:
             logging.warning("デモデータが提供されていません。APEの実行に影響する可能性があります。")
 
     def rewrite(self, initial_prompt: str) -> Optional[str]:
-        """
-        初期プロンプトをInstruction guideに基づいて書き換えます。
+        """初期プロンプトをInstruction guideに基づいて書き換えます。
 
         Args:
             initial_prompt (str): 書き換え対象の初期プロンプト。
 
         Returns:
             Optional[str]: 書き換えられたプロンプト。エラーの場合はNone。
-        """
+        """  # ドキュメント文字列
+        # プロンプトのテンプレートを定義
         prompt: str = (
             """
             You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
@@ -180,29 +183,31 @@ class APE:
             Please only output the rewrite result.
             """.strip()
         )
+        # ユーザーに送信するメッセージを作成
         messages: List[Dict[str, str]] = [
             {
                 "role": "user",
-                "content": prompt.format(guide=PromptGuide, initial=initial_prompt),
+                "content": prompt.format(guide=PromptGuide, initial=initial_prompt),  # プロンプトをフォーマット
             }
         ]
         try:
             # Groq APIを使用してプロンプトの書き換えをリクエストします
-            completion = groq_client.chat.completions.create(
+            completion = groq_client.chat.completions.create(  # Groq APIを呼び出し
                 model=self.config.rewrite_model,
-                messages=messages,
-                max_completion_tokens=self.config.max_tokens,
-                temperature=self.config.temperature,
+                messages=messages,  # メッセージを渡す
+                max_completion_tokens=self.config.max_tokens,  # 最大トークン数を設定
+                temperature=self.config.temperature,  # 温度パラメータを設定
             )
-            result: str = completion.choices[0].message.content
+            result: str = completion.choices[0].message.content  # APIの応答からコンテンツを取得
             # 結果から不要なXMLタグを除去します
-            if result.startswith("<instruction>"):
-                result = result[13:]
-            if result.endswith("</instruction>"):
-                result = result[:-14]
-            result = result.strip()
-            logging.debug(f"APE.rewrite successful, result: \n{result}\n")
-            return result
+            if result.startswith("<instruction>"):  # <instruction>タグで始まる場合
+                result = result[13:]  # タグを取り除く
+            if result.endswith("</instruction>"):  # </instruction>タグで終わる場合
+                result = result[:-14]  # タグを取り除く
+            result = result.strip()  # 前後の空白を削除
+            logging.debug(f"APE.rewrite successful, result: \n{result}\n")  # デバッグログを出力
+            return result  # 書き換えられたプロンプトを返す
+        # APIエラーをハンドル
         except groq.InternalServerError as e:
             error_message: str = (
                 e.body.get("error", {}).get("message", str(e))
@@ -267,7 +272,7 @@ class APE:
         try:
             # Groq APIを使用して追加のプロンプト候補を生成します
             completion = groq_client.chat.completions.create(
-                model=self.config.rewrite_model,
+                model=self.config.rewrite_model,  # モデルを指定
                 messages=messages,
                 max_completion_tokens=self.config.max_tokens,
                 temperature=self.config.temperature,

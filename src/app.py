@@ -21,18 +21,23 @@ from translate import GuideBased
 
 
 # 設定管理クラスの導入
-class AppConfig:  # AppConfig クラス
+class AppConfig:
+    """アプリケーション設定を管理するクラス。
+
+    設定は環境変数と翻訳ファイルから読み込まれます。
+    """
+
     def __init__(self):
         self.language: str = "ja"
         self.lang_store: Dict[str, Any] = {}
         self.load_env()
         self.safe_load_translations()
 
-    def load_env(self):
+    def load_env(self) -> None:
+        """環境変数を読み込み、言語設定を初期化します。"""
         env_path = Path(__file__).parent.parent / ".env"
         load_dotenv(env_path)
-        # 言語設定を読み込む (既存の機能)
-        self.language = os.environ.get("LANGUAGE", "ja")
+        self.language = os.environ.get("LANGUAGE", "ja")  # 環境変数から言語設定を読み込む
         logging.info(f"環境変数から言語設定を読み込みました: {self.language}")
 
     def safe_load_translations(self):
@@ -54,7 +59,7 @@ class AppConfig:  # AppConfig クラス
             self.lang_store = {}
 
 
-# AppConfigのインスタンスを作成
+# AppConfig のインスタンスを作成
 config = AppConfig()
 language = config.language
 lang_store = config.lang_store
@@ -68,7 +73,12 @@ setup_logging()
 
 
 # コンポーネントの遅延初期化を管理するクラス
-class ComponentManager:  # ComponentManager クラス
+class ComponentManager:
+    """
+    アプリケーションコンポーネントの初期化を遅延させるクラス。
+
+    必要な時にコンポーネントを初期化し、リソースを効率的に利用します。
+    """
     def __init__(self, config: AppConfig):
         self._config = config
         self._components: Dict[str, Any] = {
@@ -81,21 +91,22 @@ class ComponentManager:  # ComponentManager クラス
         }
 
     def __getattr__(self, name: str) -> Any:
+        """存在しない属性へのアクセスを処理し、コンポーネントを初期化して返します。"""
         if name in self._components:
             if self._components[name] is None:
                 self._initialize_component(name)
             return self._components[name]
         raise AttributeError(f"Component {name} not found")
 
-    def _initialize_component(self, name: str) -> None:
+    def _initialize_component(self, name: str) -> None:  # コンポーネントの初期化を行う
         logging.info(f"Initializing component: {name}")
         if name == "ape":
-            self._components[name] = APE()
+            self._components[name] = APE()  # APEコンポーネントの初期化
         elif name == "rewrite":
-            self._components[name] = GuideBased()
+            self._components[name] = GuideBased()  # GuideBasedコンポーネントの初期化
         elif name == "alignment":
             self._components[name] = Alignment(lang_store=self._config.lang_store, language=self._config.language)
-        elif name == "metaprompt":
+        elif name == "metaprompt":  # メタプロンプトコンポーネントの初期化
             self._components[name] = MetaPrompt()  # MetaPrompt のインスタンス化
         elif name == "soeprompt":
             self._components[name] = SOEPrompt()
@@ -158,12 +169,14 @@ def create_multiple_textboxes(candidates: List[str], judge_result: int) -> List[
 
 
 def generate_single_prompt(original_prompt: str) -> List[gr.Textbox]:
+    """一回生成モードでプロンプトを生成し、結果をテキストボックスに表示します。"""
     """一回生成モード"""
     result = rewrite(original_prompt)
     return create_single_textbox(result)
 
 
 def generate_multiple_prompts_async(original_prompt: str) -> List[str]:
+    """複数回生成モードでプロンプトを非同期に生成します。"""
     """複数回生成モード (非同期実行用)"""
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [executor.submit(rewrite, original_prompt) for _ in range(3)]
@@ -171,9 +184,10 @@ def generate_multiple_prompts_async(original_prompt: str) -> List[str]:
     return candidates
 
 
+# プロンプト生成のメイン関数
 def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
-    """
-    元のプロンプトと最適化レベルに基づいてプロンプトを生成します。
+    """プロンプト生成のメイン関数。
+    最適化レベルに応じて、一回生成または複数回生成を行います。
 
     Args:
         original_prompt (str): 元のプロンプト。
@@ -193,6 +207,11 @@ def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
 
 # セキュリティ改善: 制限付きコード実行クラス
 class SafeCodeExecutor:
+    """安全なPythonコード実行環境を提供するクラス。
+
+    許可されたASTノード、関数、演算子のみを含むコードを実行します。
+    これにより、悪意のあるコードの実行を防ぎます。
+    """
     ALLOWED_NODES = (
         ast.Expression,
         ast.Call,
@@ -266,6 +285,14 @@ class SafeCodeExecutor:
     }
 
     def execute_safe_code(self, code_str: str, context: Dict[str, Any]) -> Any:
+        """
+        与えられたコード文字列を、指定されたコンテキスト内で安全に実行します。
+
+        Args:
+            code_str (str): 実行するPythonコードの文字列。
+            context (Dict[str, Any]): コード実行時のコンテキスト（変数など）。
+        Returns: コードの実行結果。
+        """
         try:
             tree = ast.parse(code_str, mode="eval")  # コードをASTにパース
 
@@ -274,7 +301,7 @@ class SafeCodeExecutor:
                     # 許可されていないノードタイプが含まれているかチェック
                     raise ValueError(f"許可されていないASTノードタイプが含まれています: {type(node).__name__}")
                 if isinstance(node, ast.Call):
-                    if not isinstance(node.func, ast.Name) or node.func.id not in self.ALLOWED_FUNCTIONS:
+                    if not isinstance(node.func, ast.Name) or node.func.id not in self.ALLOWED_FUNCTIONS:  # 許可されていない関数呼び出し
                         raise ValueError(
                             f"許可されていない関数呼び出しが含まれています: {node.func.id if isinstance(node.func, ast.Name) else 'unknown'}"
                         )
@@ -321,7 +348,7 @@ class SafeCodeExecutor:
                         raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
 
             # 実行コンテキストを制限
-            safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}
+            safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}  # 許可された関数のみを含む安全なグローバル変数
             safe_globals.update(context)
 
             return eval(compile(tree, "<string>", "eval"), safe_globals, safe_globals)
@@ -339,20 +366,19 @@ safe_code_executor = SafeCodeExecutor()
 # ただし、app.py の calibration.optimize の呼び出し部分で postprocess_code が渡されているため、
 # calibration.py 側で SafeCodeExecutor を使用するように修正が必要であることをメモしておく。
 # 現時点では app.py の変更のみに集中する。
-def ape_prompt(original_prompt, user_data):
-    logging.debug("ape_prompt function was called!")
-    logging.debug(f"original_prompt = {original_prompt}")
-    logging.debug(f"user_data = {user_data}")
-    """
-    APE (Automatic Prompt Engineering) を使用してプロンプトを生成します。
+def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
+    """APE (Automatic Prompt Engineering) を使用してプロンプトを生成します。
 
     Args:
         original_prompt (str): 元のプロンプト。
         user_data (str): JSON形式のユーザーデータ。
-
     Returns:
-        list: Gradioテキストボックスコンポーネントのリスト。
+        List[gr.Textbox]: Gradioテキストボックスコンポーネントのリスト。生成されたプロンプトを含む。
     """
+    logging.debug("ape_prompt function was called!")
+    logging.debug(f"original_prompt = {original_prompt}")
+    logging.debug(f"user_data = {user_data}")
+
     try:
         parsed_user_data = json.loads(user_data)
     except json.JSONDecodeError as e:
@@ -383,12 +409,13 @@ def ape_prompt(original_prompt, user_data):
     ] * 2  # 他のタブとの互換性のための非表示テキストボックス
 
 
-# メタプロンプト出力に対してAPEを実行する関数
-def run_ape_on_metaprompt_output(metaprompt_template, metaprompt_variables_str):
+# メタプロンプト出力に対して APE を実行する関数
+def run_ape_on_metaprompt_output(metaprompt_template: str, metaprompt_variables_str: str) -> Tuple[str, str]:
     """
-    メタプロンプトで生成されたテンプレートと変数文字列を元にAPEを実行します。
+    メタプロンプトで生成されたテンプレートと変数文字列を元に APE を実行します。
 
     Args:
+        metaprompt_template (str): メタプロンプトによって生成されたプロンプトテンプレート。
         metaprompt_template (str): メタプロンプトによって生成されたプロンプトテンプレート。
         metaprompt_variables_str (str): 改行区切りの変数名文字列 (例: "VAR1\nVAR2")。
                                          metaprompt.py の修正により、変数名の中身のみが含まれます。
@@ -514,7 +541,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
         gr.Markdown(r"Use {\{xxx\}} to express custom variable, e.g. {\{document\}}")
         with gr.Row():
             with gr.Column(scale=2):
-                level = gr.Radio(
+                level = gr.Radio(  # 最適化レベルを選択するラジオボタン
                     ["One-time Generation", "Multiple-time Generation"],
                     label=config.lang_store[config.language]["Optimize Level"],
                     value="One-time Generation",
@@ -627,7 +654,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             outputs=[openrouter_output, groq_output],
         )
 
-        # フィードバックと評価、改善プロンプト生成エリア
+        # フィードバックと評価、改善プロンプト生成エリアのUI定義
         with gr.Row():
             feedback_input = gr.Textbox(
                 label=config.lang_store[config.language]["Evaluate the Prompt Effect"],
@@ -665,7 +692,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 outputs=revised_prompt_output,
             )
 
-    # 「SOE最適化商品説明」タブ
+    # 「SOE最適化商品説明」タブのUI定義
     with gr.Tab(config.lang_store[config.language]["SOE-Optimized Product Description"]):
         with gr.Row():
             with gr.Column():
@@ -703,7 +730,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             product_description = gr.Textbox(
                 label=config.lang_store[config.language]["Generated Product Description"], lines=10, interactive=False
             )
-        # 商品説明生成イベント
+        # 商品説明生成イベントの定義
         generate_button.click(
             soeprompt.generate_description,
             inputs=[product_category, brand_name, usage_description, target_customer, image_upload],
@@ -711,7 +738,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
         )
         image_upload.upload(lambda images: images, inputs=image_upload, outputs=image_preview)
 
-    # 「プロンプトキャリブレーション」タブ
+    # 「プロンプトキャリブレーション」タブのUI定義
     with gr.Tab(config.lang_store[config.language]["Prompt Calibration"]):  # 例: タブ名の変更（必要に応じて）
         default_code = """
 def postprocess(llm_output):
@@ -730,17 +757,19 @@ def postprocess(llm_output):
                     ],
                 )
             with gr.Column(scale=2):  # カラムの定義
-                postprocess_code = gr.Textbox(
+                postprocess_code = gr.Textbox(  # ポストプロセスコード入力欄
                     label=config.lang_store[config.language]["Please input your postprocess code"],
                     lines=3,
                     value=default_code,
                 )  # 例: ラベルの変更（より明確に）
-                dataset_file = gr.File(file_types=["csv"], type="binary")
+                dataset_file = gr.File(file_types=["csv"], type="binary")  # データセットファイルアップロード
         with gr.Row():  # 行の定義
             calibration_task_type = gr.Radio(
-                ["classification"], value="classification", label=config.lang_store[config.language]["Task type"]
+                ["classification"],
+                value="classification",
+                label=config.lang_store[config.language]["Task type"],
             )  # タスクタイプ選択
-            steps_num = gr.Slider(1, 5, value=1, step=1, label=config.lang_store[config.language]["Epoch"])
+            steps_num = gr.Slider(1, 5, value=1, step=1, label=config.lang_store[config.language]["Epoch"])  # 最適化ステップ数
         # 例: 不要なラベルの削除（またはより具体的なラベルに変更）
         #  calibration_prompt = gr.Textbox(label=config.lang_store[config.language]["Revised Prompt"],
         #                                  lines=3, show_copy_button=True, interactive=False)
@@ -751,6 +780,7 @@ def postprocess(llm_output):
             show_copy_button=True,
             interactive=False,
         )
+        # プロンプトキャリブレーション実行イベント
         calibration_optimization.click(
             calibration.optimize,
             inputs=[calibration_task, calibration_prompt_original, dataset_file, postprocess_code, steps_num],
@@ -758,6 +788,7 @@ def postprocess(llm_output):
         )
 
 
+# シグナルハンドラ
 def signal_handler(sig, frame):
     print("Shutting down gracefully...")
     time.sleep(2)  # タスク完了のための猶予時間（必要に応じて調整）

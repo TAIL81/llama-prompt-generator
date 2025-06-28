@@ -65,7 +65,7 @@ class GuideBased:
             initial_prompt (str): 書き換え対象の初期プロンプト。
 
         Returns:
-            str: 書き換えられたプロンプト。
+            str: 書き換えられたプロンプト。""を返却することはほぼないと思われる
         """
         self._validate_initial_prompt(initial_prompt)
         lang: str = self.detect_lang(initial_prompt)
@@ -77,7 +77,7 @@ class GuideBased:
         elif lang == "en":
             lang_prompt = "Please use English for rewriting."
         else:
-            lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."
+            lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."  # 初期指示と同じ言語を使用
 
         # プロンプト書き換えのための指示テンプレート
         prompt: str = (
@@ -146,7 +146,7 @@ class GuideBased:
             <initial_instruction>
             {initial}
             </initial_instruction>
-            """.strip()
+            """.strip()  # プロンプトテンプレートの終わり
         )
 
         messages: List[Dict[str, str]] = [
@@ -154,21 +154,21 @@ class GuideBased:
                 "role": "user",
                 "content": prompt.format(guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt),
             },
-        ]
+        ]  # LLMへのメッセージ
         # Groq APIを使用してプロンプトの書き換えをリクエストします
         completion = self.groq_client.chat.completions.create(
             model=self.config.rewrite_model,
-            messages=messages,
-            max_completion_tokens=self.config.max_tokens,
-            temperature=self.config.temperature_rewrite,
+            messages=messages,  # メッセージ
+            max_completion_tokens=self.config.max_tokens,  # 最大トークン数
+            temperature=self.config.temperature_rewrite,  # 温度
         )
-        result: str = completion.choices[0].message.content
+        result: str = completion.choices[0].message.content  # LLMの応答
         # LLMからの応答をデバッグ出力
         logging.debug(f"__call__ LLM response: \n{result}\n")
         # 結果から不要なXMLタグを除去します
-        if result.startswith("<instruction>"):
+        if result.startswith("<instruction>"):  # 開始タグを除去
             result = result[13:]
-        if result.endswith("</instruction>"):
+        if result.endswith("</instruction>"):  # 終了タグを除去
             result = result[:-14]
         result = result.strip()
         return result
@@ -201,7 +201,7 @@ class GuideBased:
 
             Use JSON format with key `lang` when return result. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
             Output example: {lang_example}
-            """.strip()
+            """.strip()  # プロンプトテンプレートの終わり
         )
         messages: List[Dict[str, str]] = [
             {
@@ -215,20 +215,20 @@ class GuideBased:
             messages=messages,
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature_detect_lang,
-        )
+        )  # API呼び出し
         # LLMからの応答をデバッグ出力
         logging.debug(f"detect_lang LLM response: {completion.choices[0].message.content}")
         try:
             # 結果のJSONをパースして言語コードを取得します
-            lang: str = json.loads(completion.choices[0].message.content)["lang"]
+            lang: str = json.loads(completion.choices[0].message.content)["lang"]  # 言語コードを抽出
         except Exception as e:
             # エラーが発生した場合は空文字列を返します
             logging.error(f"Error detecting language: {e}")
-            lang = ""
+            lang = ""  # エラー時は空文字列
         return lang
 
     def judge(self, candidates: List[str]) -> Optional[int]:
-        """
+        """ # ドキュメント文字列
         複数のプロンプト候補を評価し、最も良いものを選択します。
 
         Args:
@@ -238,7 +238,7 @@ class GuideBased:
             Optional[int]: 最も良いと判断された候補のインデックス。エラーの場合はNone。
         """
         Instruction_prompts: List[str] = []
-        for idx, candidate in enumerate(candidates):
+        for idx, candidate in enumerate(candidates):  # 各候補を処理
             Instruction_prompts.append(f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>")
         example: str = json.dumps({"Preferred": "Instruction 1"})
         # プロンプト評価のための指示テンプレート
@@ -255,7 +255,7 @@ class GuideBased:
 
             Use JSON format when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
             {example}
-            """.strip()
+            """.strip()  # プロンプトテンプレートの終わり
         )
         messages: List[Dict[str, str]] = [
             {
@@ -273,22 +273,22 @@ class GuideBased:
             messages=messages,
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature_judge,
-        )
+        )  # API呼び出し
         # LLMからの応答をデバッグ出力
         logging.debug(f"judge LLM response (raw): {completion.choices[0].message.content}")
         final_result: Optional[int] = None
         try:
-            result: Dict[str, str] = json.loads(completion.choices[0].message.content)
+            result: Dict[str, str] = json.loads(completion.choices[0].message.content)  # JSONをパース
             # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
             for idx in range(len(candidates)):  # candidatesの長さに合わせてループ
-                if str(idx + 1) in result["Preferred"]:
+                if str(idx + 1) in result["Preferred"]:  # 優先される候補を特定
                     final_result = idx
                     break
         except (json.JSONDecodeError, KeyError) as e:
             # JSONパースエラーなどが発生した場合はNoneのまま
             logging.error(f"Error parsing judge LLM response: {e}")
-            pass
+            pass  # 何もしない
         except Exception as e:
             logging.error(f"Unexpected error in judge method: {e}")
-            pass
+            pass  # 何もしない
         return final_result

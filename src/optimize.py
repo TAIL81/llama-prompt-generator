@@ -164,7 +164,7 @@ class Alignment:
                 messages=[{"role": "system", "content": system_content}, {"role": "user", "content": user_prompt}],
                 temperature=TEMPERATURE,
                 max_tokens=MAX_TOKENS,
-            )
+            )  # Groq API を呼び出し、応答を生成
             if not self._validate_response(completion):
                 logging.error(f"Invalid response structure from Groq API: {completion}")
                 return "Error: Invalid response structure from Groq API"
@@ -207,7 +207,7 @@ class Alignment:
     #             if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
     #                 output_
     def stream_openrouter_response(self, prompt, model_id, output_component):
-        # TODO: Gradioの出力コンポーネントへのストリーミング出力を実装する
+        # TODO: Gradio の出力コンポーネントへのストリーミング出力を実装する
         if not self.openrouter_client:
             logging.error("OpenRouterError: API client not initialized. Check OPENAI_API_KEY.")
             output_component.update("OpenRouterError: API client not initialized. Check OPENAI_API_KEY.")
@@ -223,7 +223,7 @@ class Alignment:
                 temperature=TEMPERATURE,
                 max_tokens=8192,
             )
-            for chunk in stream:
+            for chunk in stream:  # ストリームからのチャンクを処理
                 if hasattr(chunk.choices[0].delta, "content") and chunk.choices[0].delta.content is not None:
                     output_component.update(chunk.choices[0].delta.content, append=True)
         except Exception as e:
@@ -255,7 +255,7 @@ class Alignment:
         """
         # 置換後のプロンプトが空の場合、置換前のプロンプトを使用します
         if len(original_prompt_replace) == 0:
-            original_prompt_replace = original_prompt
+            original_prompt_replace = original_prompt  # 元のプロンプトを使用
         if len(revised_prompt_replace) == 0:
             revised_prompt_replace = revised_prompt
 
@@ -270,7 +270,7 @@ class Alignment:
             logging.error(error_msg)
             yield gr.update(value=error_msg), gr.update(value=error_msg)
             return
-
+        # OpenRouter API を呼び出し、応答を生成
         original_prompt_output = self.generate_openrouter_response(original_prompt_replace, openrouter_model_id)
         yield gr.update(value=original_prompt_output), gr.update(value=processing_message)
 
@@ -286,7 +286,7 @@ class Alignment:
             logging.error(error_msg)
             yield gr.update(value=error_msg), gr.update(value=error_msg)
             return
-
+        # Groq API を呼び出し、応答を生成
         evaluation_prompt_output = self.generate_groq_response(revised_prompt_replace, groq_model_id)
         yield gr.update(value=original_prompt_output), gr.update(value=evaluation_prompt_output)
 
@@ -306,7 +306,7 @@ class Alignment:
             logging.error("GroqError: API client for evaluation not initialized. Check GROQ_API_KEY.")
             return "GroqError: API client for evaluation not initialized. Check GROQ_API_KEY."
 
-        current_eval_instruction = self.evaluation_language_instruction
+        current_eval_instruction = self.evaluation_language_instruction  # 現在の評価指示
         formatted_evaluate_prompt = evaluate_response_prompt_template.format(
             _OpenAI=openai_output, _Groq=groq_output, language_instruction_for_evaluation=current_eval_instruction
         )
@@ -322,7 +322,7 @@ class Alignment:
         feedback = feedback_match[0] if feedback_match else "Feedback not found."
 
         pattern = r"<recommendation>(.*?)</recommendation>"
-        recommendation_match = re.findall(pattern, groq_result, re.DOTALL)
+        recommendation_match = re.findall(pattern, groq_result, re.DOTALL)  # 推奨事項を抽出
         recommendation = recommendation_match[0] if recommendation_match else "Recommendation not found."
 
         return feedback + f"\n<recommendation>{recommendation}</recommendation>"
@@ -365,7 +365,7 @@ class Alignment:
         if len(matches):
             feedback = matches[0]
 
-        current_revision_instruction = self.revision_language_instruction
+        current_revision_instruction = self.revision_language_instruction  # 現在の修正指示
         formatted_revised_prompt_content = generate_revised_prompt_template.format(
             _feedback=feedback,
             _prompt=prompt,
@@ -378,7 +378,7 @@ class Alignment:
             return "GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY."
         # generate_groq_responseからの戻り値をチェック
         groq_result = self.generate_groq_response(formatted_revised_prompt_content, eval_model_id)
-        if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
+        if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):  # Groq API エラーをチェック
             logging.error(f"Prompt Revision Error: {groq_result}")
             return f"Prompt Revision Error: {groq_result}"  # エラーメッセージを返す
 
