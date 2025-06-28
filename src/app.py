@@ -571,6 +571,13 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             user_prompt_original = gr.Textbox(
                 label=config.lang_store[config.language]["Please input your original prompt"], lines=3
             )
+            # 評価対象プロンプト入力欄
+            user_prompt_eval = gr.Textbox(
+                label=config.lang_store[config.language]["Please input the prompt need to be evaluate"], lines=3
+            )
+
+            # 評価対象プロンプトの入力と変数置換のセクション
+        with gr.Row():
             # 変数置換入力欄（元のプロンプト用）
             # 形式: "key1:value1;key2:value2"
             # user_prompt_original 内のプレースホルダ（例: {key1}）を置換するために使用
@@ -582,12 +589,6 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             # 変数置換後の元のプロンプト表示欄 (インタラクティブではない)
             user_prompt_original_replaced = gr.Textbox(
                 label=config.lang_store[config.language]["Replace Result"], lines=3, interactive=False
-            )
-
-            # 評価対象プロンプトの入力と変数置換のセクション
-            # 評価対象プロンプト入力欄
-            user_prompt_eval = gr.Textbox(
-                label=config.lang_store[config.language]["Please input the prompt need to be evaluate"], lines=3
             )
             # 変数置換入力欄（評価対象のプロンプト用）
             # 形式: "key1:value1;key2:value2"
@@ -608,7 +609,6 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             insert_button_original = gr.Button(
                 config.lang_store[config.language]["Replace Variables in Original Prompt"]
             )
-            # 元のプロンプトの変数置換イベントハンドラ
             insert_button_original.click(
                 alignment.insert_kv,
                 inputs=[user_prompt_original, kv_input_original],
@@ -616,9 +616,9 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             )
 
             # 改訂されたプロンプトの変数置換ボタン
-            insert_button_revise = gr.Button(config.lang_store[config.language]["Replace Variables in Revised Prompt"])
-
-            # 改訂されたプロンプトの変数置換イベントハンドラ
+            insert_button_revise = gr.Button(
+                config.lang_store[config.language]["Replace Variables in Revised Prompt"]
+            )
             insert_button_revise.click(
                 alignment.insert_kv,
                 inputs=[user_prompt_eval, kv_input_eval],
@@ -646,12 +646,12 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 value="compound-beta-mini",
             )
 
+        with gr.Row():
             # プロンプト実行ボタン
             invoke_button = gr.Button(config.lang_store[config.language]["Execute prompt"])
 
         # モデル実行結果表示エリア
         with gr.Row():
-            # OpenAIモデルの出力表示
             # OpenAIモデルの出力表示テキストボックス
             OpenAI_output = gr.Textbox(
                 label=config.lang_store[config.language]["Original Prompt Output (OpenAI)"],
@@ -659,7 +659,6 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 interactive=True,
                 show_copy_button=True,
             )
-            # Groqモデルの出力表示
             # Groqモデルの出力表示テキストボックス
             groq_output = gr.Textbox(
                 label=config.lang_store[config.language]["Evaluation Prompt Output (Groq)"],
@@ -667,7 +666,6 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 interactive=False,
                 show_copy_button=True,
             )
-
             # プロンプト実行イベント
             invoke_button.click(
                 alignment.invoke_prompt,
@@ -691,6 +689,15 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 lines=3,
                 show_copy_button=True,
             )
+            # 改訂されたプロンプトの出力表示テキストボックス
+            revised_prompt_output = gr.Textbox(
+                label=config.lang_store[config.language]["Revised Prompt"],
+                lines=3,
+                interactive=False,
+                show_copy_button=True,
+            )
+
+        with gr.Row():
             # 評価モデル選択ドロップダウン
             eval_model_dropdown = gr.Dropdown(
                 label=config.lang_store[config.language]["Choose the Evaluation Model"],
@@ -702,25 +709,13 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             )
             # 自動評価ボタン（OpenAIとGroqの出力を比較してフィードバックを生成）
             evaluate_button = gr.Button(config.lang_store[config.language]["Auto-evaluate the Prompt Effect"])
-
-            # 自動評価ボタンがクリックされたときのイベントハンドラ
             evaluate_button.click(
                 alignment.evaluate_response,
                 inputs=[OpenAI_output, groq_output, eval_model_dropdown],
                 outputs=[feedback_input],
             )
-
             # プロンプト改善ボタン（フィードバックに基づいてプロンプトを改訂）
-            revise_button = gr.Button(config.lang_store[config.language]["Iterate the Prompt"])  # 改善ボタン
-            # 改訂されたプロンプトの出力表示テキストボックス
-            revised_prompt_output = gr.Textbox(
-                label=config.lang_store[config.language]["Revised Prompt"],
-                lines=3,
-                interactive=False,
-                show_copy_button=True,
-            )
-
-            # プロンプト改善ボタンがクリックされたときのイベントハンドラ
+            revise_button = gr.Button(config.lang_store[config.language]["Iterate the Prompt"])
             revise_button.click(
                 alignment.generate_revised_prompt,
                 inputs=[feedback_input, user_prompt_eval, OpenAI_output, groq_output, eval_model_dropdown],
