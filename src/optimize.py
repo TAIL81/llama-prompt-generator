@@ -80,6 +80,9 @@ Finally, provide the revised prompt within the following XML tags:
 </revised_prompt>
 """.strip()
 
+# 評価モデルIDの定数定義
+EVAL_MODEL_ID: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+
 # APIキーとベースURLを (.env ファイルからロードされた) 環境変数から取得します
 openai_api_key = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
@@ -89,7 +92,7 @@ groq_api_key = os.getenv("GROQ_API_KEY")
 # プロンプトの最適化と評価を行うクラス
 class Alignment:
     def __init__(self, lang_store: Optional[Dict[str, Any]] = None, language: str = "ja") -> None:
-        self.lang_store = lang_store
+        self.lang_store: Optional[Dict[str, Any]] = lang_store
         self.language = language
 
         try:
@@ -207,7 +210,6 @@ class Alignment:
     #             if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
     #                 output_
     def stream_OpenAI_response(self, prompt, model_id, output_component):
-        # TODO: Gradio の出力コンポーネントへのストリーミング出力を実装する
         if not self.OpenAI_client:
             logging.error("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
             output_component.update("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
@@ -290,14 +292,17 @@ class Alignment:
         evaluation_prompt_output = self.generate_groq_response(revised_prompt_replace, groq_model_id)
         yield gr.update(value=original_prompt_output), gr.update(value=evaluation_prompt_output)
 
-    def evaluate_response(self, openai_output: str, groq_output: str, eval_model_id: str) -> str:
+    def evaluate_response(self, openai_output: str, groq_output: str) -> str:
         """
+        固定モデルを使用して OpenAI と Groq の応答を比較評価し、フィードバックと推奨事項を生成します。
+
+
+
         OpenAIとGroqの応答を比較評価し、フィードバックと推奨事項を生成します。
 
         Args:
             openai_output (str): OpenAI (OpenAI) からの応答。
             groq_output (str): Groqからの応答。
-            eval_model_id (str): 評価に使用するGroqモデルのID。
 
         Returns:
             str: 自動フィードバックと推奨事項を含む文字列。
@@ -311,7 +316,7 @@ class Alignment:
             _OpenAI=openai_output, _Groq=groq_output, language_instruction_for_evaluation=current_eval_instruction
         )
         # generate_groq_responseからの戻り値をチェック
-        groq_result = self.generate_groq_response(formatted_evaluate_prompt, eval_model_id)
+        groq_result = self.generate_groq_response(formatted_evaluate_prompt, EVAL_MODEL_ID)
         if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
             logging.error(f"Evaluation Error: {groq_result}")
             return f"Evaluation Error: {groq_result}"  # エラーメッセージを返す
@@ -346,16 +351,16 @@ class Alignment:
                 user_prompt = user_prompt.replace(f"{{{key}}}", value)
         return user_prompt
 
-    def generate_revised_prompt(self, feedback, prompt, openai_response, groq_response, eval_model_id):
+    def generate_revised_prompt(self, feedback, prompt, openai_response, groq_response) -> str:
         """
+        固定モデルを使用して、フィードバック、元のプロンプト、および両モデルの応答に基づいて、改訂されたプロンプトを生成します。
+
+
         フィードバック、元のプロンプト、および両モデルの応答に基づいて、改訂されたプロンプトを生成します。
 
         Args:
             feedback (str): プロンプト改善のためのフィードバック。
-            prompt (str): 元のLlama (Groq) プロンプト。
-            openai_response (str): OpenAI (OpenAI) からの応答。
             groq_response (str): Llama (Groq) からの応答。
-            eval_model_id (str): プロンプト改訂に使用するGroqモデルのID。
 
         Returns:
             str: 改訂されたプロンプト。
@@ -377,7 +382,7 @@ class Alignment:
             logging.error("GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY.")
             return "GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY."
         # generate_groq_responseからの戻り値をチェック
-        groq_result = self.generate_groq_response(formatted_revised_prompt_content, eval_model_id)
+        groq_result = self.generate_groq_response(formatted_revised_prompt_content, EVAL_MODEL_ID)
         if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):  # Groq API エラーをチェック
             logging.error(f"Prompt Revision Error: {groq_result}")
             return f"Prompt Revision Error: {groq_result}"  # エラーメッセージを返す

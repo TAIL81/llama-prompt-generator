@@ -616,9 +616,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             )
 
             # 改訂されたプロンプトの変数置換ボタン
-            insert_button_revise = gr.Button(
-                config.lang_store[config.language]["Replace Variables in Revised Prompt"]
-            )
+            insert_button_revise = gr.Button(config.lang_store[config.language]["Replace Variables in Revised Prompt"])
             insert_button_revise.click(
                 alignment.insert_kv,
                 inputs=[user_prompt_eval, kv_input_eval],
@@ -698,27 +696,17 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             )
 
         with gr.Row():
-            # 評価モデル選択ドロップダウン
-            eval_model_dropdown = gr.Dropdown(
-                label=config.lang_store[config.language]["Choose the Evaluation Model"],
-                choices=[
-                    "meta-llama/llama-4-scout-17b-16e-instruct",
-                    "meta-llama/llama-4-maverick-17b-128e-instruct",
-                ],
-                value="meta-llama/llama-4-scout-17b-16e-instruct",
-            )
-            # 自動評価ボタン（OpenAIとGroqの出力を比較してフィードバックを生成）
             evaluate_button = gr.Button(config.lang_store[config.language]["Auto-evaluate the Prompt Effect"])
             evaluate_button.click(
                 alignment.evaluate_response,
-                inputs=[OpenAI_output, groq_output, eval_model_dropdown],
+                inputs=[OpenAI_output, groq_output],
                 outputs=[feedback_input],
             )
             # プロンプト改善ボタン（フィードバックに基づいてプロンプトを改訂）
             revise_button = gr.Button(config.lang_store[config.language]["Iterate the Prompt"])
             revise_button.click(
-                alignment.generate_revised_prompt,
-                inputs=[feedback_input, user_prompt_eval, OpenAI_output, groq_output, eval_model_dropdown],
+                alignment.generate_revised_prompt,  # eval_model_id は削除
+                inputs=[feedback_input, user_prompt_eval, OpenAI_output, groq_output],
                 outputs=revised_prompt_output,
             )
 
@@ -823,7 +811,7 @@ def postprocess(llm_output):
 # シグナルハンドラ
 def signal_handler(sig, frame):
     print("Shutting down gracefully...")
-    time.sleep(2)  # タスク完了のための猶予時間（必要に応じて調整）
+    time.sleep(1)  # タスク完了のための猶予時間（必要に応じて調整）
     exit(0)
 
 

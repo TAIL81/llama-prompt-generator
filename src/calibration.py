@@ -209,7 +209,7 @@ class CalibrationPrompt:
         Returns:
             str: モデルからの応答メッセージ。
         """
-        # TODO: model引数に基づいて実際に使用するモデルIDを動的に変更できるようにする
+
         model_id = "meta-llama/llama-4-scout-17b-16e-instruct"
         messages = [{"role": "user", "content": prompt}]
         # Groq APIを呼び出し、チャット補完を生成します
