@@ -108,11 +108,11 @@ class MetaPrompt:
         # API 呼び出しと応答処理
         completion = self.groq_client.chat.completions.create(
             model=self.config.metaprompt_model,
-            messages=messages,
+            messages=messages, # type: ignore
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature,
         )
-        message: str = completion.choices[0].message.content
+        message: str = completion.choices[0].message.content or ""
 
         # ロギング: API 応答をログに記録
         logging.info("Received response from Groq API")

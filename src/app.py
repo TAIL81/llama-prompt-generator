@@ -7,7 +7,7 @@ import signal
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, Callable, Dict, List, Tuple, Type, Union, cast
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -28,8 +28,8 @@ class AppConfig:
     """
 
     def __init__(self):
-        self.language: str = "ja"
-        self.lang_store: Dict[str, Any] = {}
+        self.language: str = "ja"  # type: ignore
+        self.lang_store: Dict[str, Any] = {}  # type: ignore
         self.load_env()
         self.safe_load_translations()
 
@@ -258,7 +258,16 @@ class SafeCodeExecutor:
         "type": type,
         "print": print,  # デバッグ用にprintを許可
     }
-    ALLOWED_OPERATORS = {
+    OperatorType = Union[
+        Type[ast.Add], Type[ast.Sub], Type[ast.Mult], Type[ast.Div],
+        Type[ast.FloorDiv], Type[ast.Mod], Type[ast.Pow], Type[ast.LShift],
+        Type[ast.RShift], Type[ast.BitOr], Type[ast.BitXor], Type[ast.BitAnd],
+        Type[ast.USub], Type[ast.UAdd], Type[ast.Not], Type[ast.Eq],
+        Type[ast.NotEq], Type[ast.Lt], Type[ast.LtE], Type[ast.Gt],
+        Type[ast.GtE], Type[ast.Is], Type[ast.IsNot], Type[ast.In],
+        Type[ast.NotIn]
+    ]
+    ALLOWED_OPERATORS: Dict[OperatorType, Callable[..., Any]] = {
         ast.Add: operator.add,
         ast.Sub: operator.sub,
         ast.Mult: operator.mul,
@@ -347,7 +356,7 @@ class SafeCodeExecutor:
                 ):
                     raise ValueError(f"許可されていない操作が含まれています: {type(node).__name__}")
                 if isinstance(node, (ast.BinOp, ast.UnaryOp, ast.Compare)):
-                    op_type = type(node.op)
+                    op_type: Type[ast.AST] = type(node.op)  # type: ignore
                     if op_type not in self.ALLOWED_OPERATORS:
                         raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
 

@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Mapping
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -69,15 +69,16 @@ class GuideBased:
         """
         self._validate_initial_prompt(initial_prompt)
         lang: str = self.detect_lang(initial_prompt)
+        lang_prompt: str = ""  # Initialize with empty string
         # 検出された言語に応じて、プロンプトの言語指示を設定します
         if lang == "ja":
-            lang_prompt: str = "Please use Japanese for rewriting. The xml tag name is still in English."
+            lang_prompt = "Please use Japanese for rewriting. The xml tag name is still in English."
         elif lang == "ch":
-            lang_prompt: str = "Please use Chinese for rewriting. The xml tag name is still in English."
+            lang_prompt = "Please use Chinese for rewriting. The xml tag name is still in English."
         elif lang == "en":
-            lang_prompt: str = "Please use English for rewriting."
+            lang_prompt = "Please use English for rewriting."
         else:
-            lang_prompt: str = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."  # 初期指示と同じ言語を使用
+            lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."  # 初期指示と同じ言語を使用
 
         # プロンプト書き換えのための指示テンプレート
         prompt: str = (
@@ -158,11 +159,11 @@ class GuideBased:
         # Groq APIを使用してプロンプトの書き換えをリクエストします
         completion = self.groq_client.chat.completions.create(
             model=self.config.rewrite_model,
-            messages=messages,  # メッセージ
+            messages=messages,  # type: ignore
             max_completion_tokens=self.config.max_tokens,  # 最大トークン数
             temperature=self.config.temperature_rewrite,  # 温度
         )
-        result: str = completion.choices[0].message.content  # LLMの応答
+        result: str = completion.choices[0].message.content or ""  # LLMの応答 (handle None)
         # LLMからの応答をデバッグ出力
         logging.debug(f"__call__ LLM response: \n{result}\n")
         # 結果から不要なXMLタグを除去します
@@ -212,23 +213,28 @@ class GuideBased:
         # Groq APIを使用して言語検出をリクエストします
         completion = self.groq_client.chat.completions.create(
             model=self.config.detect_lang_model,
-            messages=messages,
+            messages=messages,  # type: ignore
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature_detect_lang,
         )  # API呼び出し
         # LLMからの応答をデバッグ出力
-        logging.debug(f"detect_lang LLM response: {completion.choices[0].message.content}")
-        try:
-            # 結果のJSONをパースして言語コードを取得します
-            lang: str = json.loads(completion.choices[0].message.content)["lang"]  # 言語コードを抽出
-        except Exception as e:
-            # エラーが発生した場合は空文字列を返します
-            logging.error(f"Error detecting language: {e}")
-            lang = ""  # エラー時は空文字列
+        content = completion.choices[0].message.content
+        logging.debug(f"detect_lang LLM response: {content}")
+        if not content:
+            logging.error("No content in response for language detection")
+            lang = ""
+        else:
+            try:
+                # 結果のJSONをパースして言語コードを取得します
+                lang = json.loads(content)["lang"]  # 言語コードを抽出
+            except Exception as e:
+                # エラーが発生した場合は空文字列を返します
+                logging.error(f"Error detecting language: {e}")
+                lang = ""  # エラー時は空文字列
         return lang
 
     def judge(self, candidates: List[str]) -> Optional[int]:
-        """ # ドキュメント文字列
+        """
         複数のプロンプト候補を評価し、最も良いものを選択します。
 
         Args:
@@ -270,15 +276,19 @@ class GuideBased:
         # Groq APIを使用してプロンプト候補の評価をリクエストします
         completion = self.groq_client.chat.completions.create(
             model=self.config.judge_model,
-            messages=messages,
+            messages=messages,  # type: ignore
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature_judge,
         )  # API呼び出し
         # LLMからの応答をデバッグ出力
-        logging.debug(f"judge LLM response (raw): {completion.choices[0].message.content}")
+        content = completion.choices[0].message.content
+        logging.debug(f"judge LLM response (raw): {content}")
         final_result: Optional[int] = None
+        if not content:
+            logging.error("No content in response for judge")
+            return None
         try:
-            result: Dict[str, str] = json.loads(completion.choices[0].message.content)  # JSONをパース
+            result: Dict[str, str] = json.loads(content)  # JSONをパース
             # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
             for idx in range(len(candidates)):  # candidatesの長さに合わせてループ
                 if str(idx + 1) in result["Preferred"]:  # 優先される候補を特定

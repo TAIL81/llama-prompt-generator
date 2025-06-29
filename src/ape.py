@@ -2,7 +2,7 @@ import logging
 import os
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Mapping, Optional, Union
 
 import groq
 from dotenv import load_dotenv
@@ -56,7 +56,7 @@ class APE:
         self.rater = Rater()
         self.config = GroqConfig()  # 設定を初期化
 
-    def __call__(self, initial_prompt: str, epoch: int, demo_data: Dict[str, str]) -> Dict[str, Union[str, None]]:
+    def __call__(self, initial_prompt: str, epoch: int, demo_data: Dict[str, str]) -> Mapping[str, Union[str, None]]:
         """
         APE処理を実行します。
 
@@ -70,7 +70,7 @@ class APE:
         """
         self._validate_inputs(initial_prompt, demo_data)  # 入力を検証
 
-        candidates: List[str] = []  # プロンプト候補を格納するリスト
+        candidates: List[str] = []
         for _ in range(2):  # 2回プロンプトを書き換え
             rewritten_prompt: Optional[str] = self.rewrite(initial_prompt)  # プロンプトを書き換え
             if rewritten_prompt:  # 書き換えに成功した場合
@@ -80,13 +80,13 @@ class APE:
             logging.error("Initial prompt rewriting failed for all attempts. Returning initial prompt.")
             return {"prompt": initial_prompt, "error": "Initial prompt rewriting failed."}
 
-        # デモデータからカスタマイズ可能な変数のリストを取得
-        customizable_variable_list: List[str] = list(demo_data.keys())
+        # 候補をDict[str, str]の形式に変換
+        candidate_dicts: List[Dict[str, str]] = [{"prompt": c} for c in candidates]
+
+        # デモデータからカスタマイズ可能な変数のリストを取得し、フィルタリング
+        customizable_variable_list: List[str] = [f"{{{k}}}" for k in demo_data.keys()]
         filtered_candidates: List[Dict[str, str]] = [
-            {"prompt": candidate}
-            # カスタマイズ可能な変数がすべて含まれている候補のみをフィルタリングします
-            for candidate in candidates
-            if all([customizable_variable in candidate for customizable_variable in customizable_variable_list])
+            c for c in candidate_dicts if all(var in c["prompt"] for var in customizable_variable_list)
         ]
         # フィルタリングの結果、候補が残らなかった場合
         if not filtered_candidates:
@@ -102,11 +102,11 @@ class APE:
         # 候補プロンプトを評価し、最良のものを選択します
         best_candidate_idx: Optional[int] = self.rater(initial_prompt, filtered_candidates, demo_data)
 
-        if best_candidate_idx is None:
+        if best_candidate_idx is None and filtered_candidates:
             logging.error("Rater did not return a valid candidate index. Using the first available filtered candidate.")
             # filtered_candidates は上で空でないことをチェック済みなので、少なくとも1要素はあるはず
             best_candidate_obj: Dict[str, str] = filtered_candidates[0]
-        else:
+        elif best_candidate_idx is not None:
             best_candidate_obj = filtered_candidates[best_candidate_idx]
 
         for i in range(epoch):  # epoch の回数だけループ
@@ -129,7 +129,7 @@ class APE:
                     # 評価に失敗した場合は、現在の best_candidate_obj を維持
                 else:
                     best_candidate_obj = current_rating_candidates[rated_idx_loop]
-            else:
+            else: # type: ignore
                 logging.warning(f"generate_more failed in epoch {i+1}. Keeping previous best candidate.")
                 # generate_more に失敗した場合も、現在の best_candidate_obj を維持
 
@@ -141,8 +141,8 @@ class APE:
                     logging.debug(f"    {line}")  # インデントして出力
             else:  # 文字列以外の場合
                 logging.debug(f"    {value}")  # そのままインデントして出力
-        return best_candidate_obj  # 最良の候補を返す
-
+        return best_candidate_obj  # type: ignore
+ 
     def _validate_inputs(self, initial_prompt: str, demo_data: Dict[str, str]) -> None:
         """
         入力パラメータの検証を行います。
@@ -195,12 +195,12 @@ class APE:
         try:
             # Groq APIを使用してプロンプトの書き換えをリクエストします
             completion = groq_client.chat.completions.create(  # Groq APIを呼び出し
-                model=self.config.rewrite_model,
-                messages=messages,  # メッセージを渡す
+                model=self.config.rewrite_model, # type: ignore
+                messages=messages, # type: ignore # メッセージを渡す
                 max_completion_tokens=self.config.max_tokens,  # 最大トークン数を設定
                 temperature=self.config.temperature,  # 温度パラメータを設定
             )
-            result: str = completion.choices[0].message.content  # APIの応答からコンテンツを取得
+            result: str = completion.choices[0].message.content or ""  # APIの応答からコンテンツを取得
             # 結果から不要なXMLタグを除去します
             if result.startswith("<instruction>"):  # <instruction>タグで始まる場合
                 result = result[13:]  # タグを取り除く
@@ -275,11 +275,11 @@ class APE:
             # Groq APIを使用して追加のプロンプト候補を生成します
             completion = groq_client.chat.completions.create(
                 model=self.config.rewrite_model,  # モデルを指定
-                messages=messages,
+                messages=messages,  # type: ignore
                 max_completion_tokens=self.config.max_tokens,
                 temperature=self.config.temperature,
             )
-            result: str = completion.choices[0].message.content
+            result: str = completion.choices[0].message.content or ""
             # 結果から不要なXMLタグを除去します
             if result.startswith("<instruction>"):
                 result = result[13:]

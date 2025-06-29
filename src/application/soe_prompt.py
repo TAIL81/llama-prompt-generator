@@ -67,8 +67,8 @@ class SOEPrompt:
                     },
                 ],
             }
-            messages = [message]
-            response = self.run_multi_modal_prompt(messages, max_completion_tokens=8192)
+            messages = [{"role": "user", "content": message["content"]}]
+            response = self.run_multi_modal_prompt(messages, max_completion_tokens=8192)  # type: ignore
             image_description = response["content"][0]["text"]
             print("Image description generated: {}".format(image_description))
 
@@ -120,12 +120,12 @@ class SOEPrompt:
         if image_files:
             # use the first image for now
             image_path = image_files[0]
-            # extract the media type from the image path e.g. format like "image/jpeg"
+            # extract the media type from the image path e.g. format like "image/jpeg" or "image/png"
             media_type = "image/" + image_path.split(".")[-1]
         else:
             image_path = None
         product_description = self.generate_product_description(
-            product_category, brand_name, usage_description, target_customer, image_path, media_type
+            product_category, brand_name, usage_description, target_customer, image_path, media_type  # type: ignore
         )
 
         return product_description

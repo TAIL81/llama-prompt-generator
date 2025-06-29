@@ -7,7 +7,7 @@ import pathlib
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Union
 
 import gradio as gr
 import pandas as pd
@@ -96,7 +96,7 @@ class SafeCodeExecutor:
         ast.NotIn: lambda a, b: not operator.contains(a, b),
     }
 
-    def execute_safe_code(self, code_str: str, context: Dict[str, Any]) -> Any:
+    def execute_safe_code(self, code_str: str, context: dict[str, Any]) -> Any:
         try:
             tree = ast.parse(code_str, mode="eval")
 
@@ -146,7 +146,7 @@ class SafeCodeExecutor:
                 ):
                     raise ValueError(f"許可されていない操作が含まれています: {type(node).__name__}")
                 if isinstance(node, (ast.BinOp, ast.UnaryOp, ast.Compare)):
-                    op_type = type(node.op)
+                    op_type = type(node.op)  # type: ignore
                     if op_type not in self.ALLOWED_OPERATORS:
                         raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
 
@@ -185,7 +185,7 @@ with open(_PROMPT_GUIDE_SHORT_PATH, encoding="utf-8") as f:
 
 # プロンプトキャリブレーションを行うクラス
 class CalibrationPrompt:
-    def __init__(self):
+    def __init__(self) -> None:
         # metaprompt.txt への絶対パス (srcディレクトリ内にあると仮定)
         _METAPROMPT_PATH = os.path.join(_CURRENT_SCRIPT_DIR, "metaprompt.txt")
         with open(_METAPROMPT_PATH, encoding="utf-8") as f:
@@ -215,13 +215,19 @@ class CalibrationPrompt:
         # Groq APIを呼び出し、チャット補完を生成します
         completion = self.groq_client.chat.completions.create(
             model=model_id,
-            messages=messages,
+            messages=messages, # type: ignore
             max_completion_tokens=8192,
         )
         message = completion.choices[0].message.content
         return message
-
-    def get_output(self, prompt, dataset, postprocess_code, return_df=False):
+    
+    def get_output(
+        self,
+        prompt: str,
+        dataset: Union[bytes, pd.DataFrame],
+        postprocess_code: str,
+        return_df: bool = False,
+    ) -> Union[pd.DataFrame, gr.DownloadButton]:
         """
         データセット内の各行に対してプロンプトを実行し、後処理を適用して結果を取得します。
 
@@ -245,7 +251,7 @@ class CalibrationPrompt:
         # 実行コンテキストにllm_outputを渡すために、ここでは関数を直接呼び出すのではなく、
         # evalで実行可能な形式に変換して渡す
         # ユーザーが定義したpostprocess関数を呼び出すためのラッパー関数を生成
-        def get_postprocess_func(code_str: str):
+        def get_postprocess_func(code_str: str) -> Callable[[Any], Any]:
             # evalで実行できるように、関数定義をラムダ式に変換する
             # ただし、ユーザーコードが複雑な場合、この単純な変換は機能しない可能性がある
             # より堅牢な方法としては、SafeCodeExecutor内で関数を定義し、その関数を呼び出す
@@ -267,10 +273,13 @@ class CalibrationPrompt:
             # ここでは、SafeCodeExecutorが関数定義を直接実行できないため、
             # 一時的にexecを使用し、その結果得られた関数をSafeCodeExecutorのコンテキストに渡す
             # これは理想的ではないが、現在のSafeCodeExecutorの制約を考慮した回避策
-            local_exec_context = {}
+            local_exec_context: dict[str, Any] = {}
             try:
                 exec(code_str, globals(), local_exec_context)
-                return local_exec_context.get("postprocess")
+                postprocess_func = local_exec_context.get("postprocess")
+                if not callable(postprocess_func):
+                    raise ValueError("postprocess function not defined or invalid in the provided code")
+                return postprocess_func
             except Exception as e:
                 print(f"Error executing postprocess code: {e}")
                 raise ValueError("postprocess function not defined or invalid in the provided code")
@@ -316,7 +325,12 @@ class CalibrationPrompt:
         )
 
     def optimize(
-        self, task_description: str, prompt: str, dataset: Any, postprocess_code: str, step_num: int = 3
+        self,
+        task_description: str,
+        prompt: str,
+        dataset: Union[bytes, pd.DataFrame],
+        postprocess_code: str,
+        step_num: int = 3,
     ) -> str:
         """
         指定されたステップ数だけプロンプトの最適化処理を繰り返します。
@@ -335,13 +349,14 @@ class CalibrationPrompt:
             data_io = io.BytesIO(dataset)
             dataset = pd.read_csv(data_io)
         # 初期プロンプトで出力を取得し、それを現在のデータセットとして使用
-        dataset = self.get_output(prompt, dataset, postprocess_code, return_df=True)
-        history = []
-        for _ in range(step_num):  # cur_dataset はループ内で更新されるため、ここでは使用しない
+        dataset_with_predictions = self.get_output(prompt, dataset.copy(), postprocess_code, return_df=True)
+        assert isinstance(dataset_with_predictions, pd.DataFrame)
+        history: list[dict[str, Any]] = []
+        for _ in range(step_num):
             # 最適化の1ステップを実行
-            step_result = self.step(task_description, prompt, dataset, postprocess_code, history)
+            step_result = self.step(task_description, prompt, dataset_with_predictions, postprocess_code, history)
             prompt = step_result["cur_prompt"]
-            dataset = step_result["dataset"]
+            dataset_with_predictions = step_result["dataset"]
             history = step_result["history"]
         return prompt.strip()
 
@@ -351,8 +366,8 @@ class CalibrationPrompt:
         prompt: str,
         dataset: pd.DataFrame,
         postprocess_code: str,
-        history: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        history: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         # 1回の最適化ステップを実行します。エラー分析、履歴の追加、新しいプロンプトの提案を行います。
         num_errors = 5
         mean_score = self.eval_score(dataset)
@@ -368,26 +383,30 @@ class CalibrationPrompt:
         prompt_input["labels"] = json.dumps([str(label) for label in list(dataset["label"].unique())])
         # 新しいプロンプトを提案するモデルを呼び出します
         prompt_suggestion = self.invoke_model(step_prompt.format(**prompt_input), model="scout")
-        pattern = r"&lt;new_prompt&gt;(.*?)&lt;/new_prompt&gt;"
-        cur_prompt = re.findall(pattern, prompt_suggestion, re.DOTALL)[0]
+        pattern = r"<new_prompt>(.*?)</new_prompt>"
+        match = re.search(pattern, prompt_suggestion, re.DOTALL)
+        if not match:
+            raise ValueError("Could not find <new_prompt> in the model's output.")
+        cur_prompt = match.group(1)
         # 新しいプロンプトで出力を取得
-        cur_dataset = self.get_output(cur_prompt, dataset, postprocess_code, return_df=True)
-        score = self.eval_score(cur_dataset)
+        cur_dataset_with_predictions = self.get_output(cur_prompt, dataset.copy(), postprocess_code, return_df=True)
+        assert isinstance(cur_dataset_with_predictions, pd.DataFrame)
+        score = self.eval_score(cur_dataset_with_predictions)
         timestr = time.strftime("%Y%m%d-%H%M%S")
         temp_file_path = os.path.join(_TEMP_DIR_PATH, f"predict_{timestr}.csv")
-        cur_dataset.to_csv(temp_file_path, index=None)
+        cur_dataset_with_predictions.to_csv(temp_file_path, index=None)
         return {
             "cur_prompt": cur_prompt,
             "score": score,
             "explanation": prompt_suggestion,
-            "dataset": cur_dataset,
+            "dataset": cur_dataset_with_predictions,
             "history": history,
         }
 
-    def get_eval_function(self):
+    def get_eval_function(self) -> Callable[[pd.DataFrame], pd.DataFrame]:
         # 評価関数を生成します。この例では、ラベルと予測が一致するかどうかでスコアを付けます。
-        def set_function_from_iterrow(func):
-            def wrapper(dataset):
+        def set_function_from_iterrow(func: Callable[[pd.Series], bool]) -> Callable[[pd.DataFrame], pd.DataFrame]:
+            def wrapper(dataset: pd.DataFrame) -> pd.DataFrame:
                 dataset["score"] = dataset.apply(func, axis=1)
                 return dataset
 
@@ -395,7 +414,7 @@ class CalibrationPrompt:
 
         return set_function_from_iterrow(lambda record: record["label"] == record["predict"])
 
-    def sample_to_text(self, sample: Dict[str, Any], num_errors_per_label: int = 0, is_score: bool = True) -> str:
+    def sample_to_text(self, sample: dict[str, Any], num_errors_per_label: int = 0, is_score: bool = True) -> str:
         """
         Return a string that organize the information of from the step run for the meta-prompt
         :param sample: The eval information for specific step
@@ -415,6 +434,8 @@ class CalibrationPrompt:
         :param num_large_errors_per_label: The (maximum) number of large errors per label
         :return: A string that contains the large errors that is used in the meta-prompt
         """
+        if error_df.empty:
+            return ""
         required_columns = error_df.columns.tolist()  # エラー分析に必要な列
         label_schema = error_df["label"].unique()
         error_res_df_list = []
@@ -428,7 +449,7 @@ class CalibrationPrompt:
             error_res_df = pd.concat(error_res_df_list, ignore_index=True)
             error_res_df = error_res_df.sample(frac=1.0, random_state=42)
             # 抽出されたエラーサンプルをテキスト形式に変換
-            for i, row in error_res_df.iterrows():
+            for _, row in error_res_df.iterrows():
                 label = row.label
                 prediction = row.predict
                 Sample = ""
@@ -447,7 +468,7 @@ class CalibrationPrompt:
         score_func = self.get_eval_function()
         dataset = score_func(dataset)
         mean_score = dataset["score"].mean()
-        return mean_score
+        return float(mean_score)
 
     def extract_errors(self, dataset: pd.DataFrame) -> pd.DataFrame:
         """
@@ -456,8 +477,8 @@ class CalibrationPrompt:
         """
         df = dataset
         # スコアが0.5未満のレコードをエラーとして抽出します
-        err_df = df[df["score"] < 0.5]
-        err_df.sort_values(by=["score"])
+        err_df = df[df["score"] < 0.5].copy()
+        err_df.sort_values(by=["score"], inplace=True)
         return err_df
 
     def add_history(
@@ -465,10 +486,10 @@ class CalibrationPrompt:
         prompt: str,
         dataset: pd.DataFrame,
         task_description: str,
-        history: List[Dict[str, Any]],
+        history: list[dict[str, Any]],
         mean_score: float,
         errors: pd.DataFrame,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         現在のステップの情報を履歴に追加します。エラー分析も行います。
 
@@ -499,7 +520,10 @@ class CalibrationPrompt:
         # エラー分析プロンプトを実行
         analysis = self.invoke_model(error_analysis_prompt.format(**prompt_input), model="scout")
         pattern = r"<analysis>(.*?)</analysis>"
-        analysis = re.findall(pattern, analysis, re.DOTALL)[0].strip()
+        match = re.search(pattern, analysis, re.DOTALL)
+        if not match:
+            raise ValueError("Could not find <analysis> in the model's output.")
+        analysis_text = match.group(1).strip()
         # 現在の情報を履歴に追加
         history.append(
             {
@@ -507,7 +531,7 @@ class CalibrationPrompt:
                 "score": mean_score,
                 "errors": errors,
                 "confusion_matrix": conf_matrix,
-                "analysis": analysis,
+                "analysis": analysis_text,
             }
         )
         return history

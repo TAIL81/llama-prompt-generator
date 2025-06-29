@@ -5,15 +5,14 @@ import os
 import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-
+import logging
 import groq  # Import the groq module to access specific error types
-import nest_asyncio  # nest_asyncioをインポート
+import nest_asyncio  # type: ignore # nest_asyncioをインポート
 from groq import AsyncGroq, Groq
 
 # nest_asyncioを適用して、既に実行中のイベントループ内で新しいイベントループをネストできるようにします
 nest_asyncio.apply()
 
-# Groq APIキーを環境変数から取得し、クライアントを初期化します
 groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
 if not groq_api_key:
     logging.error("GROQ_API_KEY環境変数が設定されていません。")
@@ -72,7 +71,10 @@ class Rater:
 
             for i, output in zip(unrated_candidates_indices, outputs):
                 candidates[i]["input"] = self._replace_placeholders(candidates[i]["prompt"], demo_data)
-                candidates[i]["output"] = output  # 候補の入力と出力を格納
+                if isinstance(output, str):
+                    candidates[i]["output"] = output  # 候補の入力と出力を格納
+                else:
+                    candidates[i]["output"] = ""  # or handle error appropriately
 
         # 元の指示プロンプトもデモデータで置換
         initial_prompt_filled = self._replace_placeholders(initial_prompt, demo_data)
@@ -110,8 +112,9 @@ class Rater:
         """
         複数のプロンプトに対して非同期でGroqモデルを実行し、出力を取得します。
         """
-        tasks = [self._get_output_async(prompt) for prompt in prompts]
-        return await asyncio.gather(*tasks, return_exceptions=True)  # 例外を返すように設定
+        tasks = [self._get_output_async(prompt) for prompt in prompts] # type: ignore
+        results = await asyncio.gather(*tasks, return_exceptions=True) # type: ignore
+        return results  # type: ignore
 
     async def _get_output_async(self, prompt: str) -> Optional[str]:
         """指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。"""
@@ -119,15 +122,17 @@ class Rater:
         try:
             completion = await async_groq_client.chat.completions.create(  # Groq APIを呼び出し
                 model=self.config.get_output_model,
-                messages=messages,
+                messages=messages,  # type: ignore
                 max_completion_tokens=self.config.max_tokens,
                 temperature=self.config.temperature_get_output,
             )
-            result: str = completion.choices[0].message.content
+            result = completion.choices[0].message.content
+            if result is None:
+                return None
             logging.debug(f"Rater._get_output_async successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
-            error_message: str = (
+            error_message = (
                 e.body.get("error", {}).get("message", str(e))
                 if hasattr(e, "body") and isinstance(e.body, dict)
                 else str(e)
@@ -209,11 +214,14 @@ class Rater:
             # Groq APIを呼び出して評価を実行します
             completion = sync_groq_client.chat.completions.create(
                 model=self.config.rater_model,
-                messages=messages,
+                messages=messages,  # type: ignore
                 max_completion_tokens=self.config.max_tokens,
                 temperature=self.config.temperature_rater,
             )
-            result_json: Dict[str, str] = json.loads(completion.choices[0].message.content)
+            content = completion.choices[0].message.content
+            if content is None:
+                raise json.JSONDecodeError("No content from LLM", "", 0)
+            result_json: Dict[str, str] = json.loads(content)
             final_result: Optional[int] = None
             for idx in range(len(candidates)):
                 if str(idx + 1) in result_json["Preferred"]:
