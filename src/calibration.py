@@ -145,10 +145,15 @@ class SafeCodeExecutor:
                     ),
                 ):
                     raise ValueError(f"許可されていない操作が含まれています: {type(node).__name__}")
-                if isinstance(node, (ast.BinOp, ast.UnaryOp, ast.Compare)):
-                    op_type = type(node.op)  # type: ignore
+                if isinstance(node, (ast.BinOp, ast.UnaryOp)):
+                    op_type = type(node.op)
                     if op_type not in self.ALLOWED_OPERATORS:
-                        raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
+                        raise ValueError(f"許可されていない演算子が含まれています: {type(node.op).__name__}")
+                elif isinstance(node, ast.Compare):
+                    for op in node.ops:
+                        op_type_compare: Any = type(op)
+                        if op_type_compare not in self.ALLOWED_OPERATORS:
+                            raise ValueError(f"許可されていない演算子が含まれています: {op_type_compare.__name__}")
 
             # 実行コンテキストを制限
             safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}

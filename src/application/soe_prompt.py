@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from groq import Groq
+from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 load_dotenv()
 
@@ -25,7 +26,7 @@ class SOEPrompt:
             return base64.b64encode(image_file.read()).decode("utf-8")
 
     def run_multi_modal_prompt(
-        self, messages: List[Dict[str, List[Dict[str, str]]]], max_completion_tokens: int = 8192
+        self, messages: List[ChatCompletionMessageParam], max_completion_tokens: int = 8192
     ) -> Dict[str, List[Dict[str, str]]]:
         # Groqは画像入力未対応のため、テキストのみ対応
         completion: Any = self.groq_client.chat.completions.create(
@@ -37,10 +38,10 @@ class SOEPrompt:
         return {"content": [{"text": completion.choices[0].message.content}]}
 
     def generate_groq_response(self, prompt: str) -> str:
-        messages = [{"role": "system", "content": self.system}, {"role": "user", "content": prompt}]
+        messages: List[ChatCompletionMessageParam] = [{"role": "system", "content": self.system}, {"role": "user", "content": prompt}]
         completion = self.groq_client.chat.completions.create(
             model=self.model_id,
-            messages=messages,
+            messages=messages, # type: ignore
             max_completion_tokens=8192,
         )
         return completion.choices[0].message.content
@@ -52,7 +53,7 @@ class SOEPrompt:
         usage_description: str,
         target_customer: str,
         image_path: Optional[str] = None,
-        media_type: str = "image/jpeg",
+        media_type: Optional[str] = None,
     ) -> str:
         image_description = None
         if image_path:
@@ -67,9 +68,13 @@ class SOEPrompt:
                     },
                 ],
             }
-            messages = [{"role": "user", "content": message["content"]}]
-            response = self.run_multi_modal_prompt(messages, max_completion_tokens=8192)  # type: ignore
-            image_description = response["content"][0]["text"]
+            messages = [message]
+            response = self.groq_client.chat.completions.create(
+                model=self.model_id,
+                messages=[message], # type: ignore
+                max_completion_tokens=8192,
+            )
+            image_description = response.choices[0].message.content
             print("Image description generated: {}".format(image_description))
 
         prompt_template = f"""
@@ -125,7 +130,7 @@ class SOEPrompt:
         else:
             image_path = None
         product_description = self.generate_product_description(
-            product_category, brand_name, usage_description, target_customer, image_path, media_type  # type: ignore
+            product_category, brand_name, usage_description, target_customer, image_path, media_type
         )
 
         return product_description

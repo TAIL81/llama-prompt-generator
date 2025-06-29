@@ -28,8 +28,8 @@ class AppConfig:
     """
 
     def __init__(self):
-        self.language: str = "ja"  # type: ignore
-        self.lang_store: Dict[str, Any] = {}  # type: ignore
+        self.language: str = "ja"
+        self.lang_store: Dict[str, Any] = {}
         self.load_env()
         self.safe_load_translations()
 
@@ -355,10 +355,15 @@ class SafeCodeExecutor:
                     ),
                 ):
                     raise ValueError(f"許可されていない操作が含まれています: {type(node).__name__}")
-                if isinstance(node, (ast.BinOp, ast.UnaryOp, ast.Compare)):
-                    op_type: Type[ast.AST] = type(node.op)  # type: ignore
+                if isinstance(node, (ast.BinOp, ast.UnaryOp)):
+                    op_type: Type[ast.AST] = type(node.op)
                     if op_type not in self.ALLOWED_OPERATORS:
                         raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
+                elif isinstance(node, ast.Compare):
+                    for op in node.ops:
+                        op_type = type(op)
+                        if op_type not in self.ALLOWED_OPERATORS:
+                            raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
 
             # 実行コンテキストを制限
             safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}  # 許可された関数のみを含む安全なグローバル変数

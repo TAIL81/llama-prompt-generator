@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # 環境変数の読み込み
 env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(dotenv_path=env_path);
+load_dotenv(dotenv_path=env_path)
 
 # 定数の定義
 TEMPERATURE: float = 0.2
@@ -152,7 +152,7 @@ class Alignment:
         """APIレスポンスの構造を検証するヘルパーメソッド"""
         return (
             hasattr(response, "choices")
-            and response.choices
+            and bool(response.choices)
             and len(response.choices) > 0
             and hasattr(response.choices[0], "message")
             and hasattr(response.choices[0].message, "content")
@@ -163,7 +163,7 @@ class Alignment:
     ) -> str:
         """APIクライアントを使用して応答を生成する共通メソッド"""
         try:
-            completion: ChatCompletion = client.chat.completions.create(
+            completion: Any = client.chat.completions.create(
                 model=model_id,
                 messages=[{"role": "system", "content": system_content}, {"role": "user", "content": user_prompt}],
                 temperature=TEMPERATURE,
@@ -191,11 +191,11 @@ class Alignment:
         return self._generate_response(self.OpenAI_client, model_id, self.OpenAI_system_content, prompt)
 
     def stream_OpenAI_response(
-        self, prompt: str, model_id: str, output_component: gr.components.Component
+        self, prompt: str, model_id: str, output_component: gr.Textbox
     ) -> None:
         if not self.OpenAI_client:
             logging.error("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
-            output_component.update("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
+            gr.update("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
             return
         try:
             stream = self.OpenAI_client.chat.completions.create(
@@ -210,10 +210,10 @@ class Alignment:
             )
             for chunk in stream:  # ストリームからのチャンクを処理
                 if hasattr(chunk.choices[0].delta, "content") and chunk.choices[0].delta.content is not None:
-                    output_component.update(chunk.choices[0].delta.content, append=True)
+                    gr.update(chunk.choices[0].delta.content, append=True)
         except Exception as e:
             logging.error(f"OpenAI API Error during streaming: {e}")
-            output_component.update(f"OpenAI API Error during streaming: {str(e)}")
+            gr.update(f"OpenAI API Error during streaming: {str(e)}")
 
     def invoke_prompt(
         self,
@@ -223,9 +223,9 @@ class Alignment:
         revised_prompt: str,
         OpenAI_model_id: str,
         groq_model_id: str,
-    ) -> Generator[Tuple[Dict, Dict], None, None]:
+    ) -> Generator[Tuple[Any, Any], None, None]:
         """
-        元のプロンプトと改訂されたプロンプトをそれぞれOpenAIとGroqで実行し、結果を返します。ジェネレータを使用して、途中結果をyieldする。
+        元のプロンプトと改訂されたプロンプトをそれぞれOpenAIとGroqで実行し、結果を返します。ジェネレータを使用して、途中結果をgr.updateする。
 
         Args:
             original_prompt_replace (str): 変数が置換された元のプロンプト。
@@ -238,7 +238,7 @@ class Alignment:
         Returns:
             tuple: (OpenAIからの応答, Groqからの応答)
         """
-        # 置換後のプロンプトが空の場合、置換前のプロンプトを使用します
+        # 置換後のプロンプトが空の場合、置換前���プロンプトを使用します
         if not original_prompt_replace:
             original_prompt_replace = original_prompt  # 元のプロンプトを使用
         if not revised_prompt_replace:
@@ -249,12 +249,13 @@ class Alignment:
 
         processing_message: str = "Processing..."
 
-        # 元のプロンプトはOpenAIで実行
+        # 元のプロンプトをOpenAIで実行
         if self.OpenAI_client is None:
             error_msg = "OpenAIError: API client not initialized. Check OPENAI_API_KEY and OPENAI_BASE_URL."
             logging.error(error_msg)
             yield gr.update(value=error_msg), gr.update(value=error_msg)
             return
+
         # OpenAI API を呼び出し、応答を生成
         original_prompt_output = self.generate_OpenAI_response(original_prompt_replace, OpenAI_model_id)
         yield gr.update(value=original_prompt_output), gr.update(value=processing_message)
@@ -274,6 +275,7 @@ class Alignment:
         # Groq API を呼び出し、応答を生成
         evaluation_prompt_output = self.generate_groq_response(revised_prompt_replace, groq_model_id)
         yield gr.update(value=original_prompt_output), gr.update(value=evaluation_prompt_output)
+        return
 
     def evaluate_response(self, openai_output: str, groq_output: str) -> str:
         """

@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Mapping
 
 from dotenv import load_dotenv
 from groq import Groq
+from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 # 環境変数を .env ファイルから読み込みます
 env_path = Path(__file__).parent.parent / ".env"
@@ -150,7 +151,7 @@ class GuideBased:
             """.strip()  # プロンプトテンプレートの終わり
         )
 
-        messages: List[Dict[str, str]] = [
+        messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
                 "content": prompt.format(guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt),
@@ -159,7 +160,7 @@ class GuideBased:
         # Groq APIを使用してプロンプトの書き換えをリクエストします
         completion = self.groq_client.chat.completions.create(
             model=self.config.rewrite_model,
-            messages=messages,  # type: ignore
+            messages=messages,
             max_completion_tokens=self.config.max_tokens,  # 最大トークン数
             temperature=self.config.temperature_rewrite,  # 温度
         )
@@ -204,7 +205,7 @@ class GuideBased:
             Output example: {lang_example}
             """.strip()  # プロンプトテンプレートの終わり
         )
-        messages: List[Dict[str, str]] = [
+        messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
                 "content": prompt.format(document=initial_prompt, lang_example=lang_example),
@@ -213,7 +214,7 @@ class GuideBased:
         # Groq APIを使用して言語検出をリクエストします
         completion = self.groq_client.chat.completions.create(
             model=self.config.detect_lang_model,
-            messages=messages,  # type: ignore
+            messages=messages,
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature_detect_lang,
         )  # API呼び出し
@@ -263,7 +264,7 @@ class GuideBased:
             {example}
             """.strip()  # プロンプトテンプレートの終わり
         )
-        messages: List[Dict[str, str]] = [
+        messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
                 "content": prompt.format(
@@ -276,7 +277,7 @@ class GuideBased:
         # Groq APIを使用してプロンプト候補の評価をリクエストします
         completion = self.groq_client.chat.completions.create(
             model=self.config.judge_model,
-            messages=messages,  # type: ignore
+            messages=messages,
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature_judge,
         )  # API呼び出し

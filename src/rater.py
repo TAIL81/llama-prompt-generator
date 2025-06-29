@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import logging
 import groq  # Import the groq module to access specific error types
-import nest_asyncio  # type: ignore # nest_asyncioをインポート
+import nest_asyncio # nest_asyncioをインポート
 from groq import AsyncGroq, Groq
+from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 # nest_asyncioを適用して、既に実行中のイベントループ内で新しいイベントループをネストできるようにします
 nest_asyncio.apply()
@@ -112,17 +113,17 @@ class Rater:
         """
         複数のプロンプトに対して非同期でGroqモデルを実行し、出力を取得します。
         """
-        tasks = [self._get_output_async(prompt) for prompt in prompts] # type: ignore
-        results = await asyncio.gather(*tasks, return_exceptions=True) # type: ignore
-        return results  # type: ignore
+        tasks = [self._get_output_async(prompt) for prompt in prompts]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return [res if isinstance(res, str) else None for res in results]
 
     async def _get_output_async(self, prompt: str) -> Optional[str]:
         """指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。"""
-        messages: List[Dict[str, str]] = [{"role": "user", "content": prompt}]
+        messages: List[ChatCompletionMessageParam] = [{"role": "user", "content": prompt}]
         try:
             completion = await async_groq_client.chat.completions.create(  # Groq APIを呼び出し
                 model=self.config.get_output_model,
-                messages=messages,  # type: ignore
+                messages=messages,
                 max_completion_tokens=self.config.max_tokens,
                 temperature=self.config.temperature_get_output,
             )
@@ -200,7 +201,7 @@ class Rater:
             Output example: {rater_example}
             """.strip()
         )
-        messages: List[Dict[str, str]] = [
+        messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
                 "content": rater_prompt.format(
@@ -214,7 +215,7 @@ class Rater:
             # Groq APIを呼び出して評価を実行します
             completion = sync_groq_client.chat.completions.create(
                 model=self.config.rater_model,
-                messages=messages,  # type: ignore
+                messages=messages,
                 max_completion_tokens=self.config.max_tokens,
                 temperature=self.config.temperature_rater,
             )

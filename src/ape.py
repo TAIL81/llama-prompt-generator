@@ -7,6 +7,7 @@ from typing import Dict, List, Mapping, Optional, Union
 import groq
 from dotenv import load_dotenv
 from groq import Groq
+from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 from rater import Rater
 
@@ -141,7 +142,7 @@ class APE:
                     logging.debug(f"    {line}")  # インデントして出力
             else:  # 文字列以外の場合
                 logging.debug(f"    {value}")  # そのままインデントして出力
-        return best_candidate_obj  # type: ignore
+        return best_candidate_obj
  
     def _validate_inputs(self, initial_prompt: str, demo_data: Dict[str, str]) -> None:
         """
@@ -186,7 +187,7 @@ class APE:
             """.strip()
         )
         # ユーザーに送信するメッセージを作成
-        messages: List[Dict[str, str]] = [
+        messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
                 "content": prompt.format(guide=PromptGuide, initial=initial_prompt),  # プロンプトをフォーマット
@@ -265,7 +266,7 @@ class APE:
             Please only output the rewrite result.
             """.strip()
         )
-        messages: List[Dict[str, str]] = [
+        messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
                 "content": prompt.format(guide=PromptGuide, initial=initial_prompt, demo=example),
@@ -275,7 +276,7 @@ class APE:
             # Groq APIを使用して追加のプロンプト候補を生成します
             completion = groq_client.chat.completions.create(
                 model=self.config.rewrite_model,  # モデルを指定
-                messages=messages,  # type: ignore
+                messages=messages,
                 max_completion_tokens=self.config.max_tokens,
                 temperature=self.config.temperature,
             )
