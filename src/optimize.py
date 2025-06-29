@@ -189,26 +189,6 @@ class Alignment:
             return "OpenAIError: API client not initialized. Check OPENAI_API_KEY."
         return self._generate_response(self.OpenAI_client, model_id, self.OpenAI_system_content, prompt)
 
-    # ストリーミング出力メソッド（未実装のためコメントアウト）
-    # def stream_groq_response(self, prompt, model_id, output_component):
-    #     if not self.groq_client:
-    #         logging.error("GroqError: API client not initialized. Check GROQ_API_KEY.")
-    #         output_component.update("GroqError: API client not initialized. Check GROQ_API_KEY.")
-    #         return
-    #     try:
-    #         stream = self.groq_client.chat.completions.create(
-    #             model=model_id,
-    #             messages=[
-    #                 {"role": "system", "content": self.groq_system_content},
-    #                 {"role": "user", "content": prompt},
-    #             ],
-    #             stream=True,
-    #             temperature=TEMPERATURE,
-    #             max_tokens=MAX_TOKENS,
-    #         )
-    #         for chunk in stream:
-    #             if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
-    #                 output_
     def stream_OpenAI_response(self, prompt, model_id, output_component):
         if not self.OpenAI_client:
             logging.error("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
