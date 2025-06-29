@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 class GroqConfig:
     """Groq APIの設定を保持するデータクラス。"""
 
-    metaprompt_model: str = "meta-llama/llama-4-maverick-17b-128e-instruct"
+    metaprompt_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     max_tokens: int = 8192
     temperature: float = 0.2
 
