@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 import groq  # Import the groq module to access specific error types
 import nest_asyncio  # nest_asyncioをインポート
-from groq import Groq
+from groq import AsyncGroq, Groq
 
 # nest_asyncioを適用して、既に実行中のイベントループ内で新しいイベントループをネストできるようにします
 nest_asyncio.apply()
@@ -20,7 +20,7 @@ if not groq_api_key:
     raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
 
 # 非同期Groqクライアントを初期化
-async_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
+async_groq_client = AsyncGroq(api_key=groq_api_key, timeout=600.0)
 # 同期Groqクライアントを初期化
 sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 
