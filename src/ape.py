@@ -92,7 +92,9 @@ class APE:
         # フィルタリングの結果、候補が残らなかった場合
         if not filtered_candidates:
             logging.warning("No candidates left after filtering for customizable variables. Returning initial prompt.")
-            logging.warning(f"Candidates that were filtered out: {candidates}")
+            # 候補リストを整形して、1つのログエントリで見やすく出力します
+            candidates_log_str = "\n".join(f"--- Candidate {i+1} ---\n{c}" for i, c in enumerate(candidates))
+            logging.warning(f"The following candidates were filtered out:\n{candidates_log_str}")
             return {
                 "prompt": initial_prompt,
                 "error": "No valid candidates after filtering. The rewritten prompts might be missing some required variables.",
