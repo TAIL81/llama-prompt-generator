@@ -24,7 +24,7 @@ class GroqConfig:
 
     metaprompt_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     max_tokens: int = 8192
-    temperature: float = 0.2
+    temperature: float = 0.0
 
 
 # 現在のスクリプトが配置されているディレクトリを取得します
@@ -196,8 +196,8 @@ class MetaPrompt:
         # パターンの順序は重要で、{変数名} が {{変数名}} の一部にマッチしないようにする
         patterns: List[str] = [
             r"\{\{([^{}]+?)\}\}",  # {{変数名}}
-            r"\{\$([^{}]+?)\}",  # {$変数名}
-            r"\{([^{}]+?)\}",  # {変数名}
+            # r"\{\$([^{}]+?)\}",  # {$変数名}
+            # r"\{([^{}]+?)\}",  # {変数名}
         ]
         variables: Set[str] = set()
         temp_string: str = prompt_content

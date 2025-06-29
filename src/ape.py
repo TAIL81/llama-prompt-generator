@@ -19,7 +19,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 @dataclass  # データクラス。API設定を保持
 class GroqConfig:
     rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
-    rating_model: str = "llama-3.3-70b-versatile"
     max_tokens: int = 8192
     temperature: float = 0.2
 
