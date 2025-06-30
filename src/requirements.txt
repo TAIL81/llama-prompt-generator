@@ -1,6 +1,7 @@
 gradio==5.34.2
 gradio_client==1.10.3
+nest_asyncio
 openai==1.14.3
 python-dotenv==1.0.1
-ruff==0.3.4
+ruff==0.9.3
 scikit-learn==1.5.2

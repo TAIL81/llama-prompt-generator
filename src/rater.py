@@ -5,7 +5,6 @@ import os
 import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-import logging
 import groq  # Import the groq module to access specific error types
 import nest_asyncio # nest_asyncioをインポート
 from groq import AsyncGroq, Groq
