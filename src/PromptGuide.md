@@ -8,13 +8,13 @@ When interacting with Llama, providing clear and direct instructions is essentia
 
 To ensure Llama understands your task, provide as much context and detail as possible. Include any specific rules or requirements for completing the task correctly. Consider the following example where we ask Llama to remove personally identifiable information (PII) from a given text:
 
-```
+```text
 Please remove all personally identifiable information from this text: {{TEXT}}
 ```
 
 While this prompt may work for simple cases, it lacks the necessary details for Llama to consistently deliver the desired output. Here is a more detailed and clearly written version.
 
-```
+```text
 We want to anonymize some text by removing all personally identifiable information (PII).
 Please follow these steps:
 1. Replace all instances of names, phone numbers, and home and email addresses with 'XXX'.
@@ -25,6 +25,7 @@ Here is the text to process:
 ```
 
 In this improved prompt, we:
+
 1. Provide context upfront about the nature of the task
 2. Define what constitutes PII (names, phone numbers, addresses)
 3. Give specific, enumerated step-by-step instructions on how Llama should carry out its task
@@ -36,13 +37,13 @@ When providing instructions for complex tasks, consider breaking them down into 
 
 Here is an example prompt without this technique:
 
-```
+```text
 Turn this textbook chapter into a lesson plan: {{CHAPTER}}
 ```
 
 Here is the same prompt with numbered steps:
 
-```
+```text
 Your task is turn the given textbook chapter into a comprehensive lesson plan. To do this task, you should:
 1. Extract and summarize key concepts by section
 2. Convert each extracted concept into a 30 minute lesson plan, including a list of questions to check comprehension.
@@ -61,13 +62,13 @@ If you want Llama to provide a definitive answer or take a specific stance on a 
 
 Here is an example of an open-ended question that causes Llama to equivocate:
 
-```
+```text
 Who is the best basketball player of all time?
 ```
 
 Here is the same request, but with a more detailed and nuanced ask that successfully pushes Llama to have an opinion:
 
-```
+```text
 Who is the best basketball player of all time? Yes, there are differing opinions, but if you absolutely had to pick one player, who would it be?
 ```
 
@@ -81,7 +82,7 @@ Remember, Llama is a powerful tool, but it relies on your guidance to deliver th
 
 Examples are one of the most powerful tools for enhancing Llama's performance and guiding it to produce your desired output. By providing a few well-crafted examples in your prompt, you can significantly improve the accuracy, consistency, and quality of Llama's responses. This technique is particularly effective for tasks that are highly detailed or require structured outputs or adherence to specific formats.
 
-```
+```text
 This technique is also known as few-shot prompting (or one-shot prompting if only one example is provided).
 ```
 
@@ -98,7 +99,7 @@ To provide examples, simply include them in your prompt, clearly distinguishing 
 
 Here's a prompt that demonstrates the use of examples to guide Llama's response:
 
-```
+```text
 I will give you some quotes. Please extract the author from the quote block.
 Here is an example:
 <example>
@@ -118,7 +119,7 @@ Examples are particularly effective for tasks that require structured or formatt
 
 Suppose you want Llama to extract names and professions from a given text and format them as a list. Here's how you might prompt Llama with examples:
 
-```
+```text
 <example>
 Text: Sarah Martinez, a dedicated nurse, was known for her compassionate care at the local hospital. David Thompson, an innovative software engineer, worked tirelessly on groundbreaking projects.
 Output:
@@ -177,7 +178,7 @@ Let's consider the following logic puzzle:
 
 By assigning the role of a logic bot, Llama's performance improves significantly and it is able to catch the nuance that multiple answers are possible:
 
-```
+```text
 You are a master logic bot designed to answer complex logic problems. Solve this logic puzzle. There are two ducks in front of a duck, two ducks behind a duck and a duck in the middle. How many ducks are there? 
 ```
 
@@ -185,7 +186,7 @@ You are a master logic bot designed to answer complex logic problems. Solve this
 
 Role prompting can be used to adjust Llama's communication style based on the intended audience. Consider the following prompts and how Llama's output differs depending on the assigned role:
 
-```
+```text
 You are a kindergarten teacher. Succinctly explain why the sky is blue to your students.
 ```
 
@@ -196,13 +197,13 @@ To get the most out of role prompting, keep these tips in mind:
 1. **Be specific:** Provide clear and detailed context about the role you want Llama to play. The more information you give, the better Llama can understand and embody the desired role.
 2. **Experiment and iterate:** Try different roles and variations of your prompts to find the best approach for your specific use case. Prompt engineering often involves experimentation and iteration to achieve optimal results.
 
-# Use XML tags
+## Use XML tags
 
 XML tags are a powerful tool for structuring prompts and guiding Llama's responses. Llama is particularly familiar with prompts that have XML tags as Llama was exposed to such prompts during training. By wrapping key parts of your prompt (such as instructions, examples, or input data) in XML tags, you can help Llama better understand the context and generate more accurate outputs. This technique is especially useful when working with complex prompts or variable inputs.
 
 > Looking for more advanced techniques? Check out long context window tips to learn how XML tags can help you make the most of Llama's extended context capabilities.
 
-### Why use XML tags?
+## Why use XML tags?
 
 There are several reasons why you might want to incorporate XML tags into your prompts:
 
@@ -214,7 +215,7 @@ There are several reasons why you might want to incorporate XML tags into your p
 
 You can use XML tags to structure and delineate parts of your prompt from one another, such as separating instructions from content, or examples from instructions.
 
-```
+```text
 Please analyze this document and write a detailed summmary memo according to the instructions below, following the format given in the example:
 <document>
 {{DOCUMENT}}
@@ -231,7 +232,7 @@ Please analyze this document and write a detailed summmary memo according to the
 
 When working with prompt templates that include variable inputs, use XML tags to indicate where the variable content should be inserted, such as in the following example:
 
-```
+```text
 I will tell you the name of an animal. Please respond with the noise that animal makes.
 <animal>{{ANIMAL}}</animal>
 ```
@@ -242,7 +243,7 @@ As a general rule, you should always separate your variable inputs from the rest
 
 You can ask Llama to use XML tags in its responses to make the output easier to parse and process:
 
-```
+```text
 Please extract the key details from the following email and return them in XML tags:
 - Sender name in <sender></sender> tags
 - Main topic in <topic></topic> tags
@@ -307,7 +308,7 @@ Here we want Llama to, given a document and a question, generate an answer using
 
 Prompt 1: Extracting the quotes
 
-```
+```text
 Here is a document, in <document></document> XML tags:
 <document>
 {{DOCUMENT}}
@@ -317,7 +318,7 @@ Please extract, word-for-word, any quotes relevant to the question {{QUESTION}}.
 
 Prompt 2 (using `{{QUOTES}}` output from Prompt 1): Answering the question
 
-```
+```text
 I want you to use a document and relevant quotes from the document to answer a question.
 Here is the document:
 <document>
@@ -337,7 +338,7 @@ In this example, the goal is to have Llama identify grammatical errors in an art
 
 Prompt 1: Generating a list of errors
 
-```
+```text
 Here is an article:
 <article>
 {{ARTICLE}}
@@ -347,7 +348,7 @@ Please identify any grammatical errors in the article. Please only respond with 
 
 Prompt 2 (using `{{ERRORS}}` output from Prompt 1): Double checking that the list is comprehensive
 
-```
+```text
 Here is an article:
 <article>
 {{ARTICLE}}
@@ -365,15 +366,15 @@ In this example, the goal is to have Llama explain a concept to readers at three
 
 Prompt 1 (create three different versions, one for each reading level): Create an outline
 
-```
+```text
 Here is a concept: {{CONCEPT}}
 I want you to write a three sentence outline of an essay about this concept that is appropriate for this level of reader: {{LEVEL}}
 Please only respond with your outline, one sentence per line, in <outline></outline> XML tags. Don't say anything else. 
-```
+```text
 
 Prompt 2 (using `{{OUTLINE}}` output from Prompt 1, one per reading level): Create full explanations using the outline
 
-```
+```text
 Here is an outline:
 <outline>
 {{OUTLINE}}
@@ -389,13 +390,13 @@ When faced with a complex question or task, it's often beneficial to let Llama t
 
 The simplest way to encourage thinking step-by-step is to include the phrase "Think step by step" in your prompt. For example:
 
-```
+```text
 Are both the directors of Jaws and Casino Royale from the same country? Think step by step. |
 ```
 
 For more complex queries, you can guide Llama's thinking by specifying the steps it should take. Here's an example:
 
-```
+```text
 Use the following clues to answer the multiple-choice question below, using this procedure:
 1. Go through the clues one by one and consider whether each is potentially relevant
 2. Combine the relevant clues to reason out the answer to the question
@@ -420,7 +421,7 @@ To make it easier to separate Llama's step-by-step reasoning from its final resp
 
 Here's an example prompt with this method:
 
-```
+```text
 [Rest of prompt] Before answering the question, please think about it step-by-step within <thinking></thinking> tags. Then, provide your final answer within <answer></answer> tags. 
 ```
 
@@ -448,7 +449,7 @@ One of the simplest ways to control Llama's output is to simply state the format
 
 For example, if you want Llama to generate a haiku in JSON format, you can use a prompt like this:
 
-```
+```text
 Please write a haiku about a cat. Use JSON format with the keys "first\_line", "second\_line", and "third\_line".
 ```
 
@@ -458,7 +459,7 @@ In addition to explicit instructions, providing examples of the desired output f
 
 Here is an example prompt showcasing this technique:
 
-```
+```text
 Your task is to write a poem. Here are some examples of ideal formatting for the poem:
 <poem>
 Title: "Autumn Leaves"
@@ -506,8 +507,7 @@ For example, if your previous application required splitting a long document int
 
 When working with long documents (particularly 30K+ tokens), it's essential to structure your prompts in a way that clearly separates the input data from the instructions. We recommend using XML tags to encapsulate each document. This structure is how Llama was trained to take long documents, and is thus the structure that Llama is most familiar with:
 
-XML
-```
+```XML
 Here are some documents for you to reference for your task:
 
 <documents>
@@ -536,13 +536,11 @@ Here are some documents for you to reference for your task:
 
 This structure makes it clear to Llama which parts of the prompt are input data and which are instructions, improving its ability to process the information accurately. You can also add tags to house other metadata, such as `<title>` or `<author>`.
 
-
 ### Document-query placement
 
 Notice in the above example of long document prompt structure that the documents come first and the rest of the prompt comes after. For situations with long documents or a lot of additional background content, Llama generally performs noticeably better if the documents and additive material are placed up top, above the detailed instructions or user query.
 
 This is true of all Llama models, from legacy models to the Llama 4 family.
-
 
 ### Tips for document q&a
 
@@ -554,7 +552,7 @@ When using Llama for document question-answering tasks, keep these tips in mind:
 
 Here's an example prompt that incorporates these tips:
 
-```
+```text
 I'm going to give you a document. Read the document carefully, because I'm going to ask you a question about it. Here is the document: <document>{{TEXT}}</document>
 First, find the quotes from the document that are most relevant to answering the question, and then print them in numbered order in <quotes></quotes> tags. Quotes should be relatively short. If there are no relevant quotes, write "No relevant quotes" instead.
 Then, answer the question in <answer></answer> tags. Do not include or reference quoted content verbatim in the answer. Don't say "According to Quote [1]" when answering. Instead make references to quotes relevant to each section of the answer solely by adding their bracketed numbers at the end of relevant sentences.
@@ -572,7 +570,7 @@ When using Llama to generate multiple choice questions based on a given text, pr
 
 Here's an example prompt for multiple choice question generation:
 
-```
+```text
 Your task is to generate multiple choice questions based on content from the following document:
 <document>
 {{DOCUMENT}}
