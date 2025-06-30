@@ -103,12 +103,13 @@ class APE:
         # 候補プロンプトを評価し、最良のものを選択します
         best_candidate_idx: Optional[int] = self.rater(initial_prompt, filtered_candidates, demo_data)
 
-        if best_candidate_idx is None and filtered_candidates:
-            logging.error("Rater did not return a valid candidate index. Using the first available filtered candidate.")
-            # filtered_candidates は上で空でないことをチェック済みなので、少なくとも1要素はあるはず
-            best_candidate_obj: Dict[str, str] = filtered_candidates[0]
-        elif best_candidate_idx is not None:
-            best_candidate_obj = filtered_candidates[best_candidate_idx]
+        best_candidate_obj: Dict[str, str] = {"prompt": initial_prompt}  # デフォルト値設定
+        if filtered_candidates:  # 候補がある場合のみ処理
+            if best_candidate_idx is not None and 0 <= best_candidate_idx < len(filtered_candidates):
+                best_candidate_obj = filtered_candidates[best_candidate_idx]
+            else:  # 評価インデックスが無効でも候補があれば最初を使用
+                best_candidate_obj = filtered_candidates[0]
+                logging.warning("Rater returned invalid index, using first candidate as fallback")
 
         for i in range(epoch):  # epoch の回数だけループ
             # 最良の候補を基にさらに候補を生成します
