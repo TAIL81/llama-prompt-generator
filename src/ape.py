@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 class GroqConfig:
     rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     max_tokens: int = 8192
-    temperature: float = 0.2
+    temperature: float = 0.7
 
 
 # 現在のスクリプトが配置されているディレクトリを取得します

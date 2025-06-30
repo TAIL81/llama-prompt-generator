@@ -23,7 +23,7 @@ class GroqConfig:
     detect_lang_model: str = "llama-3.1-8b-instant"
     judge_model: str = "llama-3.3-70b-versatile"
     max_tokens: int = 8192
-    temperature_rewrite: float = 0.2
+    temperature_rewrite: float = 0.7
     temperature_detect_lang: float = 0.0
     temperature_judge: float = 0.0
 

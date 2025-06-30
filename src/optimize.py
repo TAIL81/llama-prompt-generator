@@ -18,7 +18,7 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # 定数の定義
-TEMPERATURE: float = 0.2
+TEMPERATURE: float = 0.0
 MAX_TOKENS = 8192
 
 # デフォルトのシステムプロンプトのテンプレートを定義します
