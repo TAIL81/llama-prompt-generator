@@ -44,7 +44,7 @@ class SOEPrompt:
             messages=messages, # type: ignore
             max_completion_tokens=8192,
         )
-        return completion.choices[0].message.content
+        return completion.choices[0].message.content or ""
 
     def generate_product_description(
         self,
@@ -74,7 +74,7 @@ class SOEPrompt:
                 messages=[message], # type: ignore
                 max_completion_tokens=8192,
             )
-            image_description = response.choices[0].message.content
+            image_description = response.choices[0].message.content or ""
             print("Image description generated: {}".format(image_description))
 
         prompt_template = f"""

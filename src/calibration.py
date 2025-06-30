@@ -223,7 +223,7 @@ class CalibrationPrompt:
             messages=messages, # type: ignore
             max_completion_tokens=8192,
         )
-        message = completion.choices[0].message.content
+        message = completion.choices[0].message.content or ""
         return message
     
     def get_output(
@@ -249,7 +249,11 @@ class CalibrationPrompt:
         """
         if isinstance(dataset, bytes):
             data_io = io.BytesIO(dataset)
-            dataset = pd.read_csv(data_io)
+            df = pd.read_csv(data_io)
+        elif isinstance(dataset, pd.DataFrame):
+            df = dataset.copy()
+        else:
+            raise TypeError("dataset must be bytes or pd.DataFrame")
 
         # SafeCodeExecutorを使用してpostprocess関数を実行
         # postprocess_codeは'def postprocess(llm_output): ...'という形式を想定
@@ -294,7 +298,7 @@ class CalibrationPrompt:
             raise ValueError("postprocess function not defined in the provided code")
 
         results = []
-        for row_idx, row in dataset.iterrows():
+        for row_idx, row in df.iterrows():
             variables = {}
             for key, value in dict(row).items():
                 if key == "label":
@@ -319,12 +323,12 @@ class CalibrationPrompt:
 
             results.append(result)
 
-        dataset["predict"] = results
+        df["predict"] = results
         if return_df:
-            return dataset
+            return df
         timestr = time.strftime("%Y%m%d-%H%M%S")
         temp_file_path = os.path.join(_TEMP_DIR_PATH, f"predict_{timestr}.csv")
-        dataset.to_csv(temp_file_path, index=None)
+        df.to_csv(temp_file_path, index=False)
         return gr.DownloadButton(
             label=f"Download predict result (predict_{timestr}.csv)", value=pathlib.Path(temp_file_path), visible=True
         )
@@ -352,10 +356,18 @@ class CalibrationPrompt:
         """
         if isinstance(dataset, bytes):
             data_io = io.BytesIO(dataset)
-            dataset = pd.read_csv(data_io)
+            df = pd.read_csv(data_io)
+        elif isinstance(dataset, pd.DataFrame):
+            df = dataset.copy()
+        else:
+            raise TypeError("dataset must be bytes or pd.DataFrame")
+
         # 初期プロンプトで出力を取得し、それを現在のデータセットとして使用
-        dataset_with_predictions = self.get_output(prompt, dataset.copy(), postprocess_code, return_df=True)
-        assert isinstance(dataset_with_predictions, pd.DataFrame)
+        output = self.get_output(prompt, df, postprocess_code, return_df=True)
+        if not isinstance(output, pd.DataFrame):
+            raise TypeError("Expected a DataFrame")
+        dataset_with_predictions = output
+
         history: list[dict[str, Any]] = []
         for _ in range(step_num):
             # 最適化の1ステップを実行
@@ -394,12 +406,14 @@ class CalibrationPrompt:
             raise ValueError("Could not find <new_prompt> in the model's output.")
         cur_prompt = match.group(1)
         # 新しいプロンプトで出力を取得
-        cur_dataset_with_predictions = self.get_output(cur_prompt, dataset.copy(), postprocess_code, return_df=True)
-        assert isinstance(cur_dataset_with_predictions, pd.DataFrame)
+        output = self.get_output(cur_prompt, dataset.copy(), postprocess_code, return_df=True)
+        if not isinstance(output, pd.DataFrame):
+            raise TypeError("Expected a DataFrame")
+        cur_dataset_with_predictions = output
         score = self.eval_score(cur_dataset_with_predictions)
         timestr = time.strftime("%Y%m%d-%H%M%S")
         temp_file_path = os.path.join(_TEMP_DIR_PATH, f"predict_{timestr}.csv")
-        cur_dataset_with_predictions.to_csv(temp_file_path, index=None)
+        cur_dataset_with_predictions.to_csv(temp_file_path, index=False)
         return {
             "cur_prompt": cur_prompt,
             "score": score,
@@ -515,7 +529,7 @@ class CalibrationPrompt:
             "prompt": prompt,
             "failure_cases": large_error_to_str,
         }
-        label_schema = dataset["label"].unique()
+        label_schema = sorted(list(dataset["label"].unique()))
         # 混同行列を計算
         conf_matrix = confusion_matrix(dataset["label"], dataset["predict"], labels=label_schema)
         conf_text = f"Confusion matrix columns:{label_schema} the matrix data:"
