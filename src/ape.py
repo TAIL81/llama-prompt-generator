@@ -85,7 +85,7 @@ class APE:
         candidate_dicts: List[Dict[str, str]] = [{"prompt": c} for c in candidates]
 
         # デモデータからカスタマイズ可能な変数のリストを取得し、フィルタリング
-        customizable_variable_list: List[str] = [f"{{{k}}}" for k in demo_data.keys()]
+        customizable_variable_list: List[str] = list(demo_data.keys())
         filtered_candidates: List[Dict[str, str]] = [
             c for c in candidate_dicts if all(var in c["prompt"] for var in customizable_variable_list)
         ]
