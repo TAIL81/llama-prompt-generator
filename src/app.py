@@ -130,6 +130,41 @@ metaprompt = component_manager.metaprompt
 soeprompt = component_manager.soeprompt
 calibration = component_manager.calibration
 
+# --- クリアボタン用の関数群 ---
+
+
+def clear_metaprompt_tab() -> Tuple[str, str, str, str, str, str]:
+    """メタプロンプトタブの入出力をクリアします。"""
+    return "", "", "", "", "", ""
+
+
+def clear_translation_tab() -> Tuple[str, gr.Textbox, gr.Textbox, gr.Textbox]:
+    """プロンプト翻訳タブの入出力をクリアします。"""
+    # 最初のテキストボックスのみ表示し、他は非表示にリセット
+    return (
+        "",
+        gr.Textbox(value="", visible=True),
+        gr.Textbox(value="", visible=False),
+        gr.Textbox(value="", visible=False),
+    )
+
+
+def clear_evaluation_tab() -> Tuple[str, str, str, str, str, str, str, str, str, str]:
+    """プロンプト評価タブの入出力をクリアします。"""
+    return "", "", "", "", "", "", "", "", "", ""
+
+
+def clear_soe_tab() -> Tuple[str, str, str, str, None, str]:
+    """SOE最適化タブの入出力をクリアします。"""
+    return "", "", "", "", None, ""
+
+
+def clear_calibration_tab() -> Tuple[str, str, str, None, int, str]:
+    """プロンプトキャリブレーションタブの入出力をクリアします。"""
+    default_code = "def postprocess(llm_output):\n    return llm_output"
+    # task, original_prompt, postprocess_code, dataset_file, steps_num, revised_prompt
+    return "", "", default_code, None, 1, ""
+
 
 # generate_prompt関数の分割と型ヒントの追加
 def create_single_textbox(value: str) -> List[gr.Textbox]:
@@ -482,6 +517,7 @@ def metaprompt_wrapper(task: str, variables_str: str) -> Tuple[str, str, str, st
 
 # Gradioインターフェースを定義
 with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engineering"], theme="soft") as demo:
+    clear_button_label = config.lang_store[config.language].get("Clear", "Clear")
     gr.Markdown(f"# {config.lang_store[config.language]['Automatic Prompt Engineering']}")
 
     # 「メタプロンプト」タブ
@@ -504,6 +540,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 ape_on_metaprompt_button = gr.Button(
                     config.lang_store[config.language]["APE on MetaPrompt Output"], scale=1
                 )
+                clear_button_meta = gr.Button(clear_button_label, scale=1)
 
         with gr.Row():
             with gr.Column():
@@ -540,6 +577,11 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
             inputs=[original_task, variables],
             outputs=[prompt_result_meta, variables_result_meta, prompt_result_ape, variables_result_ape],
         )
+        clear_button_meta.click(
+            clear_metaprompt_tab,
+            inputs=[],
+            outputs=[original_task, variables, prompt_result_meta, variables_result_meta, prompt_result_ape, variables_result_ape],
+        )
 
         ape_on_metaprompt_button.click(
             run_ape_on_metaprompt_output,
@@ -563,7 +605,9 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                     label=config.lang_store[config.language]["Optimize Level"],
                     value="One-time Generation",
                 )
-                b1 = gr.Button(config.lang_store[config.language]["Generate Prompt"])
+                with gr.Row():
+                    b1 = gr.Button(config.lang_store[config.language]["Generate Prompt"], scale=4)
+                    clear_button_translate = gr.Button(clear_button_label, scale=1)
                 textboxes = []
                 for i in range(3):
                     t = gr.Textbox(
@@ -576,6 +620,7 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                     )
                     textboxes.append(t)
                 b1.click(generate_prompt, inputs=[original_prompt, level], outputs=textboxes)
+                clear_button_translate.click(clear_translation_tab, inputs=[], outputs=[original_prompt] + textboxes)
 
     # プロンプト評価タブの定義
     with gr.Tab(config.lang_store[config.language]["Prompt Evaluation"]):
@@ -660,7 +705,8 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
 
         with gr.Row():
             # プロンプト実行ボタン
-            invoke_button = gr.Button(config.lang_store[config.language]["Execute prompt"])
+            invoke_button = gr.Button(config.lang_store[config.language]["Execute prompt"], scale=4)
+            clear_button_eval = gr.Button(clear_button_label, scale=1)
 
         # モデル実行結果表示エリア
         with gr.Row():
@@ -707,6 +753,23 @@ with gr.Blocks(title=config.lang_store[config.language]["Automatic Prompt Engine
                 lines=3,
                 interactive=False,
                 show_copy_button=True,
+            )
+
+            clear_button_eval.click(
+                clear_evaluation_tab,
+                inputs=[],
+                outputs=[
+                    user_prompt_original,
+                    user_prompt_eval,
+                    kv_input_original,
+                    kv_input_eval,
+                    user_prompt_original_replaced,
+                    user_prompt_eval_replaced,
+                    OpenAI_output,
+                    groq_output,
+                    feedback_input,
+                    revised_prompt_output,
+                ],
             )
 
         with gr.Row():
