@@ -82,7 +82,7 @@ class Rater:
 
         # 評価を実行
         rate = self.rater(initial_prompt_filled, candidates)
-        logging.info(f"Rater.__call__ return: {rate}\n")
+        logging.info(f"Rater.__call__ return: {rate}")
         return rate
 
     def _validate_inputs(
@@ -130,7 +130,7 @@ class Rater:
             result = completion.choices[0].message.content
             if result is None:
                 return None
-            logging.info(f"Rater._get_output_async successful, result: \n{result}\n")
+            logging.info(f"Rater._get_output_async successful, result: {result}")
             return result
         except groq.InternalServerError as e:
             error_message = (
@@ -235,7 +235,7 @@ class Rater:
                 )
                 final_result = random.randint(0, len(candidates) - 1)
 
-            logging.info(f"Rater.rater successful, result: {final_result}\n")
+            logging.info(f"Rater.rater successful, result: {final_result}")
             return final_result
 
         except (json.JSONDecodeError, KeyError) as e:
