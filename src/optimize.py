@@ -7,6 +7,7 @@ from typing import Any, Dict, Generator, Optional, Tuple, Union
 import gradio as gr  # Gradioをインポート
 from dotenv import load_dotenv
 from groq import Groq
+import httpx
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
 
@@ -100,6 +101,7 @@ class Alignment:
             self.OpenAI_client: Optional[OpenAI] = OpenAI(
                 base_url=OPENAI_BASE_URL,
                 api_key=openai_api_key,
+                http_client=httpx.Client(),
             )
         except Exception as e:
             logging.error(f"OpenAI client initialization failed: {e}")
