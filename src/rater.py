@@ -28,10 +28,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 @dataclass
 class GroqConfig:
-    get_output_model: str = "compound-beta-mini"
+    get_output_model: str = "meta-llama/llama-guard-4-12b"
     rater_model: str = "llama-3.3-70b-versatile"
-    max_tokens: int = 8192
-    temperature_get_output: float = 0.2
+    max_tokens_get_output: int = 1024
+    max_tokens_rater: int = 8192
+    temperature_get_output: float = 0.0
     temperature_rater: float = 0.0
 
 
@@ -81,7 +82,7 @@ class Rater:
 
         # 評価を実行
         rate = self.rater(initial_prompt_filled, candidates)
-        logging.debug(f"Rater.__call__ return: {rate}\n")
+        logging.info(f"Rater.__call__ return: {rate}\n")
         return rate
 
     def _validate_inputs(
@@ -123,13 +124,13 @@ class Rater:
             completion = await async_groq_client.chat.completions.create(  # Groq APIを呼び出し
                 model=self.config.get_output_model,
                 messages=messages,
-                max_completion_tokens=self.config.max_tokens,
+                max_completion_tokens=self.config.max_tokens_get_output,
                 temperature=self.config.temperature_get_output,
             )
             result = completion.choices[0].message.content
             if result is None:
                 return None
-            logging.debug(f"Rater._get_output_async successful, result: \n{result}\n")
+            logging.info(f"Rater._get_output_async successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
             error_message = (
@@ -215,7 +216,7 @@ class Rater:
             completion = sync_groq_client.chat.completions.create(
                 model=self.config.rater_model,
                 messages=messages,
-                max_completion_tokens=self.config.max_tokens,
+                max_completion_tokens=self.config.max_tokens_rater,
                 temperature=self.config.temperature_rater,
             )
             content = completion.choices[0].message.content
@@ -234,7 +235,7 @@ class Rater:
                 )
                 final_result = random.randint(0, len(candidates) - 1)
 
-            logging.debug(f"Rater.rater successful, result: {final_result}\n")
+            logging.info(f"Rater.rater successful, result: {final_result}\n")
             return final_result
 
         except (json.JSONDecodeError, KeyError) as e:

@@ -209,7 +209,7 @@ class APE:
             if result.endswith("</instruction>"):  # </instruction>タグで終わる場合
                 result = result[:-14]  # タグを取り除く
             result = result.strip()  # 前後の空白を削除
-            logging.debug(f"APE.rewrite successful, result: \n{result}\n")  # デバッグログを出力
+            logging.info(f"APE.rewrite successful, result: \n{result}\n")  # デバッグログを出力
             return result  # 書き換えられたプロンプトを返す
         # APIエラーをハンドル
         except groq.InternalServerError as e:
@@ -288,7 +288,7 @@ class APE:
             if result.endswith("</instruction>"):
                 result = result[:-14]
             result = result.strip()
-            logging.debug(f"APE.generate_more successful, result: \n{result}\n")
+            logging.info(f"APE.generate_more successful, result: \n{result}\n")
             return result
         except groq.InternalServerError as e:
             error_message = (

@@ -116,7 +116,7 @@ class MetaPrompt:
 
         # ロギング: API 応答をログに記録
         logging.info("Received response from Groq API")
-        logging.debug(f"API Response: {message}")
+        logging.info(f"API Response: {message}")
         logging.debug(message)
 
         # API応答からプロンプトと変数を抽出
