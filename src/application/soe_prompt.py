@@ -4,7 +4,10 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from groq import Groq
-from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+from groq.types.chat import (
+    ChatCompletionMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
 load_dotenv()
 
@@ -58,20 +61,23 @@ class SOEPrompt:
         image_description = None
         if image_path:
             encoded_image = self.encode_image(image_path)
-            message = {
+            message: ChatCompletionUserMessageParam = {
                 "role": "user",
                 "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": encoded_image}},
                     {
                         "type": "text",
                         "text": "Describe the uploaded product image including the colors, patterns, textures, and any other relevant details.",
                     },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{media_type};base64,{encoded_image}"},
+                    },
                 ],
             }
-            messages = [message]
+            messages: List[ChatCompletionMessageParam] = [message]
             response = self.groq_client.chat.completions.create(
                 model=self.model_id,
-                messages=[message], 
+                messages=messages,
                 max_completion_tokens=8192,
             )
             image_description = response.choices[0].message.content or ""

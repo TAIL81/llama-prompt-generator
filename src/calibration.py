@@ -13,6 +13,7 @@ import gradio as gr
 import pandas as pd
 from dotenv import load_dotenv  # .envファイルから環境変数を読み込むために使用
 from groq import Groq
+from groq.types.chat import ChatCompletionMessageParam
 from sklearn.metrics import confusion_matrix  # 混同行列の計算に使用
 
 env_path = Path(__file__).parent.parent / ".env"
@@ -216,7 +217,7 @@ class CalibrationPrompt:
         """
 
         model_id = "meta-llama/llama-4-scout-17b-16e-instruct"
-        messages = [{"role": "user", "content": prompt}]
+        messages: list[ChatCompletionMessageParam] = [{"role": "user", "content": prompt}]
         # Groq APIを呼び出し、チャット補完を生成します
         completion = self.groq_client.chat.completions.create(
             model=model_id,
