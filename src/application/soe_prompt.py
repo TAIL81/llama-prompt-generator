@@ -41,7 +41,7 @@ class SOEPrompt:
         messages: List[ChatCompletionMessageParam] = [{"role": "system", "content": self.system}, {"role": "user", "content": prompt}]
         completion = self.groq_client.chat.completions.create(
             model=self.model_id,
-            messages=messages, # type: ignore
+            messages=messages, 
             max_completion_tokens=8192,
         )
         return completion.choices[0].message.content or ""
@@ -71,7 +71,7 @@ class SOEPrompt:
             messages = [message]
             response = self.groq_client.chat.completions.create(
                 model=self.model_id,
-                messages=[message], # type: ignore
+                messages=[message], 
                 max_completion_tokens=8192,
             )
             image_description = response.choices[0].message.content or ""

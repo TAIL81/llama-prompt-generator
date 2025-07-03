@@ -131,7 +131,7 @@ class APE:
                     # 評価に失敗した場合は、現在の best_candidate_obj を維持
                 else:
                     best_candidate_obj = current_rating_candidates[rated_idx_loop]
-            else: # type: ignore
+            else: 
                 logging.warning(f"generate_more failed in epoch {i+1}. Keeping previous best candidate.")
                 # generate_more に失敗した場合も、現在の best_candidate_obj を維持
 
@@ -197,8 +197,8 @@ class APE:
         try:
             # Groq APIを使用してプロンプトの書き換えをリクエストします
             completion = groq_client.chat.completions.create(  # Groq APIを呼び出し
-                model=self.config.rewrite_model, # type: ignore
-                messages=messages, # type: ignore # メッセージを渡す
+                model=self.config.rewrite_model, 
+                messages=messages,  # メッセージを渡す
                 max_completion_tokens=self.config.max_tokens,  # 最大トークン数を設定
                 temperature=self.config.temperature,  # 温度パラメータを設定
             )

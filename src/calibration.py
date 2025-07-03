@@ -220,7 +220,7 @@ class CalibrationPrompt:
         # Groq APIを呼び出し、チャット補完を生成します
         completion = self.groq_client.chat.completions.create(
             model=model_id,
-            messages=messages, # type: ignore
+            messages=messages, 
             max_completion_tokens=8192,
         )
         message = completion.choices[0].message.content or ""

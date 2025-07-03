@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from dotenv import load_dotenv
 from groq import Groq
+from groq.types.chat import ChatCompletionMessageParam
 
 # 環境変数を .env ファイルから読み込みます
 env_path = Path(__file__).parent.parent / ".env"
@@ -92,7 +93,7 @@ class MetaPrompt:
         if variable_string:
             assistant_partial += variable_string + "\n</Inputs>\n<Instructions Structure>"
 
-        messages: List[Dict[str, str]] = [
+        messages: List[ChatCompletionMessageParam] = [
             {"role": "user", "content": prompt},  # ユーザーの質問（メタプロンプト）
             {"role": "assistant", "content": assistant_partial},  # アシスタントの途中応答（変数リストと指示）
         ]
@@ -108,7 +109,7 @@ class MetaPrompt:
         # API 呼び出しと応答処理
         completion = self.groq_client.chat.completions.create(
             model=self.config.metaprompt_model,
-            messages=messages, # type: ignore
+            messages=messages, 
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature,
         )
