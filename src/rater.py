@@ -3,11 +3,12 @@ import json
 import logging
 import os
 import random
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 import groq  # Import the groq module to access specific error types
 import nest_asyncio # nest_asyncioをインポート
-from groq import AsyncGroq, Groq
+from groq import AsyncGroq, Groq, RateLimitError, APIError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 # nest_asyncioを適用して、既に実行中のイベントループ内で新しいイベントループをネストできるようにします
@@ -120,37 +121,34 @@ class Rater:
     async def _get_output_async(self, prompt: str) -> Optional[str]:
         """指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。"""
         messages: List[ChatCompletionMessageParam] = [{"role": "user", "content": prompt}]
-        try:
-            completion = await async_groq_client.chat.completions.create(  # Groq APIを呼び出し
-                model=self.config.get_output_model,
-                messages=messages,
-                max_completion_tokens=self.config.max_tokens_get_output,
-                temperature=self.config.temperature_get_output,
-            )
-            result = completion.choices[0].message.content
-            if result is None:
+        max_retries = 3
+        backoff_factor = 2
+        retry_delay = 1
+        for attempt in range(max_retries):
+            try:
+                completion = await async_groq_client.chat.completions.create(  # Groq APIを呼び出し
+                    model=self.config.get_output_model,
+                    messages=messages,
+                    max_completion_tokens=self.config.max_tokens_get_output,
+                    temperature=self.config.temperature_get_output,
+                )
+                result = completion.choices[0].message.content
+                if result is None:
+                    return None
+                logging.info(f"Rater._get_output_async successful, result: {result}")
+                return result
+            except RateLimitError as e:
+                logging.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                await asyncio.sleep(retry_delay)
+                retry_delay *= backoff_factor
+            except APIError as e:
+                logging.error(f"Rater._get_output_async - Groq APIError: {e}")
                 return None
-            logging.info(f"Rater._get_output_async successful, result: {result}")
-            return result
-        except groq.InternalServerError as e:
-            error_message = (
-                e.body.get("error", {}).get("message", str(e))
-                if hasattr(e, "body") and isinstance(e.body, dict)
-                else str(e)
-            )
-            logging.error(f"Rater._get_output_async - Groq InternalServerError: {error_message} (Details: {e})")
-            return None
-        except groq.APIError as e:
-            error_message = (
-                e.body.get("error", {}).get("message", str(e))
-                if hasattr(e, "body") and isinstance(e.body, dict)
-                else str(e)
-            )
-            logging.error(f"Rater._get_output_async - Groq APIError: {error_message} (Details: {e})")
-            return None
-        except Exception as e:
-            logging.error(f"Rater._get_output_async - Unexpected error: {e}")
-            return None
+            except Exception as e:
+                logging.error(f"Rater._get_output_async - Unexpected error: {e}")
+                return None
+        logging.error("Max retries reached for _get_output_async. Failed to get a response from Groq API.")
+        return None
 
     def rater(self, initial_prompt: str, candidates: List[Dict[str, str]]) -> Optional[int]:
         """
@@ -211,38 +209,52 @@ class Rater:
                 ),
             },
         ]
-        try:
-            # Groq APIを呼び出して評価を実行します
-            completion = sync_groq_client.chat.completions.create(
-                model=self.config.rater_model,
-                messages=messages,
-                max_completion_tokens=self.config.max_tokens_rater,
-                temperature=self.config.temperature_rater,
-            )
-            content = completion.choices[0].message.content
-            if content is None:
-                raise json.JSONDecodeError("No content from LLM", "", 0)
-            result_json: Dict[str, str] = json.loads(content)
-            final_result: Optional[int] = None
-            for idx in range(len(candidates)):
-                if str(idx + 1) in result_json["Preferred"]:
-                    final_result = idx
-                    break
-
-            if final_result is None:
-                logging.warning(
-                    "Rater.rater - LLM did not return a clear preferred choice. Falling back to random choice."
+        max_retries = 3
+        backoff_factor = 2
+        retry_delay = 1
+        for attempt in range(max_retries):
+            try:
+                # Groq APIを呼び出して評価を実行します
+                completion = sync_groq_client.chat.completions.create(
+                    model=self.config.rater_model,
+                    messages=messages,
+                    max_completion_tokens=self.config.max_tokens_rater,
+                    temperature=self.config.temperature_rater,
                 )
-                final_result = random.randint(0, len(candidates) - 1)
+                content = completion.choices[0].message.content
+                if content is None:
+                    raise json.JSONDecodeError("No content from LLM", "", 0)
+                result_json: Dict[str, str] = json.loads(content)
+                final_result: Optional[int] = None
+                for idx in range(len(candidates)):
+                    if str(idx + 1) in result_json["Preferred"]:
+                        final_result = idx
+                        break
 
-            logging.info(f"Rater.rater successful, result: {final_result}")
-            return final_result
+                if final_result is None:
+                    logging.warning(
+                        "Rater.rater - LLM did not return a clear preferred choice. Falling back to random choice."
+                    )
+                    final_result = random.randint(0, len(candidates) - 1)
 
-        except (json.JSONDecodeError, KeyError) as e:
-            logging.error(f"Rater.rater - Error parsing LLM response or key error: {e}")
-            logging.warning("Rater.rater - Falling back to random choice due to parsing error.")
-            return random.randint(0, len(candidates) - 1) if candidates else None
-        except Exception as e:
-            logging.error(f"Rater.rater - Unexpected error during LLM rating: {e}")
-            logging.warning("Rater.rater - Falling back to random choice due to unexpected error.")
-            return random.randint(0, len(candidates) - 1) if candidates else None
+                logging.info(f"Rater.rater successful, result: {final_result}")
+                return final_result
+
+            except (json.JSONDecodeError, KeyError) as e:
+                logging.error(f"Rater.rater - Error parsing LLM response or key error: {e}")
+                logging.warning("Rater.rater - Falling back to random choice due to parsing error.")
+                return random.randint(0, len(candidates) - 1) if candidates else None
+            except RateLimitError as e:
+                logging.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                time.sleep(retry_delay)
+                retry_delay *= backoff_factor
+            except APIError as e:
+                logging.error(f"Rater.rater - Groq APIError: {e}")
+                return random.randint(0, len(candidates) - 1) if candidates else None
+            except Exception as e:
+                logging.error(f"Rater.rater - Unexpected error during LLM rating: {e}")
+                logging.warning("Rater.rater - Falling back to random choice due to unexpected error.")
+                return random.randint(0, len(candidates) - 1) if candidates else None
+        logging.error("Max retries reached for rater. Failed to get a response from Groq API.")
+        return random.randint(0, len(candidates) - 1) if candidates else None
+

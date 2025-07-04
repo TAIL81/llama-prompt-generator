@@ -14,7 +14,9 @@ from rater import Rater
 # 環境変数を読み込みます
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 @dataclass  # データクラス。API設定を保持
@@ -57,7 +59,9 @@ class APE:
         self.rater = Rater()
         self.config = GroqConfig()  # 設定を初期化
 
-    def __call__(self, initial_prompt: str, epoch: int, demo_data: Dict[str, str]) -> Mapping[str, Union[str, None]]:
+    def __call__(
+        self, initial_prompt: str, epoch: int, demo_data: Dict[str, str]
+    ) -> Mapping[str, Union[str, None]]:
         """
         APE処理を実行します。
 
@@ -73,13 +77,20 @@ class APE:
 
         candidates: List[str] = []
         for _ in range(2):  # 2回プロンプトを書き換え
-            rewritten_prompt: Optional[str] = self.rewrite(initial_prompt)  # プロンプトを書き換え
+            rewritten_prompt: Optional[str] = self.rewrite(
+                initial_prompt
+            )  # プロンプトを書き換え
             if rewritten_prompt:  # 書き換えに成功した場合
                 candidates.append(rewritten_prompt)  # 候補リストに追加
 
         if not candidates:  # 書き換え候補が1つも生成されなかった場合
-            logging.error("Initial prompt rewriting failed for all attempts. Returning initial prompt.")
-            return {"prompt": initial_prompt, "error": "Initial prompt rewriting failed."}
+            logging.error(
+                "Initial prompt rewriting failed for all attempts. Returning initial prompt."
+            )
+            return {
+                "prompt": initial_prompt,
+                "error": "Initial prompt rewriting failed.",
+            }
 
         # 候補をDict[str, str]の形式に変換
         candidate_dicts: List[Dict[str, str]] = [{"prompt": c} for c in candidates]
@@ -87,34 +98,51 @@ class APE:
         # デモデータからカスタマイズ可能な変数のリストを取得し、フィルタリング
         customizable_variable_list: List[str] = list(demo_data.keys())
         filtered_candidates: List[Dict[str, str]] = [
-            c for c in candidate_dicts if all(var in c["prompt"] for var in customizable_variable_list)
+            c
+            for c in candidate_dicts
+            if all(var in c["prompt"] for var in customizable_variable_list)
         ]
         # フィルタリングの結果、候補が残らなかった場合
         if not filtered_candidates:
-            logging.warning("No candidates left after filtering for customizable variables. Returning initial prompt.")
+            logging.warning(
+                "No candidates left after filtering for customizable variables. Returning initial prompt."
+            )
             # 候補リストを整形して、1つのログエントリで見やすく出力します
-            candidates_log_str = "\n".join(f"--- Candidate {i+1} ---\n{c}" for i, c in enumerate(candidates))
-            logging.warning(f"The following candidates were filtered out:\n{candidates_log_str}")
+            candidates_log_str = "\n".join(
+                f"--- Candidate {i+1} ---\n{c}" for i, c in enumerate(candidates)
+            )
+            logging.warning(
+                f"The following candidates were filtered out:\n{candidates_log_str}"
+            )
             return {
                 "prompt": initial_prompt,
                 "error": "No valid candidates after filtering. The rewritten prompts might be missing some required variables.",
             }
 
         # 候補プロンプトを評価し、最良のものを選択します
-        best_candidate_idx: Optional[int] = self.rater(initial_prompt, filtered_candidates, demo_data)
+        best_candidate_idx: Optional[int] = self.rater(
+            initial_prompt, filtered_candidates, demo_data
+        )
 
-        best_candidate_obj: Dict[str, str] = {"prompt": initial_prompt}  # デフォルト値設定
+        best_candidate_obj: Dict[str, str] = {
+            "prompt": initial_prompt
+        }  # デフォルト値設定
         if filtered_candidates:  # 候補がある場合のみ処理
-            if best_candidate_idx is not None and 0 <= best_candidate_idx < len(filtered_candidates):
+            if best_candidate_idx is not None and 0 <= best_candidate_idx < len(
+                filtered_candidates
+            ):
                 best_candidate_obj = filtered_candidates[best_candidate_idx]
             else:  # 評価インデックスが無効でも候補があれば最初を使用
                 best_candidate_obj = filtered_candidates[0]
-                logging.warning("Rater returned invalid index, using first candidate as fallback")
+                logging.warning(
+                    "Rater returned invalid index, using first candidate as fallback"
+                )
 
         for i in range(epoch):  # epoch の回数だけループ
             # 最良の候補を基にさらに候補を生成します
             more_candidate_prompt: Optional[str] = self.generate_more(
-                initial_prompt, best_candidate_obj["prompt"]  # オブジェクトのプロンプトを使用
+                initial_prompt,
+                best_candidate_obj["prompt"],  # オブジェクトのプロンプトを使用
             )
             if more_candidate_prompt:  # generate_moreが成功した場合
                 # 新しい候補と現在の最良候補でリストを作成
@@ -124,15 +152,21 @@ class APE:
                 ]
 
                 # 再度評価し、最良のものを選択します
-                rated_idx_loop: Optional[int] = self.rater(initial_prompt, current_rating_candidates, demo_data)
+                rated_idx_loop: Optional[int] = self.rater(
+                    initial_prompt, current_rating_candidates, demo_data
+                )
 
                 if rated_idx_loop is None:
-                    logging.warning(f"Rater failed in epoch {i+1}. Keeping previous best candidate.")
+                    logging.warning(
+                        f"Rater failed in epoch {i+1}. Keeping previous best candidate."
+                    )
                     # 評価に失敗した場合は、現在の best_candidate_obj を維持
                 else:
                     best_candidate_obj = current_rating_candidates[rated_idx_loop]
-            else: 
-                logging.warning(f"generate_more failed in epoch {i+1}. Keeping previous best candidate.")
+            else:
+                logging.warning(
+                    f"generate_more failed in epoch {i+1}. Keeping previous best candidate."
+                )
                 # generate_more に失敗した場合も、現在の best_candidate_obj を維持
 
         logging.debug("APE.__call__ return:")  # デバッグログ出力
@@ -144,7 +178,7 @@ class APE:
             else:  # 文字列以外の場合
                 logging.debug(f"    {value}")  # そのままインデントして出力
         return best_candidate_obj
- 
+
     def _validate_inputs(self, initial_prompt: str, demo_data: Dict[str, str]) -> None:
         """
         入力パラメータの検証を行います。
@@ -154,7 +188,9 @@ class APE:
         # demo_dataが空の場合でもエラーをスローしないように変更
         # ただし、空の場合は警告をログに出力する
         if not demo_data:
-            logging.warning("デモデータが提供されていません。APEの実行に影響する可能性があります。")
+            logging.warning(
+                "デモデータが提供されていません。APEの実行に影響する可能性があります。"
+            )
 
     def rewrite(self, initial_prompt: str) -> Optional[str]:
         """初期プロンプトをInstruction guideに基づいて書き換えます。
@@ -191,25 +227,31 @@ class APE:
         messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
-                "content": prompt.format(guide=PromptGuide, initial=initial_prompt),  # プロンプトをフォーマット
+                "content": prompt.format(
+                    guide=PromptGuide, initial=initial_prompt
+                ),  # プロンプトをフォーマット
             }
         ]
         try:
             # Groq APIを使用してプロンプトの書き換えをリクエストします
             completion = groq_client.chat.completions.create(  # Groq APIを呼び出し
-                model=self.config.rewrite_model, 
+                model=self.config.rewrite_model,
                 messages=messages,  # メッセージを渡す
                 max_completion_tokens=self.config.max_tokens,  # 最大トークン数を設定
                 temperature=self.config.temperature,  # 温度パラメータを設定
             )
-            result: str = completion.choices[0].message.content or ""  # APIの応答からコンテンツを取得
+            result: str = (
+                completion.choices[0].message.content or ""
+            )  # APIの応答からコンテンツを取得
             # 結果から不要なXMLタグを除去します
             if result.startswith("<instruction>"):  # <instruction>タグで始まる場合
                 result = result[13:]  # タグを取り除く
             if result.endswith("</instruction>"):  # </instruction>タグで終わる場合
                 result = result[:-14]  # タグを取り除く
             result = result.strip()  # 前後の空白を削除
-            logging.info(f"APE.rewrite successful, result: \n{result}\n")  # デバッグログを出力
+            logging.info(
+                f"APE.rewrite successful, result: \n{result}\n"
+            )  # デバッグログを出力
             return result  # 書き換えられたプロンプトを返す
         # APIエラーをハンドル
         except groq.InternalServerError as e:
@@ -218,7 +260,9 @@ class APE:
                 if hasattr(e, "body") and isinstance(e.body, dict)
                 else str(e)
             )
-            logging.error(f"APE.rewrite - Groq InternalServerError: {error_message} (Details: {e})")
+            logging.error(
+                f"APE.rewrite - Groq InternalServerError: {error_message} (Details: {e})"
+            )
             return None
         except groq.APIError as e:
             error_message = (
@@ -226,7 +270,9 @@ class APE:
                 if hasattr(e, "body") and isinstance(e.body, dict)
                 else str(e)
             )
-            logging.error(f"APE.rewrite - Groq APIError: {error_message} (Details: {e})")
+            logging.error(
+                f"APE.rewrite - Groq APIError: {error_message} (Details: {e})"
+            )
             return None
         except Exception as e:
             logging.error(f"APE.rewrite - Unexpected error: {e}")
@@ -270,7 +316,9 @@ class APE:
         messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
-                "content": prompt.format(guide=PromptGuide, initial=initial_prompt, demo=example),
+                "content": prompt.format(
+                    guide=PromptGuide, initial=initial_prompt, demo=example
+                ),
             }
         ]
         try:
@@ -296,7 +344,9 @@ class APE:
                 if hasattr(e, "body") and isinstance(e.body, dict)
                 else str(e)
             )
-            logging.error(f"APE.generate_more - Groq InternalServerError: {error_message} (Details: {e})")
+            logging.error(
+                f"APE.generate_more - Groq InternalServerError: {error_message} (Details: {e})"
+            )
             return None
         except groq.APIError as e:
             error_message = (
@@ -304,7 +354,9 @@ class APE:
                 if hasattr(e, "body") and isinstance(e.body, dict)
                 else str(e)
             )
-            logging.error(f"APE.generate_more - Groq APIError: {error_message} (Details: {e})")
+            logging.error(
+                f"APE.generate_more - Groq APIError: {error_message} (Details: {e})"
+            )
             return None
         except Exception as e:
             logging.error(f"APE.generate_more - Unexpected error: {e}")

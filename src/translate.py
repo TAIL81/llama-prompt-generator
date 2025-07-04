@@ -1,13 +1,14 @@
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Mapping
+from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
-from groq import Groq
+from groq import Groq, RateLimitError, APIError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 # 環境変数を .env ファイルから読み込みます
@@ -157,23 +158,40 @@ class GuideBased:
                 "content": prompt.format(guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt),
             },
         ]  # LLMへのメッセージ
-        # Groq APIを使用してプロンプトの書き換えをリクエストします
-        completion = self.groq_client.chat.completions.create(
-            model=self.config.rewrite_model,
-            messages=messages,
-            max_completion_tokens=self.config.max_tokens,  # 最大トークン数
-            temperature=self.config.temperature_rewrite,  # 温度
-        )
-        result: str = completion.choices[0].message.content or ""  # LLMの応答 (handle None)
-        # LLMからの応答をデバッグ出力
-        logging.debug(f"__call__ LLM response: \n{result}\n")
-        # 結果から不要なXMLタグを除去します
-        if result.startswith("<instruction>"):  # 開始タグを除去
-            result = result[13:]
-        if result.endswith("</instruction>"):  # 終了タグを除去
-            result = result[:-14]
-        result = result.strip()
-        return result
+        max_retries = 3
+        backoff_factor = 2
+        retry_delay = 1
+        for attempt in range(max_retries):
+            try:
+                # Groq APIを使用してプロンプトの書き換えをリクエストします
+                completion = self.groq_client.chat.completions.create(
+                    model=self.config.rewrite_model,
+                    messages=messages,
+                    max_completion_tokens=self.config.max_tokens,  # 最大トークン数
+                    temperature=self.config.temperature_rewrite,  # 温度
+                )
+                result: str = completion.choices[0].message.content or ""  # LLMの応答 (handle None)
+                # LLMからの応答をデバッグ出力
+                logging.debug(f"__call__ LLM response: \n{result}\n")
+                # 結果から不要なXMLタグを除去します
+                if result.startswith("<instruction>"):  # 開始タグを除去
+                    result = result[13:]
+                if result.endswith("</instruction>"):  # 終了タグを除去
+                    result = result[:-14]
+                result = result.strip()
+                return result
+            except RateLimitError as e:
+                logging.warning(f"Rate limit exceeded in __call__. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                time.sleep(retry_delay)
+                retry_delay *= backoff_factor
+            except APIError as e:
+                logging.error(f"GuideBased.__call__ - Groq APIError: {e}")
+                return ""
+            except Exception as e:
+                logging.error(f"GuideBased.__call__ - Unexpected error: {e}")
+                return ""
+        logging.error("Max retries reached for __call__. Failed to get a response from Groq API.")
+        return ""
 
     def _validate_initial_prompt(self, initial_prompt: str) -> None:
         """
@@ -211,28 +229,43 @@ class GuideBased:
                 "content": prompt.format(document=initial_prompt, lang_example=lang_example),
             },
         ]
-        # Groq APIを使用して言語検出をリクエストします
-        completion = self.groq_client.chat.completions.create(
-            model=self.config.detect_lang_model,
-            messages=messages,
-            max_completion_tokens=self.config.max_tokens,
-            temperature=self.config.temperature_detect_lang,
-        )  # API呼び出し
-        # LLMからの応答をデバッグ出力
-        content = completion.choices[0].message.content
-        logging.debug(f"detect_lang LLM response: {content}")
-        if not content:
-            logging.error("No content in response for language detection")
-            lang = ""
-        else:
+        max_retries = 3
+        backoff_factor = 2
+        retry_delay = 1
+        for attempt in range(max_retries):
             try:
+                # Groq APIを使用して言語検出をリクエストします
+                completion = self.groq_client.chat.completions.create(
+                    model=self.config.detect_lang_model,
+                    messages=messages,
+                    max_completion_tokens=self.config.max_tokens,
+                    temperature=self.config.temperature_detect_lang,
+                )  # API呼び出し
+                # LLMからの応答をデバッグ出力
+                content = completion.choices[0].message.content
+                logging.debug(f"detect_lang LLM response: {content}")
+                if not content:
+                    logging.error("No content in response for language detection")
+                    return ""
                 # 結果のJSONをパースして言語コードを取得します
                 lang = json.loads(content)["lang"]  # 言語コードを抽出
-            except Exception as e:
+                return lang
+            except (json.JSONDecodeError, KeyError) as e:
                 # エラーが発生した場合は空文字列を返します
-                logging.error(f"Error detecting language: {e}")
-                lang = ""  # エラー時は空文字列
-        return lang
+                logging.error(f"Error parsing LLM response for language detection: {e}")
+                return ""
+            except RateLimitError as e:
+                logging.warning(f"Rate limit exceeded in detect_lang. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                time.sleep(retry_delay)
+                retry_delay *= backoff_factor
+            except APIError as e:
+                logging.error(f"GuideBased.detect_lang - Groq APIError: {e}")
+                return ""
+            except Exception as e:
+                logging.error(f"GuideBased.detect_lang - Unexpected error: {e}")
+                return ""
+        logging.error("Max retries reached for detect_lang. Failed to get a response from Groq API.")
+        return ""
 
     def judge(self, candidates: List[str]) -> Optional[int]:
         """
@@ -274,32 +307,45 @@ class GuideBased:
                 ),
             },
         ]
-        # Groq APIを使用してプロンプト候補の評価をリクエストします
-        completion = self.groq_client.chat.completions.create(
-            model=self.config.judge_model,
-            messages=messages,
-            max_completion_tokens=self.config.max_tokens,
-            temperature=self.config.temperature_judge,
-        )  # API呼び出し
-        # LLMからの応答をデバッグ出力
-        content = completion.choices[0].message.content
-        logging.debug(f"judge LLM response (raw): {content}")
-        final_result: Optional[int] = None
-        if not content:
-            logging.error("No content in response for judge")
-            return None
-        try:
-            result: Dict[str, str] = json.loads(content)  # JSONをパース
-            # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
-            for idx in range(len(candidates)):  # candidatesの長さに合わせてループ
-                if str(idx + 1) in result["Preferred"]:  # 優先される候補を特定
-                    final_result = idx
-                    break
-        except (json.JSONDecodeError, KeyError) as e:
-            # JSONパースエラーなどが発生した場合はNoneのまま
-            logging.error(f"Error parsing judge LLM response: {e}")
-            pass  # 何もしない
-        except Exception as e:
-            logging.error(f"Unexpected error in judge method: {e}")
-            pass  # 何もしない
-        return final_result
+        max_retries = 3
+        backoff_factor = 2
+        retry_delay = 1
+        for attempt in range(max_retries):
+            try:
+                # Groq APIを使用してプロンプト候補の評価をリクエストします
+                completion = self.groq_client.chat.completions.create(
+                    model=self.config.judge_model,
+                    messages=messages,
+                    max_completion_tokens=self.config.max_tokens,
+                    temperature=self.config.temperature_judge,
+                )  # API呼び出し
+                # LLMからの応答をデバッグ出力
+                content = completion.choices[0].message.content
+                logging.debug(f"judge LLM response (raw): {content}")
+                final_result: Optional[int] = None
+                if not content:
+                    logging.error("No content in response for judge")
+                    return None
+                result: Dict[str, str] = json.loads(content)  # JSONをパース
+                # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
+                for idx in range(len(candidates)):  # candidatesの長さに合わせてループ
+                    if str(idx + 1) in result["Preferred"]:  # 優先される候補を特定
+                        final_result = idx
+                        break
+                return final_result
+            except (json.JSONDecodeError, KeyError) as e:
+                # JSONパースエラーなどが発生した場合はNoneのまま
+                logging.error(f"Error parsing judge LLM response: {e}")
+                return None
+            except RateLimitError as e:
+                logging.warning(f"Rate limit exceeded in judge. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                time.sleep(retry_delay)
+                retry_delay *= backoff_factor
+            except APIError as e:
+                logging.error(f"GuideBased.judge - Groq APIError: {e}")
+                return None
+            except Exception as e:
+                logging.error(f"Unexpected error in judge method: {e}")
+                return None
+        logging.error("Max retries reached for judge. Failed to get a response from Groq API.")
+        return None
