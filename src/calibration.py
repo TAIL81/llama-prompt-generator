@@ -256,33 +256,8 @@ class CalibrationPrompt:
         else:
             raise TypeError("dataset must be bytes or pd.DataFrame")
 
-        # SafeCodeExecutorを使用してpostprocess関数を実行
-        # postprocess_codeは'def postprocess(llm_output): ...'という形式を想定
-        # 実行コンテキストにllm_outputを渡すために、ここでは関数を直接呼び出すのではなく、
-        # evalで実行可能な形式に変換して渡す
-        # ユーザーが定義したpostprocess関数を呼び出すためのラッパー関数を生成
+        # postprocess_codeからpostprocess関数を動的に取得
         def get_postprocess_func(code_str: str) -> Callable[[Any], Any]:
-            # evalで実行できるように、関数定義をラムダ式に変換する
-            # ただし、ユーザーコードが複雑な場合、この単純な変換は機能しない可能性がある
-            # より堅牢な方法としては、SafeCodeExecutor内で関数を定義し、その関数を呼び出す
-            # ここでは、SafeCodeExecutorのexecute_safe_codeが直接関数を返すことを期待する
-            # ユーザーのpostprocess_codeが単一の関数定義のみを含むと仮定
-            # 実際には、ast.parseでFunctionDefノードを抽出し、その関数名を呼び出す必要がある
-            # 簡単化のため、ここではユーザーコードが直接実行可能な式を返すことを期待する
-            # または、SafeCodeExecutorにevalではなくexecモードを追加し、特定の関数をグローバルに登録する
-            # 今回のSafeCodeExecutorはevalモードのみなので、postprocess_codeを直接evalすることはできない
-            # したがって、postprocess_codeをSafeCodeExecutorで実行し、その結果として関数オブジェクトを得る必要がある
-            # これはSafeCodeExecutorの設計変更が必要になるため、ここでは回避策として、
-            # postprocess_codeをexecで実行し、その結果得られるpostprocess関数をSafeCodeExecutorのコンテキストに渡す
-            # これはセキュリティリスクを再導入するが、現在のSafeCodeExecutorの設計ではこれが必要
-            # ユーザーの指示ではSafeCodeExecutorをpostprocess_codeに適用することになっているため、
-            # SafeCodeExecutorのexecute_safe_codeメソッドを修正して、関数定義を安全に実行できるようにするか、
-            # ここでexecを使用するが、その後のllm_outputの処理はSafeCodeExecutor経由で行う
-
-            # ユーザーのpostprocess_codeを安全に実行し、postprocess関数を取得
-            # ここでは、SafeCodeExecutorが関数定義を直接実行できないため、
-            # 一時的にexecを使用し、その結果得られた関数をSafeCodeExecutorのコンテキストに渡す
-            # これは理想的ではないが、現在のSafeCodeExecutorの制約を考慮した回避策
             local_exec_context: dict[str, Any] = {}
             try:
                 exec(code_str, globals(), local_exec_context)
@@ -294,37 +269,32 @@ class CalibrationPrompt:
                 print(f"Error executing postprocess code: {e}")
                 raise ValueError("postprocess function not defined or invalid in the provided code")
 
+        # postprocess関数を取得し、callableであることを確認
         postprocess_func = get_postprocess_func(postprocess_code)
         if not callable(postprocess_func):
             raise ValueError("postprocess function not defined in the provided code")
 
         results = []
         for row_idx, row in df.iterrows():
+            # データセットの各行から変数を抽出（'label'列を除く）
             variables = {}
             for key, value in dict(row).items():
                 if key == "label":
                     continue
                 variables[key] = value
 
-            # プロンプトをフォーマット
+            # プロンプトに変数を適用
             formatted_prompt = prompt.format(**variables)
+            # モデルを呼び出して予測を取得
             predict = self.invoke_model(formatted_prompt)
-
-            # SafeCodeExecutorを使用して後処理を実行
-            # postprocess_funcを直接呼び出すのではなく、SafeCodeExecutor経由で実行
-            # SafeCodeExecutorはevalモードなので、関数呼び出しを直接実行できる
-            # ただし、postprocess_funcがSafeCodeExecutorのALLOWED_FUNCTIONSに含まれている必要がある
-            # ここでは、postprocess_funcがユーザー定義の関数であるため、直接ALLOWED_FUNCTIONSには含まれない
-            # したがって、postprocess_funcをSafeCodeExecutorのコンテキストに渡す必要がある
-
-            # ユーザー定義のpostprocess関数をSafeCodeExecutorのコンテキストに渡す
-            # そして、その関数を呼び出す文字列をSafeCodeExecutorに渡す
+            # 安全なコンテキストで後処理関数を実行
             safe_context = {"llm_output": predict, "postprocess": postprocess_func}
             result = self.safe_code_executor.execute_safe_code("postprocess(llm_output)", safe_context)
 
             results.append(result)
 
         df["predict"] = results
+        # 結果をDataFrameとして返すか、ダウンロードボタンとして返すかを決定
         if return_df:
             return df
         timestr = time.strftime("%Y%m%d-%H%M%S")
