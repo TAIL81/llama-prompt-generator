@@ -7,12 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 import groq  # Import the groq module to access specific error types
-import nest_asyncio # nest_asyncioをインポート
 from groq import AsyncGroq, Groq, RateLimitError, APIError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
-
-# nest_asyncioを適用して、既に実行中のイベントループ内で新しいイベントループをネストできるようにします
-nest_asyncio.apply()
 
 groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
 if not groq_api_key:
@@ -42,7 +38,7 @@ class Rater:
     def __init__(self) -> None:
         self.config = GroqConfig()
 
-    def __call__(
+    async def __call__(
         self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]
     ) -> Optional[int]:
         """
@@ -69,7 +65,7 @@ class Rater:
             ]
 
             # nest_asyncioが適用されているため、asyncio.run()を安全に呼び出せます
-            outputs = asyncio.run(self._get_outputs_parallel(unrated_prompts))
+            outputs = await self._get_outputs_parallel(unrated_prompts)
 
             for i, output in zip(unrated_candidates_indices, outputs):
                 candidates[i]["input"] = self._replace_placeholders(candidates[i]["prompt"], demo_data)
@@ -232,29 +228,27 @@ class Rater:
                         break
 
                 if final_result is None:
-                    logging.warning(
-                        "Rater.rater - LLM did not return a clear preferred choice. Falling back to random choice."
+                    logging.error(
+                        "Rater.rater - LLM did not return a clear preferred choice."
                     )
-                    final_result = random.randint(0, len(candidates) - 1)
+                    raise ValueError("LLM did not return a clear preferred choice.")
 
                 logging.info(f"Rater.rater successful, result: {final_result}")
                 return final_result
 
             except (json.JSONDecodeError, KeyError) as e:
                 logging.error(f"Rater.rater - Error parsing LLM response or key error: {e}")
-                logging.warning("Rater.rater - Falling back to random choice due to parsing error.")
-                return random.randint(0, len(candidates) - 1) if candidates else None
+                raise ValueError(f"Error parsing LLM response or key error: {e}")
             except RateLimitError as e:
                 logging.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
                 logging.error(f"Rater.rater - Groq APIError: {e}")
-                return random.randint(0, len(candidates) - 1) if candidates else None
+                raise ValueError(f"Groq APIError: {e}")
             except Exception as e:
                 logging.error(f"Rater.rater - Unexpected error during LLM rating: {e}")
-                logging.warning("Rater.rater - Falling back to random choice due to unexpected error.")
-                return random.randint(0, len(candidates) - 1) if candidates else None
+                raise ValueError(f"Unexpected error during LLM rating: {e}")
         logging.error("Max retries reached for rater. Failed to get a response from Groq API.")
-        return random.randint(0, len(candidates) - 1) if candidates else None
+        raise ValueError("Max retries reached for rater. Failed to get a response from Groq API.")
 

@@ -463,12 +463,11 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
 
 
 # メタプロンプト出力に対して APE を実行する関数
-def run_ape_on_metaprompt_output(metaprompt_template: str, metaprompt_variables_str: str) -> Tuple[str, str]:
+async def run_ape_on_metaprompt_output(metaprompt_template: str, metaprompt_variables_str: str) -> Tuple[str, str]:
     """
     メタプロンプトで生成されたテンプレートと変数文字列を元に APE を実行します。
 
     Args:
-        metaprompt_template (str): メタプロンプトによって生成されたプロンプトテンプレート。
         metaprompt_template (str): メタプロンプトによって生成されたプロンプトテンプレート。
         metaprompt_variables_str (str): 改行区切りの変数名文字列 (例: "VAR1\nVAR2")。
                                          metaprompt.py の修正により、変数名の中身のみが含まれます。
@@ -479,20 +478,22 @@ def run_ape_on_metaprompt_output(metaprompt_template: str, metaprompt_variables_
     variable_names = [var for var in metaprompt_variables_str.split("\n") if var]
     demo_data = {}
     if not variable_names:
-        # 変数がない場合、APEが実行できるようにダミーデータを生成
-        # このダミーデータはAPEのバリデーションを通過させるためのもので、実際の評価には影響しない
         demo_data = {"{{DUMMY_VARIABLE}}": "dummy_value"}
         logging.warning("メタプロンプトの変数が空のため、APE用にダミーデータを生成しました。")
     else:
         for var_name in variable_names:
-            # APEはプロンプト内の {{VAR_NAME}} 形式の変数を期待し、demo_dataのキーもそれに合わせる
-            placeholder_key_for_ape = f"{{{{{var_name}}}}}"  # 例: {{CUSTOMER_COMPLAINT}}
-            demo_data[placeholder_key_for_ape] = f"dummy_{var_name.lower()}"  # APE評価用のダミーデータ
+            placeholder_key_for_ape = f"{{{{{var_name}}}}}"
+            demo_data[placeholder_key_for_ape] = f"dummy_{var_name.lower()}"
 
     try:
-        # APEを実行 (epoch=1は固定)
-        result_dict = ape(initial_prompt=metaprompt_template, epoch=1, demo_data=demo_data)
-        return result_dict["prompt"], metaprompt_variables_str  # variables_result は変更しない
+        result_dict = await ape(initial_prompt=metaprompt_template, epoch=1, demo_data=demo_data)
+        if result_dict and isinstance(result_dict.get("prompt"), str):
+            prompt = result_dict["prompt"]
+            return prompt, metaprompt_variables_str
+        else:
+            error_info = result_dict.get("error", "APE returned invalid data") if result_dict else "APE returned None"
+            logging.error(f"APE実行エラー: {error_info}")
+            return f"エラー: {error_info}", metaprompt_variables_str
     except ValueError as e:
         error_message = str(e)
         logging.error(f"APE実行エラー: {error_message}")
