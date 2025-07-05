@@ -19,152 +19,10 @@ from sklearn.metrics import confusion_matrix  # 混同行列の計算に使用
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
+from app import SafeCodeExecutor
+
 # スクリプト (calibration.py) が置かれているディレクトリの絶対パス
 _CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-# セキュリティ改善: 制限付きコード実行クラス (app.pyからコピー)
-class SafeCodeExecutor:
-    ALLOWED_NODES = (
-        ast.Expression,
-        ast.Call,
-        ast.Name,
-        ast.Load,
-        ast.Constant,
-        ast.Tuple,
-        ast.List,
-        ast.Dict,
-        ast.Set,
-        ast.Attribute,
-        ast.Subscript,
-        ast.Index,
-        ast.Slice,
-    )
-    ALLOWED_FUNCTIONS = {
-        "len": len,
-        "str": str,
-        "int": int,
-        "float": float,
-        "bool": bool,
-        "list": list,
-        "dict": dict,
-        "set": set,
-        "tuple": tuple,
-        "min": min,
-        "max": max,
-        "sum": sum,
-        "abs": abs,
-        "round": round,
-        "range": range,
-        "zip": zip,
-        "map": map,
-        "filter": filter,
-        "sorted": sorted,
-        "all": all,
-        "any": any,
-        "getattr": getattr,  # 属性アクセスを許可
-        "hasattr": hasattr,
-        "isinstance": isinstance,
-        "issubclass": issubclass,
-        "type": type,
-        "print": print,  # デバッグ用にprintを許可
-    }
-    ALLOWED_OPERATORS = {
-        ast.Add: operator.add,
-        ast.Sub: operator.sub,
-        ast.Mult: operator.mul,
-        ast.Div: operator.truediv,
-        ast.FloorDiv: operator.floordiv,
-        ast.Mod: operator.mod,
-        ast.Pow: operator.pow,
-        ast.LShift: operator.lshift,
-        ast.RShift: operator.rshift,
-        ast.BitOr: operator.or_,
-        ast.BitXor: operator.xor,
-        ast.BitAnd: operator.and_,
-        ast.USub: operator.neg,
-        ast.UAdd: operator.pos,
-        ast.Not: operator.not_,
-        ast.Eq: operator.eq,
-        ast.NotEq: operator.ne,
-        ast.Lt: operator.lt,
-        ast.LtE: operator.le,
-        ast.Gt: operator.gt,
-        ast.GtE: operator.ge,
-        ast.Is: operator.is_,
-        ast.IsNot: operator.is_not,
-        ast.In: operator.contains,
-        ast.NotIn: lambda a, b: not operator.contains(a, b),
-    }
-
-    def execute_safe_code(self, code_str: str, context: dict[str, Any]) -> Any:
-        try:
-            tree = ast.parse(code_str, mode="eval")
-
-            for node in ast.walk(tree):
-                if not isinstance(node, self.ALLOWED_NODES):
-                    raise ValueError(f"許可されていないASTノードタイプが含まれています: {type(node).__name__}")
-                if isinstance(node, ast.Call):
-                    if not isinstance(node.func, ast.Name) or node.func.id not in self.ALLOWED_FUNCTIONS:
-                        raise ValueError(
-                            f"許可されていない関数呼び出しが含まれています: {node.func.id if isinstance(node.func, ast.Name) else 'unknown'}"
-                        )
-                if isinstance(
-                    node,
-                    (
-                        ast.Import,
-                        ast.ImportFrom,
-                        ast.Lambda,
-                        ast.GeneratorExp,
-                        ast.ListComp,
-                        ast.SetComp,
-                        ast.DictComp,
-                        ast.AsyncFunctionDef,
-                        ast.Await,
-                        ast.Yield,
-                        ast.YieldFrom,
-                        ast.Starred,
-                        ast.AnnAssign,
-                        ast.AugAssign,
-                        ast.For,
-                        ast.AsyncFor,
-                        ast.While,
-                        ast.If,
-                        ast.With,
-                        ast.AsyncWith,
-                        ast.Raise,
-                        ast.Try,
-                        ast.Assert,
-                        ast.Delete,
-                        ast.Pass,
-                        ast.Break,
-                        ast.Continue,
-                        ast.Global,
-                        ast.Nonlocal,
-                        ast.ClassDef,
-                        ast.FunctionDef,
-                    ),
-                ):
-                    raise ValueError(f"許可されていない操作が含まれています: {type(node).__name__}")
-                if isinstance(node, (ast.BinOp, ast.UnaryOp)):
-                    op_type = type(node.op)
-                    if op_type not in self.ALLOWED_OPERATORS:
-                        raise ValueError(f"許可されていない演算子が含まれています: {type(node.op).__name__}")
-                elif isinstance(node, ast.Compare):
-                    for op in node.ops:
-                        op_type_compare: Any = type(op)
-                        if op_type_compare not in self.ALLOWED_OPERATORS:
-                            raise ValueError(f"許可されていない演算子が含まれています: {op_type_compare.__name__}")
-
-            # 実行コンテキストを制限
-            safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}
-            safe_globals.update(context)
-
-            return eval(compile(tree, "<string>", "eval"), safe_globals, safe_globals)
-        except Exception as e:
-            # logging.error(f"コード実行エラー: {e}") # calibration.pyにはloggingがないため、ここではprintを使用
-            print(f"コード実行エラー: {e}")
-            return None
 
 
 # プロジェクトのルートディレクトリ (srcディレクトリの親)
@@ -256,23 +114,47 @@ class CalibrationPrompt:
         else:
             raise TypeError("dataset must be bytes or pd.DataFrame")
 
-        # postprocess_codeからpostprocess関数を動的に取得
+        # postprocess_codeからpostprocess関数を動的に取得 (安全性を強化)
         def get_postprocess_func(code_str: str) -> Callable[[Any], Any]:
+            try:
+                # コードをASTにパース
+                tree = ast.parse(code_str, mode='exec')
+
+                # 悪意のある可能性のある操作をチェック
+                for node in ast.walk(tree):
+                    # 許可するノードタイプを定義
+                    allowed_node_types = self.safe_code_executor.ALLOWED_NODES + (
+                        ast.FunctionDef, ast.Return, ast.Module, ast.arguments, ast.arg
+                    )
+                    if not isinstance(node, allowed_node_types):
+                        raise ValueError(f"許可されていないASTノードタイプが含まれています: {type(node).__name__}")
+
+                    # 危険な組み込み関数の呼び出しをチェック
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                        if node.func.id not in self.safe_code_executor.ALLOWED_FUNCTIONS:
+                            raise ValueError(f"許可されていない関数呼び出しが含まれています: {node.func.id}")
+                    
+                    # import文を禁止
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        raise ValueError("Import statements are not allowed in postprocess code.")
+
+            except (SyntaxError, ValueError) as e:
+                raise ValueError(f"後処理コードの検証に失敗しました: {e}")
+
+
             local_exec_context: dict[str, Any] = {}
             try:
-                exec(code_str, globals(), local_exec_context)
+                # 検証済みコードの実行
+                exec(code_str, {"__builtins__": self.safe_code_executor.ALLOWED_FUNCTIONS}, local_exec_context)
                 postprocess_func = local_exec_context.get("postprocess")
                 if not callable(postprocess_func):
-                    raise ValueError("postprocess function not defined or invalid in the provided code")
+                    raise ValueError("postprocess関数がコード内で定義されていないか、無効です。")
                 return postprocess_func
             except Exception as e:
-                print(f"Error executing postprocess code: {e}")
-                raise ValueError("postprocess function not defined or invalid in the provided code")
+                raise ValueError(f"後処理コードの実行中にエラーが発生しました: {e}")
 
         # postprocess関数を取得し、callableであることを確認
         postprocess_func = get_postprocess_func(postprocess_code)
-        if not callable(postprocess_func):
-            raise ValueError("postprocess function not defined in the provided code")
 
         results = []
         for row_idx, row in df.iterrows():
