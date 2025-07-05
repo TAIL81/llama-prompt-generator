@@ -8,14 +8,16 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
-from groq import Groq, RateLimitError, APIError
+from groq import APIError, Groq, RateLimitError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 # 環境変数を .env ファイルから読み込みます
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 @dataclass
@@ -155,7 +157,9 @@ class GuideBased:
         messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
-                "content": prompt.format(guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt),
+                "content": prompt.format(
+                    guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt
+                ),
             },
         ]  # LLMへのメッセージ
         max_retries = 3
@@ -170,7 +174,9 @@ class GuideBased:
                     max_completion_tokens=self.config.max_tokens,  # 最大トークン数
                     temperature=self.config.temperature_rewrite,  # 温度
                 )
-                result: str = completion.choices[0].message.content or ""  # LLMの応答 (handle None)
+                result: str = (
+                    completion.choices[0].message.content or ""
+                )  # LLMの応答 (handle None)
                 # LLMからの応答をデバッグ出力
                 logging.debug(f"__call__ LLM response: \n{result}\n")
                 # 結果から不要なXMLタグを除去します
@@ -181,7 +187,9 @@ class GuideBased:
                 result = result.strip()
                 return result
             except RateLimitError as e:
-                logging.warning(f"Rate limit exceeded in __call__. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                logging.warning(
+                    f"Rate limit exceeded in __call__. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
@@ -190,7 +198,9 @@ class GuideBased:
             except Exception as e:
                 logging.error(f"GuideBased.__call__ - Unexpected error: {e}")
                 return ""
-        logging.error("Max retries reached for __call__. Failed to get a response from Groq API.")
+        logging.error(
+            "Max retries reached for __call__. Failed to get a response from Groq API."
+        )
         return ""
 
     def _validate_initial_prompt(self, initial_prompt: str) -> None:
@@ -226,7 +236,9 @@ class GuideBased:
         messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "user",
-                "content": prompt.format(document=initial_prompt, lang_example=lang_example),
+                "content": prompt.format(
+                    document=initial_prompt, lang_example=lang_example
+                ),
             },
         ]
         max_retries = 3
@@ -255,7 +267,9 @@ class GuideBased:
                 logging.error(f"Error parsing LLM response for language detection: {e}")
                 return ""
             except RateLimitError as e:
-                logging.warning(f"Rate limit exceeded in detect_lang. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                logging.warning(
+                    f"Rate limit exceeded in detect_lang. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
@@ -264,7 +278,9 @@ class GuideBased:
             except Exception as e:
                 logging.error(f"GuideBased.detect_lang - Unexpected error: {e}")
                 return ""
-        logging.error("Max retries reached for detect_lang. Failed to get a response from Groq API.")
+        logging.error(
+            "Max retries reached for detect_lang. Failed to get a response from Groq API."
+        )
         return ""
 
     def judge(self, candidates: List[str]) -> Optional[int]:
@@ -279,7 +295,9 @@ class GuideBased:
         """
         Instruction_prompts: List[str] = []
         for idx, candidate in enumerate(candidates):  # 各候補を処理
-            Instruction_prompts.append(f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>")
+            Instruction_prompts.append(
+                f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>"
+            )
         example: str = json.dumps({"Preferred": "Instruction 1"})
         # プロンプト評価のための指示テンプレート
         prompt: str = (
@@ -338,7 +356,9 @@ class GuideBased:
                 logging.error(f"Error parsing judge LLM response: {e}")
                 return None
             except RateLimitError as e:
-                logging.warning(f"Rate limit exceeded in judge. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                logging.warning(
+                    f"Rate limit exceeded in judge. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
@@ -347,5 +367,7 @@ class GuideBased:
             except Exception as e:
                 logging.error(f"Unexpected error in judge method: {e}")
                 return None
-        logging.error("Max retries reached for judge. Failed to get a response from Groq API.")
+        logging.error(
+            "Max retries reached for judge. Failed to get a response from Groq API."
+        )
         return None

@@ -1,5 +1,5 @@
-import logging
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -16,7 +16,9 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 # ロギング設定
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 @dataclass
@@ -86,20 +88,29 @@ class MetaPrompt:
         # 基本的なメタプロンプトを読み込み、タスクで置き換える
         prompt: str = self.metaprompt.replace("{{TASK}}", task)
         # Prompt に日本語での書き換え指示を追加
-        prompt += "\nPlease use Japanese for rewriting. The xml tag name is still in English."
+        prompt += (
+            "\nPlease use Japanese for rewriting. The xml tag name is still in English."
+        )
 
         # API に送信するメッセージを準備。system ロールは使用しない
         assistant_partial: str = "<Inputs>"
         if variable_string:
-            assistant_partial += variable_string + "\n</Inputs>\n<Instructions Structure>"
+            assistant_partial += (
+                variable_string + "\n</Inputs>\n<Instructions Structure>"
+            )
 
         messages: List[ChatCompletionMessageParam] = [
             {"role": "user", "content": prompt},  # ユーザーの質問（メタプロンプト）
-            {"role": "assistant", "content": assistant_partial},  # アシスタントの途中応答（変数リストと指示）
+            {
+                "role": "assistant",
+                "content": assistant_partial,
+            },  # アシスタントの途中応答（変数リストと指示）
         ]
 
         # Groq API を呼び出してプロンプトを生成
-        logging.info(f"MetaPrompt Request JSON: {json.dumps(messages, ensure_ascii=False, indent=2)}")
+        logging.info(
+            f"MetaPrompt Request JSON: {json.dumps(messages, ensure_ascii=False, indent=2)}"
+        )
 
         # Groq API を呼び出して応答を生成
         # ロギング: API 呼び出しの詳細をログに記録
@@ -109,7 +120,7 @@ class MetaPrompt:
         # API 呼び出しと応答処理
         completion = self.groq_client.chat.completions.create(
             model=self.config.metaprompt_model,
-            messages=messages, 
+            messages=messages,
             max_completion_tokens=self.config.max_tokens,
             temperature=self.config.temperature,
         )
@@ -138,7 +149,9 @@ class MetaPrompt:
             # 変数が空の場合でもエラーとしない（空リストとして扱う）
             raise ValueError("変数が空です")
 
-    def extract_between_tags(self, tag: str, string: str, strip: bool = False) -> List[str]:
+    def extract_between_tags(
+        self, tag: str, string: str, strip: bool = False
+    ) -> List[str]:
         """
         文字列内から指定されたタグに囲まれた部分を抽出します。
 
@@ -172,7 +185,9 @@ class MetaPrompt:
             str: 抽出されたプロンプト指示。
         """
         # <Instructions> タグ内のコンテンツを取得し、前後の空白を削除します。
-        instructions_list: List[str] = self.extract_between_tags("Instructions", metaprompt_response, strip=True)
+        instructions_list: List[str] = self.extract_between_tags(
+            "Instructions", metaprompt_response, strip=True
+        )
 
         if instructions_list and instructions_list[0]:
             # 抽出されたコンテンツが空でなければ、それを返します。

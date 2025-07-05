@@ -4,10 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from groq import Groq
-from groq.types.chat import (
-    ChatCompletionMessageParam,
-    ChatCompletionUserMessageParam,
-)
+from groq.types.chat import ChatCompletionMessageParam, ChatCompletionUserMessageParam
 
 load_dotenv()
 
@@ -29,7 +26,9 @@ class SOEPrompt:
             return base64.b64encode(image_file.read()).decode("utf-8")
 
     def run_multi_modal_prompt(
-        self, messages: List[ChatCompletionMessageParam], max_completion_tokens: int = 8192
+        self,
+        messages: List[ChatCompletionMessageParam],
+        max_completion_tokens: int = 8192,
     ) -> Dict[str, List[Dict[str, str]]]:
         # Groqは画像入力未対応のため、テキストのみ対応
         completion: Any = self.groq_client.chat.completions.create(
@@ -41,10 +40,13 @@ class SOEPrompt:
         return {"content": [{"text": completion.choices[0].message.content}]}
 
     def generate_groq_response(self, prompt: str) -> str:
-        messages: List[ChatCompletionMessageParam] = [{"role": "system", "content": self.system}, {"role": "user", "content": prompt}]
+        messages: List[ChatCompletionMessageParam] = [
+            {"role": "system", "content": self.system},
+            {"role": "user", "content": prompt},
+        ]
         completion = self.groq_client.chat.completions.create(
             model=self.model_id,
-            messages=messages, 
+            messages=messages,
             max_completion_tokens=8192,
         )
         return completion.choices[0].message.content or ""
@@ -70,7 +72,9 @@ class SOEPrompt:
                     },
                     {
                         "type": "image_url",
-                        "image_url": {"url": f"data:{media_type};base64,{encoded_image}"},
+                        "image_url": {
+                            "url": f"data:{media_type};base64,{encoded_image}"
+                        },
                     },
                 ],
             }
@@ -136,7 +140,12 @@ class SOEPrompt:
         else:
             image_path = None
         product_description = self.generate_product_description(
-            product_category, brand_name, usage_description, target_customer, image_path, media_type
+            product_category,
+            brand_name,
+            usage_description,
+            target_customer,
+            image_path,
+            media_type,
         )
 
         return product_description

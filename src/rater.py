@@ -6,8 +6,9 @@ import random
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
+
 import groq  # Import the groq module to access specific error types
-from groq import AsyncGroq, Groq, RateLimitError, APIError
+from groq import APIError, AsyncGroq, Groq, RateLimitError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
@@ -20,7 +21,9 @@ async_groq_client = AsyncGroq(api_key=groq_api_key, timeout=600.0)
 # 同期Groqクライアントを初期化
 sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 @dataclass
@@ -39,7 +42,10 @@ class Rater:
         self.config = GroqConfig()
 
     async def __call__(
-        self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]
+        self,
+        initial_prompt: str,
+        candidates: List[Dict[str, str]],
+        demo_data: Dict[str, str],
     ) -> Optional[int]:
         """
         複数のプロンプト候補を評価し、最も良いものを選択します。
@@ -56,19 +62,24 @@ class Rater:
         self._validate_inputs(initial_prompt, candidates, demo_data)
 
         # 既に評価済みの候補を特定
-        unrated_candidates_indices = [i for i, candidate in enumerate(candidates) if "output" not in candidate]
+        unrated_candidates_indices = [
+            i for i, candidate in enumerate(candidates) if "output" not in candidate
+        ]
 
         # 未評価の候補に対して非同期で出力を取得
         if unrated_candidates_indices:
             unrated_prompts = [
-                self._replace_placeholders(candidates[i]["prompt"], demo_data) for i in unrated_candidates_indices  # 未評価のプロンプトをデモデータで置換
+                self._replace_placeholders(candidates[i]["prompt"], demo_data)
+                for i in unrated_candidates_indices  # 未評価のプロンプトをデモデータで置換
             ]
 
             # nest_asyncioが適用されているため、asyncio.run()を安全に呼び出せます
             outputs = await self._get_outputs_parallel(unrated_prompts)
 
             for i, output in zip(unrated_candidates_indices, outputs):
-                candidates[i]["input"] = self._replace_placeholders(candidates[i]["prompt"], demo_data)
+                candidates[i]["input"] = self._replace_placeholders(
+                    candidates[i]["prompt"], demo_data
+                )
                 if isinstance(output, str):
                     candidates[i]["output"] = output  # 候補の入力と出力を格納
                 else:
@@ -83,7 +94,10 @@ class Rater:
         return rate
 
     def _validate_inputs(
-        self, initial_prompt: str, candidates: List[Dict[str, str]], demo_data: Dict[str, str]
+        self,
+        initial_prompt: str,
+        candidates: List[Dict[str, str]],
+        demo_data: Dict[str, str],
     ) -> None:
         """
         入力パラメータの検証を行います。
@@ -116,7 +130,9 @@ class Rater:
 
     async def _get_output_async(self, prompt: str) -> Optional[str]:
         """指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。"""
-        messages: List[ChatCompletionMessageParam] = [{"role": "user", "content": prompt}]
+        messages: List[ChatCompletionMessageParam] = [
+            {"role": "user", "content": prompt}
+        ]
         max_retries = 3
         backoff_factor = 2
         retry_delay = 1
@@ -134,7 +150,9 @@ class Rater:
                 logging.info(f"Rater._get_output_async successful, result: {result}")
                 return result
             except RateLimitError as e:
-                logging.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                logging.warning(
+                    f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                )
                 await asyncio.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
@@ -143,10 +161,14 @@ class Rater:
             except Exception as e:
                 logging.error(f"Rater._get_output_async - Unexpected error: {e}")
                 return None
-        logging.error("Max retries reached for _get_output_async. Failed to get a response from Groq API.")
+        logging.error(
+            "Max retries reached for _get_output_async. Failed to get a response from Groq API."
+        )
         return None
 
-    def rater(self, initial_prompt: str, candidates: List[Dict[str, str]]) -> Optional[int]:
+    def rater(
+        self, initial_prompt: str, candidates: List[Dict[str, str]]
+    ) -> Optional[int]:
         """
         Groqモデルを使用して、複数の候補応答の中から最も良いものを評価させます。
 
@@ -158,7 +180,9 @@ class Rater:
             Optional[int]: 最も良いと評価された候補のインデックス。エラー時はNone。
         """
         if not candidates:
-            logging.debug("Rater.rater - No candidates provided for LLM rating. Returning None.")
+            logging.debug(
+                "Rater.rater - No candidates provided for LLM rating. Returning None."
+            )
             return None
 
         rater_example: str = json.dumps({"Preferred": "Response 1"})
@@ -237,10 +261,14 @@ class Rater:
                 return final_result
 
             except (json.JSONDecodeError, KeyError) as e:
-                logging.error(f"Rater.rater - Error parsing LLM response or key error: {e}")
+                logging.error(
+                    f"Rater.rater - Error parsing LLM response or key error: {e}"
+                )
                 raise ValueError(f"Error parsing LLM response or key error: {e}")
             except RateLimitError as e:
-                logging.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                logging.warning(
+                    f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
@@ -249,6 +277,9 @@ class Rater:
             except Exception as e:
                 logging.error(f"Rater.rater - Unexpected error during LLM rating: {e}")
                 raise ValueError(f"Unexpected error during LLM rating: {e}")
-        logging.error("Max retries reached for rater. Failed to get a response from Groq API.")
-        raise ValueError("Max retries reached for rater. Failed to get a response from Groq API.")
-
+        logging.error(
+            "Max retries reached for rater. Failed to get a response from Groq API."
+        )
+        raise ValueError(
+            "Max retries reached for rater. Failed to get a response from Groq API."
+        )

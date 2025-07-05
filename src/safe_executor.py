@@ -3,6 +3,7 @@ import logging
 import operator
 from typing import Any, Callable, Dict, Type, Union
 
+
 class SafeCodeExecutor:
     """安全なPythonコード実行環境を提供するクラス。
 
@@ -55,13 +56,31 @@ class SafeCodeExecutor:
         "print": print,
     }
     OperatorType = Union[
-        Type[ast.Add], Type[ast.Sub], Type[ast.Mult], Type[ast.Div],
-        Type[ast.FloorDiv], Type[ast.Mod], Type[ast.Pow], Type[ast.LShift],
-        Type[ast.RShift], Type[ast.BitOr], Type[ast.BitXor], Type[ast.BitAnd],
-        Type[ast.USub], Type[ast.UAdd], Type[ast.Not], Type[ast.Eq],
-        Type[ast.NotEq], Type[ast.Lt], Type[ast.LtE], Type[ast.Gt],
-        Type[ast.GtE], Type[ast.Is], Type[ast.IsNot], Type[ast.In],
-        Type[ast.NotIn]
+        Type[ast.Add],
+        Type[ast.Sub],
+        Type[ast.Mult],
+        Type[ast.Div],
+        Type[ast.FloorDiv],
+        Type[ast.Mod],
+        Type[ast.Pow],
+        Type[ast.LShift],
+        Type[ast.RShift],
+        Type[ast.BitOr],
+        Type[ast.BitXor],
+        Type[ast.BitAnd],
+        Type[ast.USub],
+        Type[ast.UAdd],
+        Type[ast.Not],
+        Type[ast.Eq],
+        Type[ast.NotEq],
+        Type[ast.Lt],
+        Type[ast.LtE],
+        Type[ast.Gt],
+        Type[ast.GtE],
+        Type[ast.Is],
+        Type[ast.IsNot],
+        Type[ast.In],
+        Type[ast.NotIn],
     ]
     ALLOWED_OPERATORS: Dict[OperatorType, Callable[..., Any]] = {
         ast.Add: operator.add,
@@ -105,10 +124,13 @@ class SafeCodeExecutor:
 
             for node in ast.walk(tree):
                 if not isinstance(node, self.ALLOWED_NODES):
-                    raise ValueError(f"許可されていないASTノードタイプが含まれています: {type(node).__name__}")
+                    raise ValueError(
+                        f"許可されていないASTノードタイプが含まれています: {type(node).__name__}"
+                    )
                 if isinstance(node, ast.Call):
                     if (
-                        not isinstance(node.func, ast.Name) or node.func.id not in self.ALLOWED_FUNCTIONS
+                        not isinstance(node.func, ast.Name)
+                        or node.func.id not in self.ALLOWED_FUNCTIONS
                     ):
                         raise ValueError(
                             f"許可されていない関数呼び出しが含まれています: {node.func.id if isinstance(node.func, ast.Name) else 'unknown'}"
@@ -149,16 +171,22 @@ class SafeCodeExecutor:
                         ast.FunctionDef,
                     ),
                 ):
-                    raise ValueError(f"許可されていない操作が含まれています: {type(node).__name__}")
+                    raise ValueError(
+                        f"許可されていない操作が含まれています: {type(node).__name__}"
+                    )
                 if isinstance(node, (ast.BinOp, ast.UnaryOp)):
                     op_type: Type[ast.AST] = type(node.op)
                     if op_type not in self.ALLOWED_OPERATORS:
-                        raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
+                        raise ValueError(
+                            f"許可されていない演算子が含まれています: {op_type.__name__}"
+                        )
                 elif isinstance(node, ast.Compare):
                     for op in node.ops:
                         op_type = type(op)
                         if op_type not in self.ALLOWED_OPERATORS:
-                            raise ValueError(f"許可されていない演算子が含まれています: {op_type.__name__}")
+                            raise ValueError(
+                                f"許可されていない演算子が含まれています: {op_type.__name__}"
+                            )
 
             safe_globals = {"__builtins__": self.ALLOWED_FUNCTIONS}
             safe_globals.update(context)

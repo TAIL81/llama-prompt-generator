@@ -5,14 +5,16 @@ from pathlib import Path
 from typing import Any, Dict, Generator, Optional, Tuple, Union
 
 import gradio as gr  # Gradioをインポート
+import httpx
 from dotenv import load_dotenv
 from groq import Groq
-import httpx
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
 
 # ロギング設定
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # 環境変数の読み込み
 env_path = Path(__file__).parent.parent / ".env"
@@ -93,7 +95,9 @@ groq_api_key = os.getenv("GROQ_API_KEY")
 
 # プロンプトの最適化と評価を行うクラス
 class Alignment:
-    def __init__(self, lang_store: Optional[Dict[str, str]] = None, language: str = "ja") -> None:
+    def __init__(
+        self, lang_store: Optional[Dict[str, str]] = None, language: str = "ja"
+    ) -> None:
         self.lang_store: Optional[Dict[str, str]] = lang_store
         self.language = language
 
@@ -127,7 +131,9 @@ class Alignment:
             "generation", "Please generate the response in English."
         )
         system_prompt_suffix: str = (
-            f"\n{self.generation_language_instruction}" if hasattr(self, "generation_language_instruction") else ""
+            f"\n{self.generation_language_instruction}"
+            if hasattr(self, "generation_language_instruction")
+            else ""
         )
         self.groq_system_content: str = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
         self.OpenAI_system_content: str = DEFAULT_SYSTEM_TEMPLATE + system_prompt_suffix
@@ -140,14 +146,17 @@ class Alignment:
                 language_instruction_for_evaluation=self.evaluation_language_instruction
             )
         if hasattr(self, "revision_language_instruction"):
-            self.generate_revised_prompt_template = self.generate_revised_prompt_template.format(
-                language_instruction_for_revision=self.revision_language_instruction
+            self.generate_revised_prompt_template = (
+                self.generate_revised_prompt_template.format(
+                    language_instruction_for_revision=self.revision_language_instruction
+                )
             )
         self.evaluation_language_instruction: str = language_instructions.get(
             "evaluation", "Please generate the feedback and recommendations in English."
         )
         self.revision_language_instruction: str = language_instructions.get(
-            "revision", "Please generate the revised prompt in English. XML tag names should remain in English."
+            "revision",
+            "Please generate the revised prompt in English. XML tag names should remain in English.",
         )
 
     def _validate_response(self, response: ChatCompletion) -> bool:
@@ -161,13 +170,20 @@ class Alignment:
         )
 
     def _generate_response(
-        self, client: Union[OpenAI, Groq], model_id: str, system_content: str, user_prompt: str
+        self,
+        client: Union[OpenAI, Groq],
+        model_id: str,
+        system_content: str,
+        user_prompt: str,
     ) -> str:
         """APIクライアントを使用して応答を生成する共通メソッド"""
         try:
             completion: Any = client.chat.completions.create(
                 model=model_id,
-                messages=[{"role": "system", "content": system_content}, {"role": "user", "content": user_prompt}],
+                messages=[
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": user_prompt},
+                ],
                 temperature=TEMPERATURE,
                 max_tokens=MAX_TOKENS,
             )  # Groq API を呼び出し、応答を生成
@@ -184,19 +200,25 @@ class Alignment:
         """Groq APIを使用して応答を生成"""
         if not self.groq_client:
             return "GroqError: API client not initialized. Check GROQ_API_KEY."
-        return self._generate_response(self.groq_client, model_id, self.groq_system_content, prompt)
+        return self._generate_response(
+            self.groq_client, model_id, self.groq_system_content, prompt
+        )
 
     def generate_OpenAI_response(self, prompt: str, model_id: str) -> str:
         """OpenAI APIを使用して応答を生成"""
         if not self.OpenAI_client:
             return "OpenAIError: API client not initialized. Check OPENAI_API_KEY."
-        return self._generate_response(self.OpenAI_client, model_id, self.OpenAI_system_content, prompt)
+        return self._generate_response(
+            self.OpenAI_client, model_id, self.OpenAI_system_content, prompt
+        )
 
     def stream_OpenAI_response(
         self, prompt: str, model_id: str, output_component: gr.Textbox
     ) -> None:
         if not self.OpenAI_client:
-            logging.error("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
+            logging.error(
+                "OpenAIError: API client not initialized. Check OPENAI_API_KEY."
+            )
             gr.update("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
             return
         try:
@@ -211,7 +233,10 @@ class Alignment:
                 max_tokens=8192,
             )
             for chunk in stream:  # ストリームからのチャンクを処理
-                if hasattr(chunk.choices[0].delta, "content") and chunk.choices[0].delta.content is not None:
+                if (
+                    hasattr(chunk.choices[0].delta, "content")
+                    and chunk.choices[0].delta.content is not None
+                ):
                     gr.update(chunk.choices[0].delta.content, append=True)
         except Exception as e:
             logging.error(f"OpenAI API Error during streaming: {e}")
@@ -259,13 +284,20 @@ class Alignment:
             return
 
         # OpenAI API を呼び出し、応答を生成
-        original_prompt_output = self.generate_OpenAI_response(original_prompt_replace, OpenAI_model_id)
-        yield gr.update(value=original_prompt_output), gr.update(value=processing_message)
+        original_prompt_output = self.generate_OpenAI_response(
+            original_prompt_replace, OpenAI_model_id
+        )
+        yield gr.update(value=original_prompt_output), gr.update(
+            value=processing_message
+        )
 
         if isinstance(original_prompt_output, str) and (
-            original_prompt_output.startswith("OpenAIError:") or original_prompt_output.startswith("Error:")
+            original_prompt_output.startswith("OpenAIError:")
+            or original_prompt_output.startswith("Error:")
         ):
-            yield gr.update(value=original_prompt_output), gr.update(value=original_prompt_output)
+            yield gr.update(value=original_prompt_output), gr.update(
+                value=original_prompt_output
+            )
             return
 
         # 評価用プロンプトはGroqで実行
@@ -275,8 +307,12 @@ class Alignment:
             yield gr.update(value=error_msg), gr.update(value=error_msg)
             return
         # Groq API を呼び出し、応答を生成
-        evaluation_prompt_output = self.generate_groq_response(revised_prompt_replace, groq_model_id)
-        yield gr.update(value=original_prompt_output), gr.update(value=evaluation_prompt_output)
+        evaluation_prompt_output = self.generate_groq_response(
+            revised_prompt_replace, groq_model_id
+        )
+        yield gr.update(value=original_prompt_output), gr.update(
+            value=evaluation_prompt_output
+        )
         return
 
     def evaluate_response(self, openai_output: str, groq_output: str) -> str:
@@ -293,15 +329,23 @@ class Alignment:
             str: 自動フィードバックと推奨事項を含む文字列。
         """
         if not self.groq_client:
-            logging.error("GroqError: API client for evaluation not initialized. Check GROQ_API_KEY.")
+            logging.error(
+                "GroqError: API client for evaluation not initialized. Check GROQ_API_KEY."
+            )
             return "GroqError: API client for evaluation not initialized. Check GROQ_API_KEY."
 
-        current_eval_instruction: str = self.evaluation_language_instruction  # 現在の評価指示
+        current_eval_instruction: str = (
+            self.evaluation_language_instruction
+        )  # 現在の評価指示
         formatted_evaluate_prompt: str = evaluate_response_prompt_template.format(
-            _OpenAI=openai_output, _Groq=groq_output, language_instruction_for_evaluation=current_eval_instruction
+            _OpenAI=openai_output,
+            _Groq=groq_output,
+            language_instruction_for_evaluation=current_eval_instruction,
         )
         # generate_groq_responseからの戻り値をチェック
-        groq_result: str = self.generate_groq_response(formatted_evaluate_prompt, EVAL_MODEL_ID)
+        groq_result: str = self.generate_groq_response(
+            formatted_evaluate_prompt, EVAL_MODEL_ID
+        )
         if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
             logging.error(f"Evaluation Error: {groq_result}")
             return f"Evaluation Error: {groq_result}"  # エラーメッセージを返す
@@ -312,8 +356,14 @@ class Alignment:
         feedback: str = feedback_match[0] if feedback_match else "Feedback not found."
 
         pattern = r"<recommendation>(.*?)</recommendation>"
-        recommendation_match = re.findall(pattern, groq_result, re.DOTALL)  # 推奨事項を抽出
-        recommendation: str = recommendation_match[0] if recommendation_match else "Recommendation not found."
+        recommendation_match = re.findall(
+            pattern, groq_result, re.DOTALL
+        )  # 推奨事項を抽出
+        recommendation: str = (
+            recommendation_match[0]
+            if recommendation_match
+            else "Recommendation not found."
+        )
 
         return feedback + f"\n<recommendation>{recommendation}</recommendation>"
 
@@ -357,7 +407,9 @@ class Alignment:
         if matches:
             feedback = matches[0]
 
-        current_revision_instruction: str = self.revision_language_instruction  # 現在の修正指示
+        current_revision_instruction: str = (
+            self.revision_language_instruction
+        )  # 現在の修正指示
         formatted_revised_prompt_content: str = generate_revised_prompt_template.format(
             _feedback=feedback,
             _prompt=prompt,
@@ -366,11 +418,17 @@ class Alignment:
             language_instruction_for_revision=current_revision_instruction,
         )
         if not self.groq_client:
-            logging.error("GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY.")
+            logging.error(
+                "GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY."
+            )
             return "GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY."
         # generate_groq_responseからの戻り値をチェック
-        groq_result: str = self.generate_groq_response(formatted_revised_prompt_content, EVAL_MODEL_ID)
-        if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):  # Groq API エラーをチェック
+        groq_result: str = self.generate_groq_response(
+            formatted_revised_prompt_content, EVAL_MODEL_ID
+        )
+        if isinstance(groq_result, str) and groq_result.startswith(
+            "Groq API Error:"
+        ):  # Groq API エラーをチェック
             logging.error(f"Prompt Revision Error: {groq_result}")
             return f"Prompt Revision Error: {groq_result}"  # エラーメッセージを返す
 
