@@ -213,7 +213,7 @@ class MetaPrompt:
         patterns: List[str] = [
             r"\{\{([^{}]+?)\}\}",  # {{変数名}}
             r"\$\{([^{}]+?)\}",  # ${変数名}
-            # r"\{([^{}]+?)\}",  # {変数名}
+            r"\{([^{}]+?)\}",  # {変数名}
         ]
         variables: Set[str] = set()
         temp_string: str = prompt_content
