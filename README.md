@@ -28,7 +28,7 @@ pip install -r requirements.txt
 - アプリケーション起動:
 
 ```bash
-python app.py
+python src/app.py
 ```
 
 → ローカルサーバーが起動 (通常 <http://localhost:7860>)
