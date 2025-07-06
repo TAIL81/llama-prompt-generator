@@ -178,7 +178,7 @@ class GuideBased:
                     completion.choices[0].message.content or ""
                 )  # LLMの応答 (handle None)
                 # LLMからの応答をデバッグ出力
-                logging.debug(f"__call__ LLM response: \n{result}\n")
+                logging.info(f"__call__ LLM response: \n{result}\n")
                 # 結果から不要なXMLタグを除去します
                 if result.startswith("<instruction>"):  # 開始タグを除去
                     result = result[13:]
@@ -255,7 +255,7 @@ class GuideBased:
                 )  # API呼び出し
                 # LLMからの応答をデバッグ出力
                 content = completion.choices[0].message.content
-                logging.debug(f"detect_lang LLM response: {content}")
+                logging.info(f"detect_lang LLM response: {content}")
                 if not content:
                     logging.error("No content in response for language detection")
                     return ""
@@ -339,7 +339,7 @@ class GuideBased:
                 )  # API呼び出し
                 # LLMからの応答をデバッグ出力
                 content = completion.choices[0].message.content
-                logging.debug(f"judge LLM response (raw): {content}")
+                logging.info(f"judge LLM response (raw): {content}")
                 final_result: Optional[int] = None
                 if not content:
                     logging.error("No content in response for judge")
