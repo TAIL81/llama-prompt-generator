@@ -11,7 +11,6 @@ from typing import Any, Callable, Dict, List, Tuple, Type, Union, cast
 
 import gradio as gr
 from dotenv import load_dotenv
-
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
@@ -30,7 +29,7 @@ class AppConfig(BaseSettings):
     設定は環境変数と翻訳ファイルから読み込まれます。
     """
 
-    LANGUAGE: str = Field(default="ja", env="LANGUAGE")
+    language: str = Field(default="ja", validation_alias="LANGUAGE")
     TRANSLATIONS_PATH: str = Field(
         default=os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "translations.json"
@@ -51,7 +50,9 @@ class AppConfig(BaseSettings):
             logging.error(f"翻訳ファイルが見つかりません: {self.TRANSLATIONS_PATH}")
             return {}
         except json.JSONDecodeError as e:
-            logging.error(f"翻訳ファイルの形式が不正です: {self.TRANSLATIONS_PATH}. エラー: {e}")
+            logging.error(
+                f"翻訳ファイルの形式が不正です: {self.TRANSLATIONS_PATH}. エラー: {e}"
+            )
             return {}
         except Exception as e:
             logging.error(
