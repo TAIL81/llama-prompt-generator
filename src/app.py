@@ -12,6 +12,9 @@ from typing import Any, Callable, Dict, List, Tuple, Type, Union, cast
 import gradio as gr
 from dotenv import load_dotenv
 
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
+
 from ape import APE
 from application.soe_prompt import SOEPrompt
 from calibration import CalibrationPrompt
@@ -21,50 +24,44 @@ from translate import GuideBased
 
 
 # 設定管理クラスの導入
-class AppConfig:
+class AppConfig(BaseSettings):
     """アプリケーション設定を管理するクラス。
 
     設定は環境変数と翻訳ファイルから読み込まれます。
     """
 
-    def __init__(self):
-        self.language: str = "ja"
-        self.lang_store: Dict[str, Any] = {}
-        self.load_env()
-        self.safe_load_translations()
-
-    def load_env(self) -> None:
-        """環境変数を読み込み、言語設定を初期化します。"""
-        env_path = Path(__file__).parent.parent / ".env"
-        load_dotenv(env_path)
-        self.language = os.environ.get(
-            "LANGUAGE", "ja"
-        )  # 環境変数から言語設定を読み込む
-        logging.info(f"環境変数から言語設定を読み込みました: {self.language}")
-
-    def safe_load_translations(self):
-        translations_path = os.path.join(
+    LANGUAGE: str = Field(default="ja", env="LANGUAGE")
+    TRANSLATIONS_PATH: str = Field(
+        default=os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "translations.json"
         )
+    )
+    lang_store: Dict[str, Any] = {}
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        self.lang_store = self._load_translations()
+
+    def _load_translations(self) -> Dict[str, Any]:
+        """翻訳ファイルを読み込みます。"""
         try:
-            with open(translations_path, "r", encoding="utf-8") as f:
-                self.lang_store = json.load(f)
-            logging.info(
-                f"翻訳ファイルを正常に読み込みました: {translations_path}. lang_storeのキー: {self.lang_store.keys()}"
-            )  # ロギング
+            with open(self.TRANSLATIONS_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
         except FileNotFoundError:
-            logging.error(f"翻訳ファイルが見つかりません: {translations_path}")
-            self.lang_store = {}
+            logging.error(f"翻訳ファイルが見つかりません: {self.TRANSLATIONS_PATH}")
+            return {}
         except json.JSONDecodeError as e:
+            logging.error(f"翻訳ファイルの形式が不正です: {self.TRANSLATIONS_PATH}. エラー: {e}")
+            return {}
+        except Exception as e:
             logging.error(
-                f"翻訳ファイルの形式が不正です: {translations_path}. エラー: {e}"
+                f"翻訳ファイルの読み込み中に予期せぬエラーが発生しました: {self.TRANSLATIONS_PATH}. エラー: {e}"
             )
-            self.lang_store = {}
-        except Exception as e:  # その他の例外をキャッチ
-            logging.error(
-                f"翻訳ファイルの読み込み中に予期せぬエラーが発生しました: {translations_path}. エラー: {e}"
-            )
-            self.lang_store = {}
+            return {}
+
+    class Config:
+        env_file = Path(__file__).parent.parent / ".env"
+        env_file_encoding = "utf-8"
 
 
 # AppConfig のインスタンスを作成
@@ -261,11 +258,6 @@ from safe_executor import SafeCodeExecutor
 safe_code_executor = SafeCodeExecutor()
 
 
-# calibration.optimize 関数内で postprocess_code の実行を safe_code_executor を使うように変更する必要がある
-# これは calibration.py ファイルの変更が必要になるため、ここでは app.py の変更のみに留める
-# ただし、app.py の calibration.optimize の呼び出し部分で postprocess_code が渡されているため、
-# calibration.py 側で SafeCodeExecutor を使用するように修正が必要であることをメモしておく。
-# 現時点では app.py の変更のみに集中する。
 def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
     """APE (Automatic Prompt Engineering) を使用してプロンプトを生成します。
 

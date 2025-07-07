@@ -21,7 +21,6 @@ LANGUAGE=ja  # or en
 - 依存パッケージのインストール:
 
 ```bash
-cd src
 pip install -r requirements.txt
 ```
 
