@@ -19,6 +19,7 @@ from application.soe_prompt import SOEPrompt
 from calibration import CalibrationPrompt
 from metaprompt import MetaPrompt
 from optimize import Alignment
+from ui.metaprompt_tab import create_metaprompt_tab
 from ui.translation_tab import create_translation_tab
 from translate import GuideBased
 
@@ -144,9 +145,7 @@ calibration = component_manager.calibration
 # --- クリアボタン用の関数群 ---
 
 
-def clear_metaprompt_tab() -> Tuple[str, str, str, str, str, str]:
-    """メタプロンプトタブの入出力をクリアします。"""
-    return "", "", "", "", "", ""
+
 
 
 
@@ -223,68 +222,7 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
     ] * 2  # 他のタブとの互換性のための非表示テキストボックス
 
 
-# メタプロンプト出力に対して APE を実行する関数
-async def run_ape_on_metaprompt_output(
-    metaprompt_template: str, metaprompt_variables_str: str
-) -> Tuple[str, str]:
-    """
-    メタプロンプトで生成されたテンプレートと変数文字列を元に APE を実行します。
 
-    Args:
-        metaprompt_template (str): メタプロンプトによって生成されたプロンプトテンプレート。
-        metaprompt_variables_str (str): 改行区切りの変数名文字列 (例: "VAR1\nVAR2")。
-                                         metaprompt.py の修正により、変数名の中身のみが含まれます。
-
-    Returns:
-        tuple: (APEによって生成された新しいプロンプトテンプレート, 元の変数文字列)
-    """
-    variable_names = [var for var in metaprompt_variables_str.split("\n") if var]
-    demo_data = {}
-    if not variable_names:
-        demo_data = {"{{DUMMY_VARIABLE}}": "dummy_value"}
-        logging.warning(
-            "メタプロンプトの変数が空のため、APE用にダミーデータを生成しました。"
-        )
-    else:
-        for var_name in variable_names:
-            placeholder_key_for_ape = f"{{{{{var_name}}}}}"
-            demo_data[placeholder_key_for_ape] = f"dummy_{var_name.lower()}"
-
-    try:
-        result_dict = await ape(
-            initial_prompt=metaprompt_template, epoch=1, demo_data=demo_data
-        )
-        if result_dict and isinstance(result_dict.get("prompt"), str):
-            prompt = result_dict["prompt"]
-            return prompt, metaprompt_variables_str
-        else:
-            error_info = (
-                result_dict.get("error", "APE returned invalid data")
-                if result_dict
-                else "APE returned None"
-            )
-            logging.error(f"APE実行エラー: {error_info}")
-            return f"エラー: {error_info}", metaprompt_variables_str
-    except ValueError as e:
-        error_message = str(e)
-        logging.error(f"APE実行エラー: {error_message}")
-        return f"エラー: {error_message}", metaprompt_variables_str
-
-
-# メタプロンプト生成ボタンクリック時のラッパー関数
-def metaprompt_wrapper(task: str, variables_str: str) -> Tuple[str, str, str, str]:
-    """
-    metapromptを実行し、APE結果表示用のテキストボックスをクリアするための値を返すラッパー。
-    """
-    try:
-        prompt, new_vars = metaprompt(task, variables_str)
-        # メタプロンプトの出力と、APE側をクリアするための空文字列を返す
-        # Gradioの出力コンポーネント数に合わせて4つの値を返す
-        return prompt, new_vars, "", ""
-    except ValueError as e:
-        error_message = str(e)
-        # エラーメッセージをユーザーに表示し、他のフィールドをクリア
-        return f"エラー: {error_message}", "", "", ""
 
 
 # Gradioインターフェースを定義
@@ -297,101 +235,8 @@ with gr.Blocks(
         f"# {config.lang_store[config.language]['Automatic Prompt Engineering']}"
     )
 
-    # 「メタプロンプト」タブ
-    with gr.Tab(config.lang_store[config.language]["Meta Prompt"]):
-        original_task = gr.Textbox(
-            label=config.lang_store[config.language]["Task"],
-            lines=3,
-            info=config.lang_store[config.language]["Please input your task"],
-            placeholder=config.lang_store[config.language][
-                "Draft an email responding to a customer complaint"
-            ],
-        )
-        variables = gr.Textbox(
-            label=config.lang_store[config.language]["Variables"],
-            info=config.lang_store[config.language][
-                "Please input your variables, one variable per line"
-            ],
-            lines=5,
-            placeholder=config.lang_store[config.language][
-                "CUSTOMER_COMPLAINT\nCOMPANY_NAME"
-            ],
-        )
-        with gr.Column(scale=2):
-            with gr.Row():
-                metaprompt_button = gr.Button(
-                    config.lang_store[config.language]["Generate Prompt"], scale=1
-                )
-                ape_on_metaprompt_button = gr.Button(
-                    config.lang_store[config.language]["APE on MetaPrompt Output"],
-                    scale=1,
-                )
-                clear_button_meta = gr.Button(clear_button_label, scale=1)
-
-        with gr.Row():
-            with gr.Column():
-                prompt_result_meta = gr.Textbox(
-                    label=config.lang_store[config.language][
-                        "MetaPrompt Output: Prompt Template"
-                    ],
-                    lines=30,
-                    show_copy_button=True,
-                    interactive=False,
-                )
-                variables_result_meta = gr.Textbox(
-                    label=config.lang_store[config.language][
-                        "MetaPrompt Output: Variables"
-                    ],
-                    lines=5,
-                    show_copy_button=True,
-                    interactive=False,
-                )
-            with gr.Column():
-                prompt_result_ape = gr.Textbox(
-                    label=config.lang_store[config.language][
-                        "APE Output: Prompt Template"
-                    ],
-                    lines=30,
-                    show_copy_button=True,
-                    interactive=False,
-                    scale=1,
-                )
-                variables_result_ape = gr.Textbox(
-                    label=config.lang_store[config.language]["APE Output: Variables"],
-                    lines=5,
-                    show_copy_button=True,
-                    interactive=False,
-                    scale=1,
-                )
-
-        metaprompt_button.click(
-            metaprompt_wrapper,
-            inputs=[original_task, variables],
-            outputs=[
-                prompt_result_meta,
-                variables_result_meta,
-                prompt_result_ape,
-                variables_result_ape,
-            ],
-        )
-        clear_button_meta.click(
-            clear_metaprompt_tab,
-            inputs=[],
-            outputs=[
-                original_task,
-                variables,
-                prompt_result_meta,
-                variables_result_meta,
-                prompt_result_ape,
-                variables_result_ape,
-            ],
-        )
-
-        ape_on_metaprompt_button.click(
-            run_ape_on_metaprompt_output,
-            inputs=[prompt_result_meta, variables_result_meta],
-            outputs=[prompt_result_ape, variables_result_ape],
-        )
+    
+    create_metaprompt_tab(component_manager, config)
     create_translation_tab(component_manager, config)
     
 
