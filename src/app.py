@@ -135,15 +135,8 @@ class ComponentManager:
 # コンポーネントマネージャーのインスタンスを作成
 component_manager = ComponentManager(config)
 
-# 各コンポーネントへのアクセスは component_manager.ape のように変更
-# 例: ape = component_manager.ape
-# ただし、既存のコードの変更を最小限にするため、ここでは直接変数に割り当てます
-ape = component_manager.ape
-rewrite = component_manager.rewrite
-alignment = component_manager.alignment
-metaprompt = component_manager.metaprompt
-soeprompt = component_manager.soeprompt
-calibration = component_manager.calibration
+# 各コンポーネントへのアクセスは component_manager インスタンス経由で行います。
+# 例: component_manager.ape
 
 from safe_executor import SafeCodeExecutor
 
@@ -182,7 +175,7 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
             )
         ] + [gr.Textbox(visible=False)] * 2
 
-    result = ape(original_prompt, 1, parsed_user_data)
+    result = component_manager.ape(original_prompt, 1, parsed_user_data)
     return [
         gr.Textbox(
             label="Prompt Generated",
@@ -193,7 +186,7 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
         )
     ] + [
         gr.Textbox(visible=False)
-    ] * 2  # 他のタブとの互換性のための非表示テキストボックス
+    ] * 2  # 他のタブの出力コンポーネント数と合わせるため、3つの出力のうち2つは非表示にする
 
 
 # Gradioインターフェースを定義
@@ -217,8 +210,7 @@ with gr.Blocks(
 # シグナルハンドラ
 def signal_handler(sig, frame):
     print("Shutting down gracefully...")
-    time.sleep(1)  # タスク完了のための猶予時間（必要に応じて調整）
-    exit(0)
+    demo.close()  # Gradioサーバーを安全に停止
 
 
 signal.signal(signal.SIGINT, signal_handler)
