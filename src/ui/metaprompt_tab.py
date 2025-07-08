@@ -28,6 +28,11 @@ def create_metaprompt_tab(component_manager, config):
             )
         else:
             for var_name in variable_names:
+                # APEは `{{variable}}` 形式のプレースホルダを期待するため、
+                # メタプロンプトの変数名をAPEが認識できる形式に変換します。
+                # f-string の仕様上、`{` は `{{`、`}` は `}}` とエスケープする必要があるため、
+                # `{{{{var_name}}}}` のように複雑な記述になっています。
+                # 例: `CUSTOMER_NAME` -> `{{CUSTOMER_NAME}}`
                 placeholder_key_for_ape = f"{{{{{var_name}}}}}"
                 demo_data[placeholder_key_for_ape] = f"dummy_{var_name.lower()}"
 

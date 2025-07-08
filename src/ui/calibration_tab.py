@@ -1,15 +1,17 @@
 import gradio as gr
 from typing import Tuple
 
+# モジュールレベルでデフォルトコードを定義し、重複を排除
+DEFAULT_POSTPROCESS_CODE = """
+def postprocess(llm_output):
+    return llm_output
+""".strip()
+
 def create_calibration_tab(component_manager, config):
     """プロンプトキャリブレーションタブのUIを作成し、イベントハンドラを登録します。"""
     with gr.Tab(
         config.lang_store[config.language]["Prompt Calibration"]
-    ): 
-        default_code = """
-def postprocess(llm_output):
-    return llm_output
-""".strip()
+    ):
         with gr.Row():
             with gr.Column(scale=2):
                 calibration_task = gr.Textbox(
@@ -31,7 +33,7 @@ def postprocess(llm_output):
                         "Please input your postprocess code"
                     ],
                     lines=3,
-                    value=default_code,
+                    value=DEFAULT_POSTPROCESS_CODE,
                 )
                 dataset_file = gr.File(
                     file_types=["csv"], type="binary"
@@ -46,9 +48,16 @@ def postprocess(llm_output):
                 1, 5, value=1, step=1, label=config.lang_store[config.language]["Epoch"]
             )
         
-        calibration_optimization = gr.Button(
-            config.lang_store[config.language]["Optimization based on prediction"]
-        )
+        with gr.Row():
+            calibration_optimization = gr.Button(
+                config.lang_store[config.language]["Optimization based on prediction"],
+                scale=4
+            )
+            clear_button_calibration = gr.Button(
+                config.lang_store[config.language].get("Clear", "Clear"),
+                scale=1
+            )
+
         calibration_prompt = gr.Textbox(
             label=config.lang_store[config.language]["Revised Prompt"],
             lines=3,
@@ -67,8 +76,20 @@ def postprocess(llm_output):
             ],
             outputs=calibration_prompt,
         )
+        
+        clear_button_calibration.click(
+            clear_calibration_tab,
+            inputs=[],
+            outputs=[
+                calibration_task,
+                calibration_prompt_original,
+                postprocess_code,
+                dataset_file,
+                steps_num,
+                calibration_prompt,
+            ],
+        )
 
 def clear_calibration_tab() -> Tuple[str, str, str, None, int, str]:
     """プロンプトキャリブレーションタブの入出力をクリアします。"""
-    default_code = "def postprocess(llm_output):\n    return llm_output"
-    return "", "", default_code, None, 1, ""
+    return "", "", DEFAULT_POSTPROCESS_CODE, None, 1, ""

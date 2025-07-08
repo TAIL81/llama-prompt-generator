@@ -2,6 +2,15 @@ from typing import Any, Dict, Tuple
 
 import gradio as gr
 
+# モデルの選択肢を定数として定義
+OPENAI_MODEL_CHOICES = [
+    "deepseek/deepseek-chat-v3-0324:free",
+    "deepseek/deepseek-r1-0528:free",
+]
+GROQ_MODEL_CHOICES = [
+    "compound-beta-mini",
+    "compound-beta",
+]
 
 def clear_evaluation_tab() -> Tuple[str, str, str, str, str, str, str, str, str, str]:
     """プロンプト評価タブの入出力をクリアします。"""
@@ -29,8 +38,6 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             # 評価対象プロンプトの入力と変数置換のセクション
         with gr.Row():
             # 変数置換入力欄（元のプロンプト用）
-            # 形式: "key1:value1;key2:value2"
-            # user_prompt_original 内のプレースホルダ（例: {key1}）を置換するために使用
             kv_input_original = gr.Textbox(
                 label=config.lang_store[config.language][
                     "[Optional]Input the template variable need to be replaced"
@@ -45,8 +52,6 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                 interactive=False,
             )
             # 変数置換入力欄（評価対象のプロンプト用）
-            # 形式: "key1:value1;key2:value2"
-            # user_prompt_eval 内のプレースホルダ（例: {key1}）を置換するために使用
             kv_input_eval = gr.Textbox(
                 label=config.lang_store[config.language][
                     "[Optional]Input the template variable need to be replaced"
@@ -94,22 +99,16 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                 label=config.lang_store[config.language].get(
                     "Choose OpenAI Model", "Choose OpenAI Model"
                 ),
-                choices=[
-                    "deepseek/deepseek-chat-v3-0324:free",
-                    "deepseek/deepseek-r1-0528:free",
-                ],
-                value="deepseek/deepseek-chat-v3-0324:free",
+                choices=OPENAI_MODEL_CHOICES,
+                value=OPENAI_MODEL_CHOICES[0],
             )
             # Groqモデル選択ドロップダウン
             groq_model_dropdown = gr.Dropdown(
                 label=config.lang_store[config.language].get(
                     "Choose Groq Model", "Choose Groq Model"
                 ),
-                choices=[
-                    "compound-beta-mini",
-                    "compound-beta",
-                ],
-                value="compound-beta-mini",
+                choices=GROQ_MODEL_CHOICES,
+                value=GROQ_MODEL_CHOICES[0],
             )
 
         with gr.Row():

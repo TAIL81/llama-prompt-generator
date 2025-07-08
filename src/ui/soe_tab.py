@@ -39,16 +39,24 @@ def create_soe_tab(component_manager, config):
                     show_label=False,
                     elem_id="image_preview",
                 )
-                image_upload = gr.UploadButton(
-                    config.lang_store[config.language][
-                        "Upload Product Image (Optional)"
-                    ],
-                    file_types=["image", "video"],
-                    file_count="multiple",
-                )
-                generate_button = gr.Button(
-                    config.lang_store[config.language]["Generate Product Description"]
-                )
+                with gr.Row():
+                    image_upload = gr.UploadButton(
+                        config.lang_store[config.language][
+                            "Upload Product Image (Optional)"
+                        ],
+                        file_types=["image", "video"],
+                        file_count="multiple",
+                        scale=1
+                    )
+                with gr.Row():
+                    generate_button = gr.Button(
+                        config.lang_store[config.language]["Generate Product Description"],
+                        scale=4
+                    )
+                    clear_button_soe = gr.Button(
+                        config.lang_store[config.language].get("Clear", "Clear"),
+                        scale=1
+                    )
 
         with gr.Row():
             product_description = gr.Textbox(
@@ -59,7 +67,7 @@ def create_soe_tab(component_manager, config):
                 interactive=False,
             )
         
-        # 商品説明生成イベントの定義
+        # イベントハンドラを登録
         generate_button.click(
             component_manager.soeprompt.generate_description,
             inputs=[
@@ -73,6 +81,18 @@ def create_soe_tab(component_manager, config):
         )
         image_upload.upload(
             lambda images: images, inputs=image_upload, outputs=image_preview
+        )
+        clear_button_soe.click(
+            clear_soe_tab,
+            inputs=[],
+            outputs=[
+                product_category,
+                brand_name,
+                usage_description,
+                target_customer,
+                image_preview, # image_uploadはクリアできないためプレビューをクリア
+                product_description,
+            ],
         )
 
 def clear_soe_tab() -> Tuple[str, str, str, str, None, str]:

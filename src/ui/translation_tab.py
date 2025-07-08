@@ -2,6 +2,12 @@
 import gradio as gr
 from typing import List, Tuple, cast
 from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
+
+# 最適化レベルをEnumで定義し、マジックストリングを排除
+class OptimizeLevel(Enum):
+    SINGLE = "One-time Generation"
+    MULTIPLE = "Multiple-time Generation"
 
 # This function will be called from app.py, so it needs access to the component_manager and config
 def create_translation_tab(component_manager, config):
@@ -19,7 +25,7 @@ def create_translation_tab(component_manager, config):
             gr.Textbox(value="", visible=False),
         )
 
-    def create_single_textbox(value: str) -> List[gr.Textbox]:
+    def create_single_textbox(value: str) -> List[gr.components.Textbox]:
         return [
             cast(
                 gr.Textbox,
@@ -37,7 +43,7 @@ def create_translation_tab(component_manager, config):
 
     def create_multiple_textboxes(
         candidates: List[str], judge_result: int
-    ) -> List[gr.Textbox]:
+    ) -> List[gr.components.Textbox]:
         textboxes = []
         for i in range(3):
             is_best = "Y" if judge_result == i else "N"
@@ -56,7 +62,7 @@ def create_translation_tab(component_manager, config):
             )
         return textboxes
 
-    def generate_single_prompt(original_prompt: str) -> List[gr.Textbox]:
+    def generate_single_prompt(original_prompt: str) -> List[gr.components.Textbox]:
         """一回生成モードでプロンプトを生成し、結果をテキストボックスに表示します。"""
         result = rewrite(original_prompt)
         return create_single_textbox(result)
@@ -68,11 +74,11 @@ def create_translation_tab(component_manager, config):
             candidates = [future.result() for future in futures]
         return candidates
 
-    def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
+    def generate_prompt(original_prompt: str, level: str) -> List[gr.components.Textbox]:
         """プロンプト生成のメイン関数。"""
-        if level == "One-time Generation":
+        if level == OptimizeLevel.SINGLE.value:
             return generate_single_prompt(original_prompt)
-        elif level == "Multiple-time Generation":
+        elif level == OptimizeLevel.MULTIPLE.value:
             candidates = generate_multiple_prompts_async(original_prompt)
             judge_result = rewrite.judge(candidates)
             return create_multiple_textboxes(candidates, judge_result)
@@ -90,9 +96,9 @@ def create_translation_tab(component_manager, config):
         with gr.Row():
             with gr.Column(scale=2):
                 level = gr.Radio(
-                    ["One-time Generation", "Multiple-time Generation"],
+                    choices=[level.value for level in OptimizeLevel],
                     label=lang_store[language]["Optimize Level"],
-                    value="One-time Generation",
+                    value=OptimizeLevel.SINGLE.value,
                 )
                 with gr.Row():
                     b1 = gr.Button(
@@ -103,7 +109,7 @@ def create_translation_tab(component_manager, config):
                 for i in range(3):
                     t = gr.Textbox(
                         label=lang_store[language]["Prompt Template Generated"],
-                        elem_id="textbox_id",
+                        elem_id=f"textbox_id_{i}", # ユニークなIDを付与
                         lines=3,
                         show_copy_button=True,
                         interactive=False,
