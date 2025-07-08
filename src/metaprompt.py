@@ -146,8 +146,8 @@ class MetaPrompt:
         if not task.strip():
             raise ValueError("タスクが空です")
         if not variables.strip():
-            # 変数が空の場合でもエラーとしない（空リストとして扱う）
-            raise ValueError("変数が空です")
+            # 変数が空の場合でもエラーとせず、警告をログに出力して処理を続行
+            logging.warning("変数が空ですが、処理を続行します。")
 
     def extract_between_tags(
         self, tag: str, string: str, strip: bool = False
