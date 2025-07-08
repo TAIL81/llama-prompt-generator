@@ -19,6 +19,7 @@ from application.soe_prompt import SOEPrompt
 from calibration import CalibrationPrompt
 from metaprompt import MetaPrompt
 from optimize import Alignment
+from ui.translation_tab import create_translation_tab
 from translate import GuideBased
 
 
@@ -148,15 +149,7 @@ def clear_metaprompt_tab() -> Tuple[str, str, str, str, str, str]:
     return "", "", "", "", "", ""
 
 
-def clear_translation_tab() -> Tuple[str, gr.Textbox, gr.Textbox, gr.Textbox]:
-    """プロンプト翻訳タブの入出力をクリアします。"""
-    # 最初のテキストボックスのみ表示し、他は非表示にリセット
-    return (
-        "",
-        gr.Textbox(value="", visible=True),
-        gr.Textbox(value="", visible=False),
-        gr.Textbox(value="", visible=False),
-    )
+
 
 
 def clear_evaluation_tab() -> Tuple[str, str, str, str, str, str, str, str, str, str]:
@@ -176,81 +169,7 @@ def clear_calibration_tab() -> Tuple[str, str, str, None, int, str]:
     return "", "", default_code, None, 1, ""
 
 
-# generate_prompt関数の分割と型ヒントの追加
-def create_single_textbox(value: str) -> List[gr.Textbox]:
-    return [
-        cast(
-            gr.Textbox,
-            gr.Textbox(
-                label=lang_store[language]["Prompt Template Generated"],
-                value=value,
-                lines=3,
-                show_copy_button=True,
-                interactive=False,
-            ),
-        )  # 閉じ括弧を追加
-    ] + [
-        gr.Textbox(visible=False)
-    ] * 2  # テキストボックスのリストを返す
 
-
-def create_multiple_textboxes(
-    candidates: List[str], judge_result: int
-) -> List[gr.Textbox]:
-    textboxes = []
-    for i in range(3):
-        is_best = "Y" if judge_result == i else "N"
-        textboxes.append(
-            cast(
-                gr.Textbox,
-                gr.Textbox(
-                    label=f"{lang_store[language]['Prompt Template Generated']} #{i+1} {is_best}",
-                    value=candidates[i],
-                    lines=3,
-                    show_copy_button=True,
-                    visible=True,
-                    interactive=False,
-                ),
-            )  # 閉じ括弧を追加
-        )
-    return textboxes
-
-
-def generate_single_prompt(original_prompt: str) -> List[gr.Textbox]:
-    """一回生成モードでプロンプトを生成し、結果をテキストボックスに表示します。"""
-    """一回生成モード"""
-    result = rewrite(original_prompt)
-    return create_single_textbox(result)
-
-
-def generate_multiple_prompts_async(original_prompt: str) -> List[str]:
-    """複数回生成モードでプロンプトを非同期に生成します。"""
-    """複数回生成モード (非同期実行用)"""
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = [executor.submit(rewrite, original_prompt) for _ in range(3)]
-        candidates = [future.result() for future in futures]
-    return candidates
-
-
-# プロンプト生成のメイン関数
-def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
-    """プロンプト生成のメイン関数。
-    最適化レベルに応じて、一回生成または複数回生成を行います。
-
-    Args:
-        original_prompt (str): 元のプロンプト。
-        level (str): 最適化レベル ("One-time Generation" または "Multiple-time Generation")。
-
-    Returns:
-        list: Gradioテキストボックスコンポーネントのリスト。
-    """
-    if level == "One-time Generation":  # 一回生成モードの場合
-        return generate_single_prompt(original_prompt)
-    elif level == "Multiple-time Generation":
-        candidates = generate_multiple_prompts_async(original_prompt)
-        judge_result = rewrite.judge(candidates)
-        return create_multiple_textboxes(candidates, judge_result)
-    return []  # デフォルトの戻り値
 
 
 from safe_executor import SafeCodeExecutor
@@ -473,51 +392,8 @@ with gr.Blocks(
             inputs=[prompt_result_meta, variables_result_meta],
             outputs=[prompt_result_ape, variables_result_ape],
         )
-    # 「プロンプト翻訳」タブ (実際にはプロンプトの書き換え・改善機能)
-    with gr.Tab(config.lang_store[config.language]["Prompt Translation"]):
-        original_prompt = gr.Textbox(
-            label=config.lang_store[config.language][
-                "Please input your original prompt"
-            ],
-            lines=3,
-            placeholder=config.lang_store[config.language][
-                'Summarize the text delimited by triple quotes.\n\n"""{{insert text here}}"""'
-            ],
-        )
-        gr.Markdown(r"Use {\{xxx\}} to express custom variable, e.g. {\{document\}}")
-        with gr.Row():
-            with gr.Column(scale=2):
-                level = gr.Radio(  # 最適化レベルを選択するラジオボタン
-                    ["One-time Generation", "Multiple-time Generation"],
-                    label=config.lang_store[config.language]["Optimize Level"],
-                    value="One-time Generation",
-                )
-                with gr.Row():
-                    b1 = gr.Button(
-                        config.lang_store[config.language]["Generate Prompt"], scale=4
-                    )
-                    clear_button_translate = gr.Button(clear_button_label, scale=1)
-                textboxes = []
-                for i in range(3):
-                    t = gr.Textbox(
-                        label=config.lang_store[config.language][
-                            "Prompt Template Generated"
-                        ],
-                        elem_id="textbox_id",
-                        lines=3,
-                        show_copy_button=True,
-                        interactive=False,
-                        visible=False if i > 0 else True,
-                    )
-                    textboxes.append(t)
-                b1.click(
-                    generate_prompt, inputs=[original_prompt, level], outputs=textboxes
-                )
-                clear_button_translate.click(
-                    clear_translation_tab,
-                    inputs=[],
-                    outputs=[original_prompt] + textboxes,
-                )
+    create_translation_tab(component_manager, config)
+    
 
     # プロンプト評価タブの定義
     with gr.Tab(config.lang_store[config.language]["Prompt Evaluation"]):
