@@ -22,6 +22,8 @@ from optimize import Alignment
 from ui.metaprompt_tab import create_metaprompt_tab
 from ui.translation_tab import create_translation_tab
 from ui.evaluation_tab import create_evaluation_tab
+from ui.soe_tab import create_soe_tab
+from ui.calibration_tab import create_calibration_tab
 from translate import GuideBased
 
 
@@ -143,33 +145,6 @@ metaprompt = component_manager.metaprompt
 soeprompt = component_manager.soeprompt
 calibration = component_manager.calibration
 
-# --- クリアボタン用の関数群 ---
-
-
-
-
-
-
-
-
-
-
-
-def clear_soe_tab() -> Tuple[str, str, str, str, None, str]:
-    """SOE最適化タブの入出力をクリアします。"""
-    return "", "", "", "", None, ""
-
-
-def clear_calibration_tab() -> Tuple[str, str, str, None, int, str]:
-    """プロンプトキャリブレーションタブの入出力をクリアします。"""
-    default_code = "def postprocess(llm_output):\n    return llm_output"
-    # task, original_prompt, postprocess_code, dataset_file, steps_num, revised_prompt
-    return "", "", default_code, None, 1, ""
-
-
-
-
-
 from safe_executor import SafeCodeExecutor
 
 # SafeCodeExecutor のインスタンスを作成
@@ -180,7 +155,7 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
     """APE (Automatic Prompt Engineering) を使用してプロンプトを生成します。
 
     Args:
-        original_prompt (str): 元のプロンプト。
+        original_prompt (str): 元の��ロンプト。
         user_data (str): JSON形式のユーザーデータ。
     Returns:
         List[gr.Textbox]: Gradioテキストボックスコンポーネントのリスト。生成されたプロンプトを含む。
@@ -221,9 +196,6 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
     ] * 2  # 他のタブとの互換性のための非表示テキストボックス
 
 
-
-
-
 # Gradioインターフェースを定義
 with gr.Blocks(
     title=config.lang_store[config.language]["Automatic Prompt Engineering"],
@@ -237,149 +209,9 @@ with gr.Blocks(
     
     create_metaprompt_tab(component_manager, config)
     create_translation_tab(component_manager, config)
-    
-
     create_evaluation_tab(component_manager, config)
-
-    # 「SOE最適化商品説明」タブのUI定義
-    with gr.Tab(
-        config.lang_store[config.language]["SOE-Optimized Product Description"]
-    ):
-        with gr.Row():
-            with gr.Column():
-                product_category = gr.Textbox(
-                    label=config.lang_store[config.language]["Product Category"],
-                    placeholder=config.lang_store[config.language][
-                        "Enter the product category"
-                    ],
-                )
-                brand_name = gr.Textbox(
-                    label=config.lang_store[config.language]["Brand Name"],
-                    placeholder=config.lang_store[config.language][
-                        "Enter the brand name"
-                    ],
-                )
-                usage_description = gr.Textbox(
-                    label=config.lang_store[config.language]["Usage Description"],
-                    placeholder=config.lang_store[config.language][
-                        "Enter the usage description"
-                    ],
-                )
-                target_customer = gr.Textbox(
-                    label=config.lang_store[config.language]["Target Customer"],
-                    placeholder=config.lang_store[config.language][
-                        "Enter the target customer"
-                    ],
-                )
-            with gr.Column():
-                # 画像アップロードとプレビュー
-                image_preview = gr.Gallery(
-                    label=config.lang_store[config.language]["Uploaded Images"],
-                    show_label=False,
-                    elem_id="image_preview",
-                )
-                image_upload = gr.UploadButton(
-                    config.lang_store[config.language][
-                        "Upload Product Image (Optional)"
-                    ],
-                    file_types=["image", "video"],
-                    file_count="multiple",
-                )
-                generate_button = gr.Button(
-                    config.lang_store[config.language]["Generate Product Description"]
-                )
-
-        with gr.Row():
-            product_description = gr.Textbox(
-                label=config.lang_store[config.language][
-                    "Generated Product Description"
-                ],
-                lines=10,
-                interactive=False,
-            )
-        # 商品説明生成イベントの定義
-        generate_button.click(
-            soeprompt.generate_description,
-            inputs=[
-                product_category,
-                brand_name,
-                usage_description,
-                target_customer,
-                image_upload,
-            ],
-            outputs=product_description,
-        )
-        image_upload.upload(
-            lambda images: images, inputs=image_upload, outputs=image_preview
-        )
-
-    # 「プロンプトキャリブレーション」タブのUI定義
-    with gr.Tab(
-        config.lang_store[config.language]["Prompt Calibration"]
-    ):  # 例: タブ名の変更（必要に応じて）
-        default_code = """
-def postprocess(llm_output):
-    return llm_output
-""".strip()
-        with gr.Row():
-            with gr.Column(scale=2):  # カラムの定義
-                calibration_task = gr.Textbox(
-                    label=config.lang_store[config.language]["Please input your task"],
-                    lines=3,
-                )
-                calibration_prompt_original = gr.Textbox(
-                    label=config.lang_store[config.language][
-                        "Please input your original prompt"
-                    ],
-                    lines=5,
-                    placeholder=config.lang_store[config.language][
-                        'Summarize the text delimited by triple quotes.\n\n"""{{insert text here}}"""'
-                    ],
-                )
-            with gr.Column(scale=2):  # カラムの定義
-                postprocess_code = gr.Textbox(  # ポストプロセスコード入力欄
-                    label=config.lang_store[config.language][
-                        "Please input your postprocess code"
-                    ],
-                    lines=3,
-                    value=default_code,
-                )  # 例: ラベルの変更（より明確に）
-                dataset_file = gr.File(
-                    file_types=["csv"], type="binary"
-                )  # データセットファイルアップロード
-        with gr.Row():  # 行の定義
-            calibration_task_type = gr.Radio(
-                ["classification"],
-                value="classification",
-                label=config.lang_store[config.language]["Task type"],
-            )  # タスクタイプ選択
-            steps_num = gr.Slider(
-                1, 5, value=1, step=1, label=config.lang_store[config.language]["Epoch"]
-            )  # 最適化ステップ数
-        # 例: 不要なラベルの削除（またはより具体的なラベルに変更）
-        #  calibration_prompt = gr.Textbox(label=config.lang_store[config.language]["Revised Prompt"],
-        #                                  lines=3, show_copy_button=True, interactive=False)
-        calibration_optimization = gr.Button(
-            config.lang_store[config.language]["Optimization based on prediction"]
-        )
-        calibration_prompt = gr.Textbox(
-            label=config.lang_store[config.language]["Revised Prompt"],
-            lines=3,
-            show_copy_button=True,
-            interactive=False,
-        )
-        # プロンプトキャリブレーション実行イベント
-        calibration_optimization.click(
-            calibration.optimize,
-            inputs=[
-                calibration_task,
-                calibration_prompt_original,
-                dataset_file,
-                postprocess_code,
-                steps_num,
-            ],
-            outputs=calibration_prompt,
-        )
+    create_soe_tab(component_manager, config)
+    create_calibration_tab(component_manager, config)
 
 
 # シグナルハンドラ
