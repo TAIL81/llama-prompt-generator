@@ -13,10 +13,22 @@ GROQ_MODEL_CHOICES = [
 ]
 
 def clear_evaluation_tab() -> Tuple[str, str, str, str, str, str, str, str, str, str]:
-    """プロンプト評価タブの入出力をクリアします。"""
+    """
+    プロンプト評価タブのすべての入力フィールドと出力フィールドをクリアします。
+
+    Returns:
+        Tuple[str, ...]: クリアされたフィールドの空文字列タプル。
+    """
     return "", "", "", "", "", "", "", "", "", ""
 
 def create_evaluation_tab(component_manager: Any, config: Any):
+    """
+    プロンプト評価タブのUIを作成し、イベントハンドラを登録します。
+
+    Args:
+        component_manager: アプリケーションのコンポーネントを管理するオブジェクト。
+        config: アプリケーションの設定オブジェクト。
+    """
     with gr.Tab(config.lang_store[config.language]["Prompt Evaluation"]):
         # プロンプト入力と変数置換のセクション
         with gr.Row():
@@ -74,6 +86,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                     "Replace Variables in Original Prompt"
                 ]
             )
+            # 元のプロンプトの変数置換ボタンクリックイベント
             insert_button_original.click(
                 component_manager.alignment.insert_kv,
                 inputs=[user_prompt_original, kv_input_original],
@@ -86,6 +99,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                     "Replace Variables in Revised Prompt"
                 ]
             )
+            # 改訂されたプロンプトの変数置換ボタンクリックイベント
             insert_button_revise.click(
                 component_manager.alignment.insert_kv,
                 inputs=[user_prompt_eval, kv_input_eval],
@@ -116,6 +130,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             invoke_button = gr.Button(
                 config.lang_store[config.language]["Execute prompt"], scale=4
             )
+            # クリアボタン
             clear_button_eval = gr.Button(config.lang_store[config.language].get("Clear", "Clear"), scale=1)
 
         # モデル実行結果表示エリア
@@ -171,6 +186,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                 show_copy_button=True,
             )
 
+            # クリアボタンクリックイベント
             clear_button_eval.click(
                 clear_evaluation_tab,
                 inputs=[],
@@ -189,9 +205,11 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             )
 
         with gr.Row():
+            # 自動評価ボタン
             evaluate_button = gr.Button(
                 config.lang_store[config.language]["Auto-evaluate the Prompt Effect"]
             )
+            # 自動評価ボタンクリックイベント
             evaluate_button.click(
                 component_manager.alignment.evaluate_response,
                 inputs=[OpenAI_output, groq_output],
@@ -201,6 +219,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             revise_button = gr.Button(
                 config.lang_store[config.language]["Iterate the Prompt"]
             )
+            # プロンプト改善ボタンクリックイベント
             revise_button.click(
                 component_manager.alignment.generate_revised_prompt,  # eval_model_id は削除
                 inputs=[feedback_input, user_prompt_eval, OpenAI_output, groq_output],
