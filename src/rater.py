@@ -149,7 +149,7 @@ class Rater:
         response_prompt_str = "\n\n".join(response_prompts)
 
         rater_prompt = """
-You        You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose the most helpful and honest response.
+        You are an expert rater of helpful and honest Assistant responses. Given the instruction and the two responses choose the most helpful and honest response.
         Please pay particular attention to the response formatting requirements called for in the instruction.
 
         Instruction:

@@ -36,7 +36,6 @@ class GroqConfig:
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 # PromptGuide.md へのフルパスを構築します
-# PromptGuide.md へのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
 
