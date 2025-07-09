@@ -1,10 +1,10 @@
 import json
 import logging
 import os
-import time
+import time  # 時間関連の操作のためにtimeモジュールをインポート
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path  # ファイルパスを扱うためのPathクラスをインポート
 from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
@@ -12,7 +12,7 @@ from groq import APIError, Groq, RateLimitError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 # 環境変数を .env ファイルから読み込みます
-env_path = Path(__file__).parent.parent / ".env"
+env_path = Path(__file__).parent.parent / ".env"  # .envファイルのパスを構築
 load_dotenv(env_path)
 
 logging.basicConfig(
@@ -22,10 +22,12 @@ logging.basicConfig(
 
 @dataclass
 class GroqConfig:
-    rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
-    detect_lang_model: str = "llama-3.1-8b-instant"
-    judge_model: str = "llama-3.3-70b-versatile"
-    max_tokens: int = 8192
+    rewrite_model: str = (
+        "meta-llama/llama-4-scout-17b-16e-instruct"  # プロンプト書き換えに使用するモデル
+    )
+    detect_lang_model: str = "llama-3.1-8b-instant"  # 言語検出に使用するモデル
+    judge_model: str = "llama-3.3-70b-versatile"  # 評価に使用するモデル
+    max_tokens: int = 8192  # モデルからの応答の最大トークン数
     temperature_rewrite: float = 0.7
     temperature_detect_lang: float = 0.0
     temperature_judge: float = 0.0
@@ -33,7 +35,7 @@ class GroqConfig:
 
 # 現在のスクリプトが配置されているディレクトリを取得します
 current_script_path = os.path.dirname(os.path.abspath(__file__))
-
+# PromptGuide.md へのフルパスを構築します
 # PromptGuide.md へのフルパスを構築します
 prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
@@ -43,11 +45,11 @@ def load_prompt_guide(path: str) -> str:
     """
     PromptGuide.md ファイルを読み込み、キャッシュします。
     """
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:  # ファイルを読み込みモードで開く
         return f.read()
 
 
-PromptGuide = load_prompt_guide(prompt_guide_path)
+PromptGuide = load_prompt_guide(prompt_guide_path)  # プロンプトガイドの内容を読み込む
 
 
 # プロンプトガイドに基づいてプロンプトを書き換えるクラス
@@ -58,7 +60,7 @@ class GuideBased:
             logging.error("GROQ_API_KEY環境変数が設定されていません。")
             raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
         self.groq_client = Groq(api_key=groq_api_key)
-        self.config = GroqConfig()
+        self.config = GroqConfig()  # GroqConfigのインスタンスを作成
 
     def __call__(self, initial_prompt: str) -> str:
         """
@@ -71,7 +73,7 @@ class GuideBased:
         Returns:
             str: 書き換えられたプロンプト。""を返却することはほぼないと思われる
         """
-        self._validate_initial_prompt(initial_prompt)
+        self._validate_initial_prompt(initial_prompt)  # 初期プロンプトの検証
         lang: str = self.detect_lang(initial_prompt)
         lang_prompt: str = ""  # Initialize with empty string
         # 検出された言語に応じて、プロンプトの言語指示を設定します
@@ -174,10 +176,10 @@ class GuideBased:
                     max_completion_tokens=self.config.max_tokens,  # 最大トークン数
                     temperature=self.config.temperature_rewrite,  # 温度
                 )
-                result: str = (
+                result: str = (  # LLMの応答を取得
                     completion.choices[0].message.content or ""
                 )  # LLMの応答 (handle None)
-                # LLMからの応答をデバッグ出力
+                # LLMからの応答をログに出力
                 logging.info(f"__call__ LLM response: \n{result}\n")
                 # 結果から不要なXMLタグを除去します
                 if result.startswith("<instruction>"):  # 開始タグを除去
@@ -186,19 +188,19 @@ class GuideBased:
                     result = result[:-14]
                 result = result.strip()
                 return result
-            except RateLimitError as e:
+            except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
                     f"Rate limit exceeded in __call__. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
-            except APIError as e:
+            except APIError as e:  # Groq APIエラーが発生した場合
                 logging.error(f"GuideBased.__call__ - Groq APIError: {e}")
                 return ""
-            except Exception as e:
+            except Exception as e:  # その他の予期せぬエラーが発生した場合
                 logging.error(f"GuideBased.__call__ - Unexpected error: {e}")
                 return ""
-        logging.error(
+        logging.error(  # 最大リトライ回数に達した場合
             "Max retries reached for __call__. Failed to get a response from Groq API."
         )
         return ""
@@ -253,10 +255,10 @@ class GuideBased:
                     max_completion_tokens=self.config.max_tokens,
                     temperature=self.config.temperature_detect_lang,
                 )  # API呼び出し
-                # LLMからの応答をデバッグ出力
+                # LLMからの応答をログに出力
                 content = completion.choices[0].message.content
                 logging.info(f"detect_lang LLM response: {content}")
-                if not content:
+                if not content:  # 応答内容が空の場合
                     logging.error("No content in response for language detection")
                     return ""
                 # 結果のJSONをパースして言語コードを取得します
@@ -264,21 +266,21 @@ class GuideBased:
                 return lang
             except (json.JSONDecodeError, KeyError) as e:
                 # エラーが発生した場合は空文字列を返します
-                logging.error(f"Error parsing LLM response for language detection: {e}")
+                logging.error(f"言語検出のためのLLM応答のパースエラー: {e}")
                 return ""
-            except RateLimitError as e:
+            except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
                     f"Rate limit exceeded in detect_lang. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
-            except APIError as e:
+            except APIError as e:  # Groq APIエラーが発生した場合
                 logging.error(f"GuideBased.detect_lang - Groq APIError: {e}")
                 return ""
-            except Exception as e:
+            except Exception as e:  # その他の予期せぬエラーが発生した場合
                 logging.error(f"GuideBased.detect_lang - Unexpected error: {e}")
                 return ""
-        logging.error(
+        logging.error(  # 最大リトライ回数に達した場合
             "Max retries reached for detect_lang. Failed to get a response from Groq API."
         )
         return ""
@@ -337,25 +339,28 @@ class GuideBased:
                     max_completion_tokens=self.config.max_tokens,
                     temperature=self.config.temperature_judge,
                 )  # API呼び出し
-                # LLMからの応答をデバッグ出力
+                # LLMからの応答をログに出力
                 content = completion.choices[0].message.content
                 logging.info(f"judge LLM response (raw): {content}")
                 final_result: Optional[int] = None
-                if not content:
+                if not content:  # 応答内容が空の場合
                     logging.error("No content in response for judge")
                     return None
                 result: Dict[str, str] = json.loads(content)  # JSONをパース
                 # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
                 for idx in range(len(candidates)):  # candidatesの長さに合わせてループ
                     if str(idx + 1) in result["Preferred"]:  # 優先される候補を特定
-                        final_result = idx
+                        final_result = idx  # インデックスを保存
                         break
                 return final_result
-            except (json.JSONDecodeError, KeyError) as e:
+            except (
+                json.JSONDecodeError,
+                KeyError,
+            ) as e:  # JSONパースエラーまたはキーエラーが発生した場合
                 # JSONパースエラーなどが発生した場合はNoneのまま
-                logging.error(f"Error parsing judge LLM response: {e}")
+                logging.error(f"LLM応答のパースエラー: {e}")
                 return None
-            except RateLimitError as e:
+            except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
                     f"Rate limit exceeded in judge. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
@@ -363,11 +368,11 @@ class GuideBased:
                 retry_delay *= backoff_factor
             except APIError as e:
                 logging.error(f"GuideBased.judge - Groq APIError: {e}")
-                return None
+                return None  # Groq APIエラーが発生した場合
             except Exception as e:
                 logging.error(f"Unexpected error in judge method: {e}")
-                return None
-        logging.error(
+                return None  # その他の予期せぬエラーが発生した場合
+        logging.error(  # 最大リトライ回数に達した場合
             "Max retries reached for judge. Failed to get a response from Groq API."
         )
         return None

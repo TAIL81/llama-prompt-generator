@@ -12,17 +12,18 @@ from groq import APIError, AsyncGroq, Groq, RateLimitError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 # --- 初期化処理 ---
-groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
+groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY") # Groq APIキーを環境変数から取得
 if not groq_api_key:
     logging.error("GROQ_API_KEY環境変数が設定されていません。")
     raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
 
-async_groq_client = AsyncGroq(api_key=groq_api_key, timeout=600.0)
-sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
+async_groq_client = AsyncGroq(api_key=groq_api_key, timeout=600.0) # 非同期Groqクライアントの初期化
+sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0) # 同期Groqクライアントの初期化
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
 
 # --- データクラス ---
 @dataclass
@@ -33,6 +34,7 @@ class GroqConfig:
     max_tokens_rater: int = 8192
     temperature_get_output: float = 0.0
     temperature_rater: float = 0.0
+
 
 # --- メインクラス ---
 class Rater:
@@ -56,7 +58,9 @@ class Rater:
             ]
             outputs = await self._get_outputs_parallel(unrated_prompts)
             for i, output in zip(unrated_indices, outputs):
-                candidates[i]["input"] = self._replace_placeholders(candidates[i]["prompt"], demo_data)
+                candidates[i]["input"] = self._replace_placeholders(
+                    candidates[i]["prompt"], demo_data
+                )
                 candidates[i]["output"] = output if isinstance(output, str) else ""
 
         initial_prompt_filled = self._replace_placeholders(initial_prompt, demo_data)
@@ -95,7 +99,9 @@ class Rater:
 
     async def _get_output_async(self, prompt: str) -> Optional[str]:
         """指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。"""
-        messages: List[ChatCompletionMessageParam] = [{"role": "user", "content": prompt}]
+        messages: List[ChatCompletionMessageParam] = [
+            {"role": "user", "content": prompt}
+        ]
         max_retries = 3
         backoff_factor = 2
         retry_delay = 1
@@ -111,7 +117,9 @@ class Rater:
                 logging.info(f"Rater._get_output_async successful, result: {result}")
                 return result
             except RateLimitError:
-                logging.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                logging.warning(
+                    f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                )
                 await asyncio.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
@@ -120,10 +128,14 @@ class Rater:
             except Exception as e:
                 logging.error(f"Rater._get_output_async - Unexpected error: {e}")
                 return None
-        logging.error("Max retries reached for _get_output_async. Failed to get a response from Groq API.")
+        logging.error(
+            "Max retries reached for _get_output_async. Failed to get a response from Groq API."
+        )
         return None
 
-    def rater(self, initial_prompt: str, candidates: List[Dict[str, str]]) -> Optional[int]:
+    def rater(
+        self, initial_prompt: str, candidates: List[Dict[str, str]]
+    ) -> Optional[int]:
         """Groqモデルを使用して、複数の候補応答の中から最も良いものを評価させます。"""
         if not candidates:
             logging.debug("Rater.rater - No candidates provided. Returning None.")
@@ -154,14 +166,16 @@ You        You are an expert rater of helpful and honest Assistant responses. Gi
         Output example: {rater_example}
         """.strip()
 
-        messages: List[ChatCompletionMessageParam] = [{
-            "role": "user",
-            "content": rater_prompt.format(
-                instruction=initial_prompt,
-                Response_prompt=response_prompt_str,
-                rater_example=rater_example,
-            ),
-        }]
+        messages: List[ChatCompletionMessageParam] = [
+            {
+                "role": "user",
+                "content": rater_prompt.format(
+                    instruction=initial_prompt,
+                    Response_prompt=response_prompt_str,
+                    rater_example=rater_example,
+                ),
+            }
+        ]
 
         max_retries = 3
         backoff_factor = 2
@@ -184,22 +198,26 @@ You        You are an expert rater of helpful and honest Assistant responses. Gi
                     raise ValueError("LLM response JSON is missing 'Preferred' key.")
 
                 # 正規表現で応答から数値を抽出
-                match = re.search(r'\d+', preferred_text)
+                match = re.search(r"\d+", preferred_text)
                 if match:
                     # 1-based indexを0-basedに変換
                     final_result = int(match.group(0)) - 1
                     if 0 <= final_result < len(candidates):
                         logging.info(f"Rater.rater successful, result: {final_result}")
                         return final_result
-                
-                raise ValueError(f"Could not parse a valid index from LLM response: '{preferred_text}'")
+
+                raise ValueError(
+                    f"Could not parse a valid index from LLM response: '{preferred_text}'"
+                )
 
             except (json.JSONDecodeError, KeyError, ValueError) as e:
                 logging.error(f"Rater.rater - Error processing LLM response: {e}")
                 if attempt >= max_retries - 1:
-                    return None # 最終試行でも失敗したらNoneを返す
+                    return None  # 最終試行でも失敗したらNoneを返す
             except RateLimitError:
-                logging.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}")
+                logging.warning(
+                    f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
@@ -208,7 +226,8 @@ You        You are an expert rater of helpful and honest Assistant responses. Gi
             except Exception as e:
                 logging.error(f"Rater.rater - Unexpected error: {e}")
                 return None
-        
-        logging.error("Max retries reached for rater. Failed to get a response from Groq API.")
-        return None
 
+        logging.error(
+            "Max retries reached for rater. Failed to get a response from Groq API."
+        )
+        return None

@@ -5,9 +5,9 @@ import operator
 import os
 import signal
 import time
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple, Type, Union, cast
+from concurrent.futures import ThreadPoolExecutor # 並行処理のためのThreadPoolExecutorをインポート
+from pathlib import Path # ファイルパスを扱うためのPathクラスをインポート
+from typing import Any, Callable, Dict, List, Tuple, Type, Union, cast # 型ヒントのための各種型をインポート
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -19,12 +19,12 @@ from application.soe_prompt import SOEPrompt
 from calibration import CalibrationPrompt
 from metaprompt import MetaPrompt
 from optimize import Alignment
-from ui.metaprompt_tab import create_metaprompt_tab
-from ui.translation_tab import create_translation_tab
-from ui.evaluation_tab import create_evaluation_tab
-from ui.soe_tab import create_soe_tab
-from ui.calibration_tab import create_calibration_tab
 from translate import GuideBased
+from ui.calibration_tab import create_calibration_tab
+from ui.evaluation_tab import create_evaluation_tab
+from ui.metaprompt_tab import create_metaprompt_tab
+from ui.soe_tab import create_soe_tab
+from ui.translation_tab import create_translation_tab
 
 
 # 設定管理クラスの導入
@@ -199,7 +199,6 @@ with gr.Blocks(
         f"# {config.lang_store[config.language]['Automatic Prompt Engineering']}"
     )
 
-    
     create_metaprompt_tab(component_manager, config)
     create_translation_tab(component_manager, config)
     create_evaluation_tab(component_manager, config)

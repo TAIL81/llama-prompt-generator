@@ -12,10 +12,10 @@ class SafeCodeExecutor:
     """
 
     ALLOWED_NODES = (
-        ast.Expression,
-        ast.Call,
-        ast.Name,
-        ast.Load,
+        ast.Expression, # 式ノード
+        ast.Call, # 関数呼び出しノード
+        ast.Name, # 変数名ノード
+        ast.Load, # 変数のロード操作
         ast.Constant,
         ast.Tuple,
         ast.List,

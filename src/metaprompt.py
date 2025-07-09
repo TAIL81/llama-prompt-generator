@@ -111,6 +111,7 @@ class MetaPrompt:
         logging.info(
             f"MetaPrompt Request JSON: {json.dumps(messages, ensure_ascii=False, indent=2)}"
         )
+ # Groq APIを呼び出して応答を生成
 
         # Groq API を呼び出して応答を生成
         # ロギング: API 呼び出しの詳細をログに記録
