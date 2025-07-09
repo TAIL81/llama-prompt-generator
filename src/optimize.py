@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import Any, Dict, Generator, Optional, Tuple, Union
 
 import gradio as gr  # Gradioをインポート
-import httpx
-from dotenv import load_dotenv
-from groq import Groq
-from openai import OpenAI
-from openai.types.chat import ChatCompletion
+import httpx # HTTPクライアント
+from dotenv import load_dotenv # 環境変数読み込み用
+from groq import Groq # Groq APIクライアント
+from openai import OpenAI # OpenAI APIクライアント
+from openai.types.chat import ChatCompletion # OpenAIのチャットAPIの型
 
 # ロギング設定
 logging.basicConfig(
@@ -17,17 +17,19 @@ logging.basicConfig(
 )
 
 # 環境変数の読み込み
+# .envファイルは現在のスクリプトの親ディレクトリに存在すると仮定
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # 定数の定義
-TEMPERATURE: float = 0.0
-MAX_TOKENS = 8192
+TEMPERATURE: float = 0.0 # モデルの応答のランダム性を制御する温度パラメータ
+MAX_TOKENS = 8192 # モデルが生成する最大トークン数
 
 # デフォルトのシステムプロンプトのテンプレートを定義します
 DEFAULT_SYSTEM_TEMPLATE = "You are a helpful and knowledgeable assistant who is able to provide detailed and accurate information on a wide range of topics. You are also able to provide clear and concise answers to questions and are always willing to go the extra mile to help others."
 
 # 応答評価用のプロンプトテンプレート
+# OpenAIとLlamaの応答を比較し、フィードバックと推奨事項を生成するための指示
 evaluate_response_prompt_template = """
 You are an expert in linguistics and able to observe subtle differences in content between two paragraphs. Your task is to analyze responses from OpenAI and Llama and provide detailed feedback.
 {language_instruction_for_evaluation}
@@ -51,6 +53,7 @@ Please follow these steps:
 """.strip()
 
 # 改訂プロンプト生成用のプロンプトテンプレート
+# 人間のフィードバックに基づいてLlamaプロンプトを調整するための指示
 generate_revised_prompt_template = """
 You are an expert in prompt engineering for both OpenAI and Llama model and able to follow the human feedback to adjust the prompt to attain the optimal effect, you will be given the original Llama prompt, responses from OpenAI, responses from Llama and human feedback to revise the Llama prompt.
 {language_instruction_for_revision}
@@ -89,34 +92,53 @@ EVAL_MODEL_ID: str = "llama-3.3-70b-versatile"
 
 # APIキーとベースURLを (.env ファイルからロードされた) 環境変数から取得します
 openai_api_key = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
-groq_api_key = os.getenv("GROQ_API_KEY")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1") # OpenAI互換APIのベースURL
+groq_api_key = os.getenv("GROQ_API_KEY") # Groq APIキー
 
 
-# プロンプトの最適化と評価を行うクラス
 class Alignment:
+    """
+    プロンプトの最適化と評価を行うクラス。
+    OpenAIとGroqモデル間のプロンプトの整合性を管理し、
+    プロンプトの実行、評価、および改訂を行います。
+    """
     def __init__(
-        self, lang_store: Optional[Dict[str, str]] = None, language: str = "ja"
+        self,
+        lang_store: Optional[Dict[str, str]] = None,
+        language: str = "ja"
     ) -> None:
+        """
+        Alignmentクラスのコンストラクタ。
+
+        Args:
+            lang_store (Optional[Dict[str, str]], optional):
+                言語ストア。言語設定に基づいてテキストをカスタマイズするために使用されます。
+                デフォルトはNone。
+            language (str, optional):
+                言語コード。テキストの言語を指定します。デフォルトは"ja"。
+        """
         self.lang_store: Optional[Dict[str, str]] = lang_store
         self.language = language
 
         try:
+            # OpenAI APIクライアントの初期化
             self.OpenAI_client: Optional[OpenAI] = OpenAI(
                 base_url=OPENAI_BASE_URL,
                 api_key=openai_api_key,
-                http_client=httpx.Client(),
+                http_client=httpx.Client(), # httpx.Clientを使用
             )
         except Exception as e:
             logging.error(f"OpenAI client initialization failed: {e}")
             self.OpenAI_client = None
 
         try:
+            # Groq APIクライアントの初期化
             self.groq_client: Optional[Groq] = Groq(api_key=groq_api_key)
         except Exception as e:
             logging.error(f"Groq client initialization failed: {e}")
             self.groq_client = None
 
+        # 言語設定に基づいて指示を定義
         if self.language == "ja":
             language_instructions: Dict[str, str] = {
                 "generation": "応答は日本語で生成してください。",
@@ -160,7 +182,15 @@ class Alignment:
         )
 
     def _validate_response(self, response: ChatCompletion) -> bool:
-        """APIレスポンスの構造を検証するヘルパーメソッド"""
+        """
+        APIレスポンスの構造を検証するヘルパーメソッド。
+
+        Args:
+            response (ChatCompletion): 検証するAPIレスポンス。
+
+        Returns:
+            bool: レスポンスが有効な構造を持っている場合はTrue、そうでない場合はFalse。
+        """
         return (
             hasattr(response, "choices")
             and bool(response.choices)
@@ -176,7 +206,18 @@ class Alignment:
         system_content: str,
         user_prompt: str,
     ) -> str:
-        """APIクライアントを使用して応答を生成する共通メソッド"""
+        """
+        APIクライアントを使用して応答を生成する共通メソッド。
+
+        Args:
+            client (Union[OpenAI, Groq]): 使用するAPIクライアント（OpenAIまたはGroq）。
+            model_id (str): 使用するモデルのID。
+            system_content (str): システムプロンプトの内容。
+            user_prompt (str): ユーザープロンプト。
+
+        Returns:
+            str: 生成された応答。APIエラーが発生した場合はエラーメッセージ。
+        """
         try:
             completion: Any = client.chat.completions.create(
                 model=model_id,
@@ -197,7 +238,16 @@ class Alignment:
             return f"API Error: {str(e)}"
 
     def generate_groq_response(self, prompt: str, model_id: str) -> str:
-        """Groq APIを使用して応答を生成"""
+        """
+        Groq APIを使用して応答を生成します。
+
+        Args:
+            prompt (str): ユーザープロンプト。
+            model_id (str): 使用するGroqモデルのID。
+
+        Returns:
+            str: 生成された応答。APIクライアントが初期化されていない場合はエラーメッセージ。
+        """
         if not self.groq_client:
             return "GroqError: API client not initialized. Check GROQ_API_KEY."
         return self._generate_response(
@@ -205,7 +255,16 @@ class Alignment:
         )
 
     def generate_OpenAI_response(self, prompt: str, model_id: str) -> str:
-        """OpenAI APIを使用して応答を生成"""
+        """
+        OpenAI APIを使用して応答を生成します。
+
+        Args:
+            prompt (str): ユーザープロンプト。
+            model_id (str): 使用するOpenAIモデルのID。
+
+        Returns:
+            str: 生成された応答。APIクライアントが初期化されていない場合はエラーメッセージ。
+        """
         if not self.OpenAI_client:
             return "OpenAIError: API client not initialized. Check OPENAI_API_KEY."
         return self._generate_response(
@@ -215,6 +274,14 @@ class Alignment:
     def stream_OpenAI_response(
         self, prompt: str, model_id: str, output_component: gr.Textbox
     ) -> None:
+        """
+        OpenAI APIを使用してストリーミング応答を生成し、Gradioテキストボックスに出力します。
+
+        Args:
+            prompt (str): ユーザープロンプト。
+            model_id (str): 使用するOpenAIモデルのID。
+            output_component (gr.Textbox): 出力を表示するGradioテキストボックスコンポーネント。
+        """
         if not self.OpenAI_client:
             logging.error(
                 "OpenAIError: API client not initialized. Check OPENAI_API_KEY."
@@ -252,7 +319,8 @@ class Alignment:
         groq_model_id: str,
     ) -> Generator[Tuple[Any, Any], None, None]:
         """
-        元のプロンプトと改訂されたプロンプトをそれぞれOpenAIとGroqで実行し、結果を返します。ジェネレータを使用して、途中結果をgr.updateする。
+        元のプロンプトと改訂されたプロンプトをそれぞれOpenAIとGroqで実行し、結果を返します。
+        ジェネレータを使用して、途中結果をgr.updateする。
 
         Args:
             original_prompt_replace (str): 変数が置換された元のプロンプト。
@@ -262,10 +330,10 @@ class Alignment:
             OpenAI_model_id (str): OpenAIで使用するモデルID。
             groq_model_id (str): Groqで使用するモデルID。
 
-        Returns:
-            tuple: (OpenAIからの応答, Groqからの応答)
+        Yields:
+            Generator[Tuple[Any, Any], None, None]: OpenAIからの応答とGroqからの応答を順に生成するジェネレータ。
         """
-        # 置換後のプロンプトが空の場合、置換前���プロンプトを使用します
+        # 置換後のプロンプトが空の場合、置換前のプロンプトを使用
         if not original_prompt_replace:
             original_prompt_replace = original_prompt  # 元のプロンプトを使用
         if not revised_prompt_replace:
@@ -277,6 +345,7 @@ class Alignment:
         processing_message: str = "Processing..."
 
         # 元のプロンプトをOpenAIで実行
+        # OpenAIクライアントが初期化されているか確認
         if self.OpenAI_client is None:
             error_msg = "OpenAIError: API client not initialized. Check OPENAI_API_KEY and OPENAI_BASE_URL."
             logging.error(error_msg)
@@ -291,6 +360,7 @@ class Alignment:
             value=processing_message
         )
 
+        # OpenAIからの応答がエラーメッセージであるか確認
         if isinstance(original_prompt_output, str) and (
             original_prompt_output.startswith("OpenAIError:")
             or original_prompt_output.startswith("Error:")
@@ -301,6 +371,7 @@ class Alignment:
             return
 
         # 評価用プロンプトはGroqで実行
+        # Groqクライアントが初期化されているか確認
         if self.groq_client is None:
             error_msg = "GroqError: API client not initialized. Check GROQ_API_KEY."
             logging.error(error_msg)
@@ -319,8 +390,6 @@ class Alignment:
         """
         固定モデルを使用して OpenAI と Groq の応答を比較評価し、フィードバックと推奨事項を生成します。
 
-        OpenAIとGroqの応答を比較評価し、フィードバックと推奨事項を生成します。
-
         Args:
             openai_output (str): OpenAI (OpenAI) からの応答。
             groq_output (str): Groqからの応答。
@@ -328,6 +397,7 @@ class Alignment:
         Returns:
             str: 自動フィードバックと推奨事項を含む文字列。
         """
+        # Groqクライアントが初期化されているか確認
         if not self.groq_client:
             logging.error(
                 "GroqError: API client for evaluation not initialized. Check GROQ_API_KEY."
@@ -346,11 +416,12 @@ class Alignment:
         groq_result: str = self.generate_groq_response(
             formatted_evaluate_prompt, EVAL_MODEL_ID
         )
+        # Groq APIからのエラーをチェック
         if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
             logging.error(f"Evaluation Error: {groq_result}")
             return f"Evaluation Error: {groq_result}"  # エラーメッセージを返す
 
-        # 生成された結果からフィードバックと推奨事項を抽出します
+        # 生成された結果からフィードバックと推奨事項を抽出
         pattern = r"<auto_feedback>(.*?)</auto_feedback>"
         feedback_match = re.findall(pattern, groq_result, re.DOTALL)
         feedback: str = feedback_match[0] if feedback_match else "Feedback not found."
@@ -392,12 +463,11 @@ class Alignment:
         """
         固定モデルを使用して、フィードバック、元のプロンプト、および両モデルの応答に基づいて、改訂されたプロンプトを生成します。
 
-
-        フィードバック、元のプロンプト、および両モデルの応答に基づいて、改訂されたプロンプトを生成します。
-
         Args:
             feedback (str): プロンプト改善のためのフィードバック。
-            groq_response (str): Llama (Groq) からの応答。
+            prompt (str): 元のプロンプト。
+            openai_response (str): OpenAIからの応答。
+            groq_response (str): Groqからの応答。
 
         Returns:
             str: 改訂されたプロンプト。
@@ -417,6 +487,7 @@ class Alignment:
             _Groq=groq_response,
             language_instruction_for_revision=current_revision_instruction,
         )
+        # Groqクライアントが初期化されているか確認
         if not self.groq_client:
             logging.error(
                 "GroqError: API client for prompt revision not initialized. Check GROQ_API_KEY."
@@ -426,13 +497,14 @@ class Alignment:
         groq_result: str = self.generate_groq_response(
             formatted_revised_prompt_content, EVAL_MODEL_ID
         )
+        # Groq API エラーをチェック
         if isinstance(groq_result, str) and groq_result.startswith(
             "Groq API Error:"
-        ):  # Groq API エラーをチェック
+        ):
             logging.error(f"Prompt Revision Error: {groq_result}")
             return f"Prompt Revision Error: {groq_result}"  # エラーメッセージを返す
 
-        # 生成された結果から改訂プロンプトを抽出します
+        # 生成された結果から改訂プロンプトを抽出
         pattern = r"<revised_prompt>(.*?)</revised_prompt>"
         matches = re.findall(pattern, groq_result, re.DOTALL)
         revised_prompt: str = matches[0] if matches else "Revised prompt not found."
