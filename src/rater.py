@@ -40,10 +40,11 @@ class GroqConfig:
     Groqモデルの設定を保持するデータクラス。
     モデル名、最大トークン数、温度などのパラメータを定義します。
     """
+
     # 出力生成に使用するモデル名
     get_output_model: str = "meta-llama/llama-guard-4-12b"
     # 評価（レーティング）に使用するモデル名
-    rater_model: str = "llama-3.3-70b-versatile"
+    rater_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     # 出力生成時の最大トークン数
     max_tokens_get_output: int = 1024
     # 評価時の最大トークン数
@@ -59,6 +60,7 @@ class Rater:
     """
     Groqモデルを使用してプロンプト候補を評価し、最適なものを選択するクラス。
     """
+
     def __init__(self) -> None:
         """
         Raterクラスのコンストラクタ。
@@ -188,10 +190,10 @@ class Rater:
         messages: List[ChatCompletionMessageParam] = [
             {"role": "user", "content": prompt}
         ]
-        max_retries = 3 # 最大リトライ回数
-        backoff_factor = 2 # リトライ遅延のバックオフ係数
-        retry_delay = 1 # 初期リトライ遅延（秒）
-        
+        max_retries = 3  # 最大リトライ回数
+        backoff_factor = 2  # リトライ遅延のバックオフ係数
+        retry_delay = 1  # 初期リトライ遅延（秒）
+
         # 指定された回数だけリトライを試みるループ
         for attempt in range(max_retries):
             try:
@@ -211,7 +213,7 @@ class Rater:
                     f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
                 await asyncio.sleep(retry_delay)
-                retry_delay *= backoff_factor # 遅延時間を指数関数的に増加
+                retry_delay *= backoff_factor  # 遅延時間を指数関数的に増加
             except APIError as e:
                 # Groq APIからのエラーの場合、エラーをログに出力し、Noneを返す
                 logging.error(f"Rater._get_output_async - Groq APIError: {e}")
@@ -286,10 +288,10 @@ class Rater:
             }
         ]
 
-        max_retries = 3 # 最大リトライ回数
-        backoff_factor = 2 # リトライ遅延のバックオフ係数
-        retry_delay = 1 # 初期リトライ遅延（秒）
-        
+        max_retries = 3  # 最大リトライ回数
+        backoff_factor = 2  # リトライ遅延のバックオフ係数
+        retry_delay = 1  # 初期リトライ遅延（秒）
+
         # 指定された回数だけリトライを試みるループ
         for attempt in range(max_retries):
             try:
@@ -336,7 +338,7 @@ class Rater:
                     f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
                 time.sleep(retry_delay)
-                retry_delay *= backoff_factor # 遅延時間を指数関数的に増加
+                retry_delay *= backoff_factor  # 遅延時間を指数関数的に増加
             except APIError as e:
                 # Groq APIからのエラーの場合、エラーをログに出力し、Noneを返す
                 logging.error(f"Rater.rater - Groq APIError: {e}")

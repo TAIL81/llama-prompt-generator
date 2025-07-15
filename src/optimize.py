@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import Any, Dict, Generator, Optional, Tuple, Union
 
 import gradio as gr  # Gradioをインポート
-import httpx # HTTPクライアント
-from dotenv import load_dotenv # 環境変数読み込み用
-from groq import Groq # Groq APIクライアント
-from openai import OpenAI # OpenAI APIクライアント
-from openai.types.chat import ChatCompletion # OpenAIのチャットAPIの型
+import httpx  # HTTPクライアント
+from dotenv import load_dotenv  # 環境変数読み込み用
+from groq import Groq  # Groq APIクライアント
+from openai import OpenAI  # OpenAI APIクライアント
+from openai.types.chat import ChatCompletion  # OpenAIのチャットAPIの型
 
 # ロギング設定
 logging.basicConfig(
@@ -22,8 +22,8 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # 定数の定義
-TEMPERATURE: float = 0.0 # モデルの応答のランダム性を制御する温度パラメータ
-MAX_TOKENS = 8192 # モデルが生成する最大トークン数
+TEMPERATURE: float = 0.0  # モデルの応答のランダム性を制御する温度パラメータ
+MAX_TOKENS = 8192  # モデルが生成する最大トークン数
 
 # デフォルトのシステムプロンプトのテンプレートを定義します
 DEFAULT_SYSTEM_TEMPLATE = "You are a helpful and knowledgeable assistant who is able to provide detailed and accurate information on a wide range of topics. You are also able to provide clear and concise answers to questions and are always willing to go the extra mile to help others."
@@ -88,12 +88,14 @@ Finally, provide the revised prompt within the following XML tags:
 """.strip()
 
 # 評価モデルIDの定数定義
-EVAL_MODEL_ID: str = "llama-3.3-70b-versatile"
+EVAL_MODEL_ID: str = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # APIキーとベースURLを (.env ファイルからロードされた) 環境変数から取得します
 openai_api_key = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1") # OpenAI互換APIのベースURL
-groq_api_key = os.getenv("GROQ_API_KEY") # Groq APIキー
+OPENAI_BASE_URL = os.getenv(
+    "OPENAI_BASE_URL", "https://openrouter.ai/api/v1"
+)  # OpenAI互換APIのベースURL
+groq_api_key = os.getenv("GROQ_API_KEY")  # Groq APIキー
 
 
 class Alignment:
@@ -102,10 +104,9 @@ class Alignment:
     OpenAIとGroqモデル間のプロンプトの整合性を管理し、
     プロンプトの実行、評価、および改訂を行います。
     """
+
     def __init__(
-        self,
-        lang_store: Optional[Dict[str, str]] = None,
-        language: str = "ja"
+        self, lang_store: Optional[Dict[str, str]] = None, language: str = "ja"
     ) -> None:
         """
         Alignmentクラスのコンストラクタ。
@@ -125,7 +126,7 @@ class Alignment:
             self.OpenAI_client: Optional[OpenAI] = OpenAI(
                 base_url=OPENAI_BASE_URL,
                 api_key=openai_api_key,
-                http_client=httpx.Client(), # httpx.Clientを使用
+                http_client=httpx.Client(),  # httpx.Clientを使用
             )
         except Exception as e:
             logging.error(f"OpenAI client initialization failed: {e}")
@@ -498,9 +499,7 @@ class Alignment:
             formatted_revised_prompt_content, EVAL_MODEL_ID
         )
         # Groq API エラーをチェック
-        if isinstance(groq_result, str) and groq_result.startswith(
-            "Groq API Error:"
-        ):
+        if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
             logging.error(f"Prompt Revision Error: {groq_result}")
             return f"Prompt Revision Error: {groq_result}"  # エラーメッセージを返す
 
