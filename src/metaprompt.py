@@ -25,7 +25,7 @@ logging.basicConfig(
 class GroqConfig:
     """Groq APIの設定を保持するデータクラス。"""
 
-    metaprompt_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    metaprompt_model: str = "moonshotai/kimi-k2-instruct"
     max_tokens: int = 8192
     temperature: float = 0.0
 
@@ -111,7 +111,7 @@ class MetaPrompt:
         logging.info(
             f"MetaPrompt Request JSON: {json.dumps(messages, ensure_ascii=False, indent=2)}"
         )
- # Groq APIを呼び出して応答を生成
+        # Groq APIを呼び出して応答を生成
 
         # Groq API を呼び出して応答を生成
         # ロギング: API 呼び出しの詳細をログに記録

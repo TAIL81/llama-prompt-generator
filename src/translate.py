@@ -23,7 +23,7 @@ logging.basicConfig(
 @dataclass
 class GroqConfig:
     rewrite_model: str = (
-        "meta-llama/llama-4-scout-17b-16e-instruct"  # プロンプト書き換えに使用するモデル
+        "moonshotai/kimi-k2-instruct"  # プロンプト書き換えに使用するモデル
     )
     detect_lang_model: str = "llama-3.1-8b-instant"  # 言語検出に使用するモデル
     judge_model: str = "llama-3.3-70b-versatile"  # 評価に使用するモデル
