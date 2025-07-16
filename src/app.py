@@ -4,12 +4,14 @@ import logging
 import operator
 import os
 import signal
+import sys  # sysモジュールを追加
 import time
-from concurrent.futures import ThreadPoolExecutor # 並行処理のためのThreadPoolExecutorをインポート
-from pathlib import Path # ファイルパスを扱うためのPathクラスをインポート
-from typing import Any, Callable, Dict, List, Tuple, Type, Union, cast # 型ヒントのための各種型をインポート
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Tuple, Type, Union, cast
 
 import gradio as gr
+import psutil  # psutilをファイル先頭に追加
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
@@ -195,6 +197,7 @@ component_manager = ComponentManager(config)
 # SafeCodeExecutor のインポートとインスタンス化
 # コードの安全な実行を管理するためのコンポーネント
 from safe_executor import SafeCodeExecutor
+
 safe_code_executor = SafeCodeExecutor()
 
 
@@ -234,7 +237,9 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
                 show_copy_button=True,
                 interactive=False,
             )
-        ] + [gr.Textbox(visible=False)] * 2 # 他の出力コンポーネントと数を合わせる
+        ] + [
+            gr.Textbox(visible=False)
+        ] * 2  # 他の出力コンポーネントと数を合わせる
 
     # APEコンポーネントを使用してプロンプトを生成
     result = component_manager.ape(original_prompt, 1, parsed_user_data)
@@ -271,23 +276,37 @@ with gr.Blocks(
     create_calibration_tab(component_manager, config)
 
 
+def kill_port_process(port: int):
+    """指定ポートを使用しているプロセスを強制終了"""
+    for proc in psutil.process_iter(["pid", "name", "connections"]):
+        try:
+            for conn in proc.connections():
+                if conn.laddr.port == port:
+                    print(f"ポート{port}のプロセスを終了します (PID: {proc.pid})")
+                    proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+
+
 # シグナルハンドラ
 def signal_handler(sig, frame):
-    """
-    Ctrl+C (SIGINT) シグナルを受信したときにアプリケーションを安全にシャットダウンします。
-
-    Args:
-        sig: 受信したシグナル番号。
-        frame: 現在のスタックフレーム。
-    """
-    print("Shutting down gracefully...")
+    """シグナルハンドラでグレースフルシャットダウンを開始"""
+    print("\nシャットダウンシグナルを受信しました。サーバーを終了します...")
     demo.close()  # Gradioサーバーを安全に停止
+    kill_port_process(7860)  # ポートを解放
+    sys.exit(0)
 
 
-# SIGINT (Ctrl+C) シグナルにシグナルハンドラを登録
+# SIGINT (Ctrl+C) と SIGTERM シグナルにハンドラを登録
 signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # スクリプトが直接実行された場合にGradioアプリケーションを起動
 if __name__ == "__main__":
-    load_dotenv() # .envファイルから環境変数をロード
-    demo.launch() # Gradioアプリケーションを起動
+    load_dotenv()  # .envファイルから環境変数をロード
+    try:
+        demo.launch()  # Gradioアプリケーションを起動
+    except Exception as e:
+        logging.error(f"サーバー起動エラー: {e}")
+        kill_port_process(7860)  # エラー時もポートを解放
+        raise

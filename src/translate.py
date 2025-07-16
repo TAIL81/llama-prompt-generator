@@ -1,10 +1,11 @@
 import json
 import logging
 import os
-import time  # 時間関連の操作のためにtimeモジュールをインポート
+import re  # 正規表現用モジュールを追加
+import time
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path  # ファイルパスを扱うためのPathクラスをインポート
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
@@ -288,9 +289,29 @@ class GuideBased:
         )
         return ""
 
+    def _clean_json_response(self, content: str) -> str:
+        """
+        JSONレスポンスからコードブロックマーカーや不要な文字を除去
+
+        Args:
+            content (str): 生のLLMレスポンス
+
+        Returns:
+            str: クリーニングされたJSON文字列
+        """
+        # ```json ... ``` のパターンを除去
+        if content.startswith("```json") and content.endswith("```"):
+            content = content[7:-3].strip()
+        # 一般的な ``` ... ``` ブロックを除去
+        elif content.startswith("```") and content.endswith("```"):
+            content = content[3:-3].strip()
+        # その他の不正文字をフィルタリング
+        return content.replace("```", "").strip()
+
     def judge(self, candidates: List[str]) -> Optional[int]:
         """
         複数のプロンプト候補を評価し、最も良いものを選択します。
+        レスポンスフォーマットの変動に対応するため、前処理とフォールバック処理を追加。
 
         Args:
             candidates (List[str]): 評価対象のプロンプト候補のリスト。
@@ -299,12 +320,11 @@ class GuideBased:
             Optional[int]: 最も良いと判断された候補のインデックス。エラーの場合はNone。
         """
         Instruction_prompts: List[str] = []
-        for idx, candidate in enumerate(candidates):  # 各候補を処理
+        for idx, candidate in enumerate(candidates):
             Instruction_prompts.append(
                 f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>"
             )
         example: str = json.dumps({"Preferred": "Instruction 1"})
-        # プロンプト評価のための指示テンプレート
         prompt: str = (
             """
             You are an instruction engineer. Your task is to evaluate which of the three instructions given below is better based on the guide in the <guide> xml tag.
@@ -318,7 +338,7 @@ class GuideBased:
 
             Use JSON format when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
             {example}
-            """.strip()  # プロンプトテンプレートの終わり
+            """.strip()
         )
         messages: List[ChatCompletionMessageParam] = [
             {
@@ -333,37 +353,58 @@ class GuideBased:
         max_retries = 3
         backoff_factor = 2
         retry_delay = 1
+
         for attempt in range(max_retries):
             try:
-                # Groq APIを使用してプロンプト候補の評価をリクエストします
                 completion = self.groq_client.chat.completions.create(
                     model=self.config.judge_model,
                     messages=messages,
                     max_completion_tokens=self.config.max_tokens,
                     temperature=self.config.temperature_judge,
-                )  # API呼び出し
-                # LLMからの応答をログに出力
+                )
                 content = completion.choices[0].message.content
                 logging.info(f"judge LLM response (raw): {content}")
-                final_result: Optional[int] = None
-                if not content:  # 応答内容が空の場合
+
+                if not content:
                     logging.error("No content in response for judge")
                     return None
-                result: Dict[str, str] = json.loads(content)  # JSONをパース
-                # 結果のJSONから優先される指示の番号を抽出し、インデックスに変換します
-                for idx in range(len(candidates)):  # candidatesの長さに合わせてループ
-                    if str(idx + 1) in result["Preferred"]:  # 優先される候補を特定
-                        final_result = idx  # インデックスを保存
+
+                # JSONレスポンスのクリーニング
+                cleaned_content = self._clean_json_response(content)
+                logging.info(f"Cleaned JSON content: {cleaned_content}")
+
+                try:
+                    # クリーニング後のコンテンツをJSONパース
+                    result: Dict[str, str] = json.loads(cleaned_content)
+                except json.JSONDecodeError as e:
+                    # JSONパース失敗時のフォールバック処理
+                    logging.error(
+                        f"JSONパースエラー: {e}\nコンテンツ: {cleaned_content}"
+                    )
+
+                    # 正規表現でJSONオブジェクトを抽出
+                    if match := re.search(
+                        r'\{"Preferred":\s*"Instruction\s*\d+"\}', cleaned_content
+                    ):
+                        result = json.loads(match.group(0))
+                        logging.info(f"Regex fallback successful: {result}")
+                    else:
+                        logging.error("JSONオブジェクトを抽出できませんでした")
+                        return None
+
+                # 結果の抽出
+                final_result = None
+                for idx in range(len(candidates)):
+                    if str(idx + 1) in result["Preferred"]:
+                        final_result = idx
                         break
+
                 return final_result
-            except (
-                json.JSONDecodeError,
-                KeyError,
-            ) as e:  # JSONパースエラーまたはキーエラーが発生した場合
-                # JSONパースエラーなどが発生した場合はNoneのまま
+
+            except (json.JSONDecodeError, KeyError) as e:
                 logging.error(f"LLM応答のパースエラー: {e}")
                 return None
-            except RateLimitError as e:  # レート制限エラーが発生した場合
+            except RateLimitError as e:
                 logging.warning(
                     f"Rate limit exceeded in judge. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
@@ -371,11 +412,12 @@ class GuideBased:
                 retry_delay *= backoff_factor
             except APIError as e:
                 logging.error(f"GuideBased.judge - Groq APIError: {e}")
-                return None  # Groq APIエラーが発生した場合
+                return None
             except Exception as e:
                 logging.error(f"Unexpected error in judge method: {e}")
-                return None  # その他の予期せぬエラーが発生した場合
-        logging.error(  # 最大リトライ回数に達した場合
+                return None
+
+        logging.error(
             "Max retries reached for judge. Failed to get a response from Groq API."
         )
         return None
