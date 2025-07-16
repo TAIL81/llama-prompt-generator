@@ -51,7 +51,7 @@ EXAMPLE_TEMPLATE = """
 class GroqConfig:
     rewrite_model: str = "moonshotai/kimi-k2-instruct"
     max_tokens: int = 8192  # 生成される応答の最大トークン数
-    temperature: float = 0.7  # 応答の多様性を制御する温度パラメータ
+    temperature: float = 0.6  # 応答の多様性を制御する温度パラメータ
 
 
 # --- 初期化処理 ---

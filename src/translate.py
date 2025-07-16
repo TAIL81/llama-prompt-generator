@@ -33,7 +33,7 @@ class GroqConfig:
         "meta-llama/llama-4-scout-17b-16e-instruct"  # 評価に使用するモデル
     )
     max_tokens: int = 8192  # モデルからの応答の最大トークン数
-    temperature_rewrite: float = 0.7
+    temperature_rewrite: float = 0.6
     temperature_detect_lang: float = 0.0
     temperature_judge: float = 0.0
 
