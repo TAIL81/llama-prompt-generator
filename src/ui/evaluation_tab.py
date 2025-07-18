@@ -9,8 +9,10 @@ OPENAI_MODEL_CHOICES = [
 ]
 GROQ_MODEL_CHOICES = [
     "compound-beta-mini",
+    "compound-beta-kimi",
     "compound-beta",
 ]
+
 
 def clear_evaluation_tab() -> Tuple[str, str, str, str, str, str, str, str, str, str]:
     """
@@ -20,6 +22,7 @@ def clear_evaluation_tab() -> Tuple[str, str, str, str, str, str, str, str, str,
         Tuple[str, ...]: クリアされたフィールドの空文字列タプル。
     """
     return "", "", "", "", "", "", "", "", "", ""
+
 
 def create_evaluation_tab(component_manager: Any, config: Any):
     """
@@ -131,7 +134,9 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                 config.lang_store[config.language]["Execute prompt"], scale=4
             )
             # クリアボタン
-            clear_button_eval = gr.Button(config.lang_store[config.language].get("Clear", "Clear"), scale=1)
+            clear_button_eval = gr.Button(
+                config.lang_store[config.language].get("Clear", "Clear"), scale=1
+            )
 
         # モデル実行結果表示エリア
         with gr.Row():
