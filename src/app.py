@@ -104,7 +104,7 @@ def setup_logging():
     INFOレベル以上のメッセージをコンソールに出力します。
     """
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+        level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
     )
 
 
