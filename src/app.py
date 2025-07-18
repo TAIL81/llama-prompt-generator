@@ -276,33 +276,25 @@ with gr.Blocks(
     create_calibration_tab(component_manager, config)
 
 
-def kill_port_process(port: int):
-    """指定ポートを使用しているプロセスを強制終了"""
-    for proc in psutil.process_iter(["pid", "name"]):
-        try:
-            # プロセスの接続情報を個別に取得（非推奨のconnections()からnet_connections()に変更）
-            connections = proc.net_connections()
-            for conn in connections:
-                # laddrが存在し、ポートが一致するかを確認
-                if conn.laddr and conn.laddr.port == port:
-                    print(f"ポート{port}のプロセスを終了します (PID: {proc.pid})")
-                    proc.kill()
-                    break  # 一致するポートを見つけたらループを抜ける
-        except (
-            psutil.NoSuchProcess,
-            psutil.AccessDenied,
-            psutil.ZombieProcess,
-            AttributeError,
-        ):
-            continue  # プロセス情報取得エラーを無視
-
+def kill_child_processes(parent_pid, sig=signal.SIGTERM):
+    """指定されたPIDの子プロセスをすべて終了させる"""
+    try:
+        parent = psutil.Process(parent_pid)
+        children = parent.children(recursive=True)
+        for child in children:
+            print(f"子プロセス {child.pid} を終了します")
+            child.send_signal(sig)
+    except psutil.NoSuchProcess:
+        return # 親プロセスがすでに存在しない場合は何もしない
 
 # シグナルハンドラ
 def signal_handler(sig, frame):
     """シグナルハンドラでグレースフルシャットダウンを開始"""
     print("\nシャットダウンシグナルを受信しました。サーバーを終了します...")
-    demo.close()  # Gradioサーバーを安全に停止
-    kill_port_process(7860)  # ポートを解放
+    # Gradioのサーバーを閉じる
+    demo.close()
+    # このスクリプトから起動した子プロセスを終了
+    kill_child_processes(os.getpid())
     sys.exit(0)
 
 
@@ -314,8 +306,10 @@ signal.signal(signal.SIGTERM, signal_handler)
 if __name__ == "__main__":
     load_dotenv()  # .envファイルから環境変数をロード
     try:
-        demo.launch()  # Gradioアプリケーションを起動
+        # Gradioアプリを起動し、サーバーインスタンスを取得
+        app, local_url, share_url = demo.launch()
     except Exception as e:
         logging.error(f"サーバー起動エラー: {e}")
-        kill_port_process(7860)  # エラー時もポートを解放
+        # エラー発生時に子プロセスをクリーンアップ
+        kill_child_processes(os.getpid())
         raise
