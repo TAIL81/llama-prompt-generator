@@ -129,65 +129,34 @@ class ComponentManager:
             config (AppConfig): アプリケーションの設定オブジェクト。
         """
         self._config = config
-        # 各コンポーネントのインスタンスをNoneで初期化
-        self._components: Dict[str, Any] = {
-            "ape": None,
-            "rewrite": None,
-            "alignment": None,
-            "metaprompt": None,
-            "soeprompt": None,
-            "calibration": None,
+        self._instances: Dict[Type, Any] = {}
+        self._initializers: Dict[Type, Callable[[], Any]] = {
+            APE: lambda: APE(),
+            GuideBased: lambda: GuideBased(),
+            Alignment: lambda: Alignment(lang_store=self._config.lang_store, language=self._config.language),
+            MetaPrompt: lambda: MetaPrompt(),
+            SOEPrompt: lambda: SOEPrompt(),
+            CalibrationPrompt: lambda: CalibrationPrompt(),
         }
 
-    def __getattr__(self, name: str) -> Any:
+    def get(self, component_type: Type[Any]) -> Any:
         """
-        存在しない属性へのアクセスを処理し、コンポーネントを初期化して返します。
-        これにより、`component_manager.ape`のようにアクセスすると、必要に応じてAPEコンポーネントが初期化されます。
+        指定された型のコンポーネントインスタンスを取得します。
+        インスタンスがまだ作成されていない場合は、初期化してから返します。
 
         Args:
-            name (str): アクセスされた属性の名前（コンポーネント名）。
+            component_type (Type[Any]): 取得するコンポーネントのクラス。
 
         Returns:
-            Any: 初期化されたコンポーネントのインスタンス。
-
-        Raises:
-            AttributeError: 指定されたコンポーネント名が見つからない場合。
+            Any: コンポーネントのインスタンス。
         """
-        if name in self._components:
-            # コンポーネントがまだ初期化されていない場合、初期化を実行
-            if self._components[name] is None:
-                self._initialize_component(name)
-            return self._components[name]
-        # 存在しない属性へのアクセスの場合、AttributeErrorを発生
-        raise AttributeError(f"Component {name} not found")
-
-    def _initialize_component(self, name: str) -> None:
-        """
-        指定された名前のコンポーネントを初期化します。
-
-        Args:
-            name (str): 初期化するコンポーネントの名前。
-
-        Raises:
-            ValueError: 未知のコンポーネント名が指定された場合。
-        """
-        logging.info(f"Initializing component: {name}")
-        if name == "ape":
-            self._components[name] = APE()  # APEコンポーネントの初期化
-        elif name == "rewrite":
-            self._components[name] = GuideBased()  # GuideBasedコンポーネントの初期化
-        elif name == "alignment":
-            self._components[name] = Alignment(
-                lang_store=self._config.lang_store, language=self._config.language
-            )
-        elif name == "metaprompt":
-            self._components[name] = MetaPrompt()  # MetaPrompt のインスタンス化
-        elif name == "soeprompt":
-            self._components[name] = SOEPrompt()
-        elif name == "calibration":
-            self._components[name] = CalibrationPrompt()
-        else:
-            raise ValueError(f"Unknown component: {name}")
+        if component_type not in self._instances:
+            if component_type in self._initializers:
+                logging.info(f"Initializing component: {component_type.__name__}")
+                self._instances[component_type] = self._initializers[component_type]()
+            else:
+                raise TypeError(f"Unknown component type: {component_type.__name__}")
+        return self._instances[component_type]
 
 
 # コンポーネントマネージャーのインスタンスを作成
@@ -242,7 +211,8 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
         ] * 2  # 他の出力コンポーネントと数を合わせる
 
     # APEコンポーネントを使用してプロンプトを生成
-    result = component_manager.ape(original_prompt, 1, parsed_user_data)
+    ape_instance = component_manager.get(APE)
+    result = ape_instance(original_prompt, 1, parsed_user_data)
     return [
         gr.Textbox(
             label="Prompt Generated",
