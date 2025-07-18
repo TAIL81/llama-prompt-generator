@@ -104,7 +104,7 @@ def setup_logging():
     INFOレベル以上のメッセージをコンソールに出力します。
     """
     logging.basicConfig(
-        level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
     )
 
 
@@ -278,14 +278,23 @@ with gr.Blocks(
 
 def kill_port_process(port: int):
     """指定ポートを使用しているプロセスを強制終了"""
-    for proc in psutil.process_iter(["pid", "name", "connections"]):
+    for proc in psutil.process_iter(["pid", "name"]):
         try:
-            for conn in proc.connections():
-                if conn.laddr.port == port:
+            # プロセスの接続情報を個別に取得（非推奨のconnections()からnet_connections()に変更）
+            connections = proc.net_connections()
+            for conn in connections:
+                # laddrが存在し、ポートが一致するかを確認
+                if conn.laddr and conn.laddr.port == port:
                     print(f"ポート{port}のプロセスを終了します (PID: {proc.pid})")
                     proc.kill()
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
+                    break  # 一致するポートを見つけたらループを抜ける
+        except (
+            psutil.NoSuchProcess,
+            psutil.AccessDenied,
+            psutil.ZombieProcess,
+            AttributeError,
+        ):
+            continue  # プロセス情報取得エラーを無視
 
 
 # シグナルハンドラ

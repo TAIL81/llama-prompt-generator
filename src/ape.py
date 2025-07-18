@@ -17,7 +17,7 @@ from rater import Rater  # Raterクラスをインポート
 load_dotenv()
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 # --- 定数定義 ---
