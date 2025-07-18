@@ -1,8 +1,8 @@
+from enum import Enum
+from typing import List, Tuple, cast
 
 import gradio as gr
-from typing import List, Tuple, cast
-from concurrent.futures import ThreadPoolExecutor
-from enum import Enum
+
 
 # 最適化レベルをEnumで定義し、マジックストリングを排除
 class OptimizeLevel(Enum):
@@ -11,8 +11,10 @@ class OptimizeLevel(Enum):
     - SINGLE: 一回生成モード
     - MULTIPLE: 複数回生成モード
     """
+
     SINGLE = "One-time Generation"
     MULTIPLE = "Multiple-time Generation"
+
 
 def create_translation_tab(component_manager, config):
     """
@@ -66,7 +68,7 @@ def create_translation_tab(component_manager, config):
             )
         ] + [
             gr.Textbox(visible=False)
-        ] * 2 # 他のタブの出力コンポーネント数と合わせるため、3つの出力のうち2つは非表示にする
+        ] * 2  # 他のタブの出力コンポーネント数と合わせるため、3つの出力のうち2つは非表示にする
 
     def create_multiple_textboxes(
         candidates: List[str], judge_result: int
@@ -93,7 +95,7 @@ def create_translation_tab(component_manager, config):
                         value=candidates[i],
                         lines=3,
                         show_copy_button=True,
-                        visible=True, # 複数回生成モードではすべて表示
+                        visible=True,  # 複数回生成モードではすべて表示
                         interactive=False,
                     ),
                 )
@@ -110,12 +112,16 @@ def create_translation_tab(component_manager, config):
         Returns:
             List[gr.components.Textbox]: 生成されたプロンプトを含むテキストボックスのリスト。
         """
-        result = rewrite(original_prompt) # rewriteコンポーネントを使用してプロンプトを生成
+        result = rewrite(
+            original_prompt
+        )  # rewriteコンポーネントを使用してプロンプトを生成
         return create_single_textbox(result)
 
-    def generate_multiple_prompts_async(original_prompt: str) -> List[str]:
+    import concurrent.futures
+
+    def generate_multiple_prompts_parallel(original_prompt: str) -> List[str]:
         """
-        複数回生成モードでプロンプトを非同期に生成します。
+        複数回生成モードでプロンプトを並列に生成します。（マルチスレッド）
 
         Args:
             original_prompt (str): 元のプロンプト。
@@ -123,8 +129,7 @@ def create_translation_tab(component_manager, config):
         Returns:
             List[str]: 生成されたプロンプト候補のリスト。
         """
-        # ThreadPoolExecutor を使用して3つのプロンプトを並行して生成
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(rewrite, original_prompt) for _ in range(3)]
             candidates = [future.result() for future in futures]
         return candidates
@@ -145,10 +150,12 @@ def create_translation_tab(component_manager, config):
             return generate_single_prompt(original_prompt)
         elif level == OptimizeLevel.MULTIPLE.value:
             # 複数回生成モードの場合
-            candidates = generate_multiple_prompts_async(original_prompt) # 複数の候補を非同期で生成
-            judge_result = rewrite.judge(candidates) # 最も良い候補を判断
+            candidates = generate_multiple_prompts_parallel(
+                original_prompt
+            )  # 複数の候補を並列に生成
+            judge_result = rewrite.judge(candidates)  # 最も良い候補を判断
             return create_multiple_textboxes(candidates, judge_result)
-        return [] # どのレベルにも一致しない場合は空リストを返す
+        return []  # どのレベルにも一致しない場合は空リストを返す
 
     # Gradio UIの定義
     with gr.Tab(lang_store[language]["Prompt Translation"]):
@@ -168,29 +175,32 @@ def create_translation_tab(component_manager, config):
                 level = gr.Radio(
                     choices=[level.value for level in OptimizeLevel],
                     label=lang_store[language]["Optimize Level"],
-                    value=OptimizeLevel.SINGLE.value, # デフォルトは一回生成
+                    value=OptimizeLevel.SINGLE.value,  # デフォルトは一回生成
                 )
                 with gr.Row():
                     # プロンプト生成ボタン
-                    b1 = gr.Button(
-                        lang_store[language]["Generate Prompt"], scale=4
-                    )
+                    b1 = gr.Button(lang_store[language]["Generate Prompt"], scale=4)
                     # クリアボタン
-                    clear_button_translate = gr.Button(config.lang_store[config.language].get("Clear", "Clear"), scale=1)
-                
+                    clear_button_translate = gr.Button(
+                        config.lang_store[config.language].get("Clear", "Clear"),
+                        scale=1,
+                    )
+
                 # 生成されたプロンプトを表示するためのテキストボックスのリスト
                 textboxes = []
                 for i in range(3):
                     t = gr.Textbox(
                         label=lang_store[language]["Prompt Template Generated"],
-                        elem_id=f"textbox_id_{i}", # ユニークなIDを付与
+                        elem_id=f"textbox_id_{i}",  # ユニークなIDを付与
                         lines=3,
                         show_copy_button=True,
                         interactive=False,
-                        visible=False if i > 0 else True, # 最初のテキストボックスのみデフォルトで表示
+                        visible=(
+                            False if i > 0 else True
+                        ),  # 最初のテキストボックスのみデフォルトで表示
                     )
                     textboxes.append(t)
-                
+
                 # イベントハンドラの登録
                 # プロンプト生成ボタンがクリックされたときの処理
                 b1.click(

@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -8,7 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import groq
-from groq import APIError, AsyncGroq, Groq, RateLimitError
+from groq import APIError, Groq, RateLimitError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 # --- 初期化処理 ---
@@ -19,11 +18,7 @@ if not groq_api_key:
     logging.error("GROQ_API_KEY環境変数が設定されていません。")
     raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
 
-# 非同期Groqクライアントの初期化。
-# プロンプトの出力を非同期で取得するために使用されます。
-async_groq_client = AsyncGroq(api_key=groq_api_key, timeout=600.0)
 # 同期Groqクライアントの初期化。
-# プロンプトの評価（レーティング）を同期的に行うために使用されます。
 sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 
 # ロギングの基本設定。
@@ -68,7 +63,7 @@ class Rater:
         """
         self.config = GroqConfig()
 
-    async def __call__(
+    def __call__(
         self,
         initial_prompt: str,
         candidates: List[Dict[str, str]],
@@ -76,7 +71,7 @@ class Rater:
     ) -> Optional[int]:
         """
         複数のプロンプト候補を評価し、最も良いものを選択します。
-        このメソッドは非同期で実行されます。
+        このメソッドは同期で実行されます。
 
         Args:
             initial_prompt (str): 評価の基準となる初期プロンプト。
@@ -99,8 +94,8 @@ class Rater:
                 self._replace_placeholders(candidates[i]["prompt"], demo_data)
                 for i in unrated_indices
             ]
-            # 並行してGroqモデルから出力を取得
-            outputs = await self._get_outputs_parallel(unrated_prompts)
+            # 逐次的にGroqモデルから出力を取得
+            outputs = self._get_outputs_parallel(unrated_prompts)
             # 取得した出力を対応する候補に格納
             for i, output in zip(unrated_indices, outputs):
                 candidates[i]["input"] = self._replace_placeholders(
@@ -158,9 +153,9 @@ class Rater:
             text = text.replace(k, v)
         return text
 
-    async def _get_outputs_parallel(self, prompts: List[str]) -> List[Optional[str]]:
+    def _get_outputs_parallel(self, prompts: List[str]) -> List[Optional[str]]:
         """
-        複数のプロンプトに対して非同期でGroqモデルを実行し、出力を並行して取得します。
+        複数のプロンプトに対してGroqモデルを並列で実行し、出力を高速に取得します。
 
         Args:
             prompts (List[str]): 出力を取得するプロンプトのリスト。
@@ -169,16 +164,24 @@ class Rater:
             List[Optional[str]]: 各プロンプトに対応するモデル出力のリスト。
                                  エラーが発生した場合はNoneが含まれます。
         """
-        # 各プロンプトに対して非同期タスクを作成
-        tasks = [self._get_output_async(prompt) for prompt in prompts]
-        # すべてのタスクが完了するのを待機し、例外が発生しても結果を返す
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        # 結果を文字列またはNoneに変換して返す
-        return [res if isinstance(res, str) else None for res in results]
+        from concurrent.futures import ThreadPoolExecutor
 
-    async def _get_output_async(self, prompt: str) -> Optional[str]:
+        results = []
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(self._get_output_sync, prompt) for prompt in prompts
+            ]
+            for future in futures:
+                try:
+                    results.append(future.result())
+                except Exception as e:
+                    logging.error(f"Error in parallel Groq call: {e}")
+                    results.append(None)
+        return results
+
+    def _get_output_sync(self, prompt: str) -> Optional[str]:
         """
-        指定されたプロンプトでGroqモデルを非同期で実行し、出力を取得します。
+        指定されたプロンプトでGroqモデルを同期で実行し、出力を取得します。
         レートリミットエラーに対してリトライメカニズムを実装しています。
 
         Args:
@@ -197,34 +200,34 @@ class Rater:
         # 指定された回数だけリトライを試みるループ
         for attempt in range(max_retries):
             try:
-                # Groq APIを非同期で呼び出し
-                completion = await async_groq_client.chat.completions.create(
+                # Groq APIを同期で呼び出し
+                completion = sync_groq_client.chat.completions.create(
                     model=self.config.get_output_model,
                     messages=messages,
                     max_completion_tokens=self.config.max_tokens_get_output,
                     temperature=self.config.temperature_get_output,
                 )
                 result = completion.choices[0].message.content
-                logging.info(f"Rater._get_output_async successful, result: {result}")
+                logging.info(f"Rater._get_output_sync successful, result: {result}")
                 return result
             except RateLimitError:
                 # レートリミットエラーの場合、警告をログに出力し、指定された時間待機してからリトライ
                 logging.warning(
                     f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
-                await asyncio.sleep(retry_delay)
+                time.sleep(retry_delay)
                 retry_delay *= backoff_factor  # 遅延時間を指数関数的に増加
             except APIError as e:
                 # Groq APIからのエラーの場合、エラーをログに出力し、Noneを返す
-                logging.error(f"Rater._get_output_async - Groq APIError: {e}")
+                logging.error(f"Rater._get_output_sync - Groq APIError: {e}")
                 return None
             except Exception as e:
                 # その他の予期せぬエラーの場合、エラーをログに出力し、Noneを返す
-                logging.error(f"Rater._get_output_async - Unexpected error: {e}")
+                logging.error(f"Rater._get_output_sync - Unexpected error: {e}")
                 return None
         # 最大リトライ回数に達しても成功しなかった場合
         logging.error(
-            "Max retries reached for _get_output_async. Failed to get a response from Groq API."
+            "Max retries reached for _get_output_sync. Failed to get a response from Groq API."
         )
         return None
 

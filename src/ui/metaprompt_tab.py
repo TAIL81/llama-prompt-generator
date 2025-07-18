@@ -1,4 +1,3 @@
-
 import gradio as gr
 import logging
 from typing import Tuple
@@ -26,7 +25,7 @@ def create_metaprompt_tab(component_manager, config):
         """
         return "", "", "", "", "", ""
 
-    async def run_ape_on_metaprompt_output(
+    def run_ape_on_metaprompt_output(
         metaprompt_template: str, metaprompt_variables_str: str
     ) -> Tuple[str, str]:
         """
@@ -63,7 +62,7 @@ def create_metaprompt_tab(component_manager, config):
 
         try:
             # APEを実行
-            result_dict = await ape(
+            result_dict = ape(
                 initial_prompt=metaprompt_template, epoch=1, demo_data=demo_data
             )
             # APEの結果が有効なプロンプトを含んでいるか確認
