@@ -11,7 +11,7 @@ from groq.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam,
 )  # チャット補完メッセージの型ヒント
 
-from rater import Rater  # Raterクラスをインポート
+from src.rater import Rater  # Raterクラスを絶対インポートに変更
 
 # 環境変数を読み込みます
 load_dotenv()

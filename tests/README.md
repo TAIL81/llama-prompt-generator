@@ -75,3 +75,15 @@ pytest tests/test_ape.py -v
 ```bash
 # 必要な依存関係をインストール
 pip install pytest pytest-cov
+
+# Windowsでのテスト実行方法
+set PYTHONPATH=src
+pytest tests/
+```
+
+## PowerShellでのテスト実行方法
+
+```powershell
+$env:PYTHONPATH = "src"
+pytest tests/
+```
