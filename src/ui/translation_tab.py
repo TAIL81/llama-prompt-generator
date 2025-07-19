@@ -151,9 +151,9 @@ def create_translation_tab(component_manager, config):
             return generate_single_prompt(original_prompt)
         elif level == OptimizeLevel.MULTIPLE.value:
             # 複数回生成モードの場合
-            candidates = generate_multiple_prompts_parallel(
+            candidates = generate_multiple_prompts_sequential(
                 original_prompt
-            )  # 複数の候補を並列に生成
+            )  # 複数の候補を逐次に生成
             judge_result = rewrite.judge(candidates)  # 最も良い候補を判断
             return create_multiple_textboxes(candidates, judge_result)
         return []  # どのレベルにも一致しない場合は空リストを返す

@@ -155,7 +155,7 @@ class Rater:
 
     def _get_outputs_parallel(self, prompts: List[str]) -> List[Optional[str]]:
         """
-        複数のプロンプトに対してGroqモデルを並列で実行し、出力を高速に取得します。
+        複数のプロンプトに対してGroqモデルを逐次実行し、出力を取得します。
 
         Args:
             prompts (List[str]): 出力を取得するプロンプトのリスト。
@@ -164,19 +164,13 @@ class Rater:
             List[Optional[str]]: 各プロンプトに対応するモデル出力のリスト。
                                  エラーが発生した場合はNoneが含まれます。
         """
-        from concurrent.futures import ThreadPoolExecutor
-
         results = []
-        with ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(self._get_output_sync, prompt) for prompt in prompts
-            ]
-            for future in futures:
-                try:
-                    results.append(future.result())
-                except Exception as e:
-                    logging.error(f"Error in parallel Groq call: {e}")
-                    results.append(None)
+        for prompt in prompts:
+            try:
+                results.append(self._get_output_sync(prompt))
+            except Exception as e:
+                logging.error(f"Error in sequential Groq call: {e}")
+                results.append(None)
         return results
 
     def _get_output_sync(self, prompt: str) -> Optional[str]:
