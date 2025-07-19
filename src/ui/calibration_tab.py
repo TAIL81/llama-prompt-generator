@@ -1,3 +1,4 @@
+from src.calibration import CalibrationPrompt
 import gradio as gr
 from typing import Tuple
 
@@ -87,7 +88,7 @@ def create_calibration_tab(component_manager, config):
         # イベントハンドラの登録
         # 最適化ボタンがクリックされたときの処理
         calibration_optimization.click(
-            component_manager.calibration.optimize,
+            component_manager.get(CalibrationPrompt).optimize,
             inputs=[
                 calibration_task,
                 calibration_prompt_original,

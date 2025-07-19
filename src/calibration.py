@@ -19,7 +19,7 @@ from sklearn.metrics import confusion_matrix  # 混同行列の計算に使用
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-from safe_executor import SafeCodeExecutor
+from src.safe_executor import SafeCodeExecutor
 
 # スクリプト (calibration.py) が置かれているディレクトリの絶対パス
 _CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

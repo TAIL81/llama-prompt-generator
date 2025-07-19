@@ -1,3 +1,4 @@
+from src.translate import GuideBased
 from enum import Enum
 from typing import List, Tuple, cast
 
@@ -27,7 +28,7 @@ def create_translation_tab(component_manager, config):
     # 設定とコンポーネントを初期化
     lang_store = config.lang_store
     language = config.language
-    rewrite = component_manager.rewrite
+    rewrite = component_manager.get(GuideBased)
 
     def clear_translation_tab() -> Tuple[str, gr.Textbox, gr.Textbox, gr.Textbox]:
         """

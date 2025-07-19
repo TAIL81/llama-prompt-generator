@@ -1,6 +1,8 @@
 import gradio as gr
 import logging
 from typing import Tuple
+from src.metaprompt import MetaPrompt
+from src.ape import APE
 
 def create_metaprompt_tab(component_manager, config):
     """
@@ -13,8 +15,8 @@ def create_metaprompt_tab(component_manager, config):
     # 設定とコンポーネントを初期化
     lang_store = config.lang_store
     language = config.language
-    metaprompt = component_manager.metaprompt
-    ape = component_manager.ape
+    metaprompt = component_manager.get(MetaPrompt)
+    ape = component_manager.get(APE)
 
     def clear_metaprompt_tab() -> Tuple[str, str, str, str, str, str]:
         """

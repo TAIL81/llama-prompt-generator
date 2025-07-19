@@ -1,3 +1,4 @@
+from src.application.soe_prompt import SOEPrompt
 import gradio as gr
 from typing import Tuple
 
@@ -85,7 +86,7 @@ def create_soe_tab(component_manager, config):
         # イベントハンドラを登録
         # 商品説明生成ボタンがクリックされたときの処理
         generate_button.click(
-            component_manager.soeprompt.generate_description,
+            component_manager.get(SOEPrompt).generate_description,
             inputs=[
                 product_category,
                 brand_name,

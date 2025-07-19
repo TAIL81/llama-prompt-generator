@@ -17,19 +17,19 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
 # 外部モジュールのインポート
-from ape import APE
-from application.soe_prompt import SOEPrompt
-from calibration import CalibrationPrompt
-from metaprompt import MetaPrompt
-from optimize import Alignment
-from translate import GuideBased
+from src.ape import APE
+from src.application.soe_prompt import SOEPrompt
+from src.calibration import CalibrationPrompt
+from src.metaprompt import MetaPrompt
+from src.optimize import Alignment
+from src.translate import GuideBased
 
 # UIタブ作成関数のインポート
-from ui.calibration_tab import create_calibration_tab
-from ui.evaluation_tab import create_evaluation_tab
-from ui.metaprompt_tab import create_metaprompt_tab
-from ui.soe_tab import create_soe_tab
-from ui.translation_tab import create_translation_tab
+from src.ui.calibration_tab import create_calibration_tab
+from src.ui.evaluation_tab import create_evaluation_tab
+from src.ui.metaprompt_tab import create_metaprompt_tab
+from src.ui.soe_tab import create_soe_tab
+from src.ui.translation_tab import create_translation_tab
 
 
 # 設定管理クラスの導入
@@ -165,7 +165,7 @@ component_manager = ComponentManager(config)
 
 # SafeCodeExecutor のインポートとインスタンス化
 # コードの安全な実行を管理するためのコンポーネント
-from safe_executor import SafeCodeExecutor
+from src.safe_executor import SafeCodeExecutor
 
 safe_code_executor = SafeCodeExecutor()
 

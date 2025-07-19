@@ -1,3 +1,4 @@
+from src.optimize import Alignment
 from typing import Any, Dict, Tuple
 
 import gradio as gr
@@ -74,7 +75,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                 placeholder="Ref format: key1:value1;key2:value2",
                 lines=3,
             )
-            # 変数置換後の評価対象プロンプト表示欄 (インタラクティブではない)
+            # 変数置換後の評価対象プロンプ���表示欄 (インタラクティブではない)
             user_prompt_eval_replaced = gr.Textbox(
                 label=config.lang_store[config.language]["Replace Result"],
                 lines=3,
@@ -91,7 +92,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             )
             # 元のプロンプトの変数置換ボタンクリックイベント
             insert_button_original.click(
-                component_manager.alignment.insert_kv,
+                component_manager.get(Alignment).insert_kv,
                 inputs=[user_prompt_original, kv_input_original],
                 outputs=user_prompt_original_replaced,
             )
@@ -102,9 +103,9 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                     "Replace Variables in Revised Prompt"
                 ]
             )
-            # 改訂されたプロンプトの変数置換ボタンクリックイベント
+            # ��訂されたプロンプトの変数置換ボタンクリックイベント
             insert_button_revise.click(
-                component_manager.alignment.insert_kv,
+                component_manager.get(Alignment).insert_kv,
                 inputs=[user_prompt_eval, kv_input_eval],
                 outputs=user_prompt_eval_replaced,
             )
@@ -160,7 +161,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             )
             # プロンプト実行イベント
             invoke_button.click(
-                component_manager.alignment.invoke_prompt,
+                component_manager.get(Alignment).invoke_prompt,
                 inputs=[
                     user_prompt_original_replaced,
                     user_prompt_eval_replaced,
@@ -216,7 +217,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             )
             # 自動評価ボタンクリックイベント
             evaluate_button.click(
-                component_manager.alignment.evaluate_response,
+                component_manager.get(Alignment).evaluate_response,
                 inputs=[OpenAI_output, groq_output],
                 outputs=[feedback_input],
             )
@@ -226,7 +227,7 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             )
             # プロンプト改善ボタンクリックイベント
             revise_button.click(
-                component_manager.alignment.generate_revised_prompt,  # eval_model_id は削除
+                component_manager.get(Alignment).generate_revised_prompt,  # eval_model_id は削除
                 inputs=[feedback_input, user_prompt_eval, OpenAI_output, groq_output],
                 outputs=revised_prompt_output,
             )
