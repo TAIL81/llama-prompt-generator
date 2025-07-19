@@ -49,7 +49,7 @@ EXAMPLE_TEMPLATE = """
 # --- データクラス ---
 @dataclass
 class GroqConfig:
-    rewrite_model: str = "moonshotai/kimi-k2-instruct"
+    rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     max_tokens: int = 8192  # 生成される応答の最大トークン数
     temperature: float = 0.6  # 応答の多様性を制御する温度パラメータ
 
