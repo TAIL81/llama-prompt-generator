@@ -1,8 +1,9 @@
+import json
 import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Generator, Optional, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 import gradio as gr  # Gradioをインポート
 import httpx  # HTTPクライアント
@@ -10,6 +11,7 @@ from dotenv import load_dotenv  # 環境変数読み込み用
 from groq import Groq  # Groq APIクライアント
 from openai import OpenAI  # OpenAI APIクライアント
 from openai.types.chat import ChatCompletion  # OpenAIのチャットAPIの型
+from pydantic import BaseModel, Field, ValidationError
 
 # ロギング設定
 logging.basicConfig(
@@ -20,6 +22,19 @@ logging.basicConfig(
 # .envファイルは現在のスクリプトの親ディレクトリに存在すると仮定
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
+
+# --- Pydanticモデル定義 ---
+class ErrorClassification(BaseModel):
+    classification: str = Field(..., description="The classification of the error.")
+
+
+class ErrorRank(BaseModel):
+    rank: int = Field(..., description="The rank of the error.")
+
+
+class StepClassification(BaseModel):
+    classification: str = Field(..., description="The classification for the step.")
+
 
 # 定数の定義
 TEMPERATURE: float = 0.0  # モデルの応答のランダム性を制御する温度パラメータ
@@ -206,6 +221,7 @@ class Alignment:
         model_id: str,
         system_content: str,
         user_prompt: str,
+        response_format: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         APIクライアントを使用して応答を生成する共通メソッド。
@@ -215,20 +231,25 @@ class Alignment:
             model_id (str): 使用するモデルのID。
             system_content (str): システムプロンプトの内容。
             user_prompt (str): ユーザープロンプト。
+            response_format (Optional[Dict[str, Any]], optional): レスポンス形式の指定。
 
         Returns:
             str: 生成された応答。APIエラーが発生した場合はエラーメッセージ。
         """
         try:
-            completion: Any = client.chat.completions.create(
-                model=model_id,
-                messages=[
+            params = {
+                "model": model_id,
+                "messages": [
                     {"role": "system", "content": system_content},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=TEMPERATURE,
-                max_tokens=MAX_TOKENS,
-            )  # Groq API を呼び出し、応答を生成
+                "temperature": TEMPERATURE,
+                "max_tokens": MAX_TOKENS,
+            }
+            if response_format:
+                params["response_format"] = response_format
+
+            completion: Any = client.chat.completions.create(**params)
             if not self._validate_response(completion):
                 logging.error(f"Invalid response structure from API: {completion}")
                 return "Error: Invalid response structure from API"
@@ -238,13 +259,19 @@ class Alignment:
             logging.error(f"API Error: {e}")
             return f"API Error: {str(e)}"
 
-    def generate_groq_response(self, prompt: str, model_id: str) -> str:
+    def generate_groq_response(
+        self,
+        prompt: str,
+        model_id: str,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """
         Groq APIを使用して応答を生成します。
 
         Args:
             prompt (str): ユーザープロンプト。
             model_id (str): 使用するGroqモデルのID。
+            response_format (Optional[Dict[str, Any]], optional): レスポンス形式の指定。
 
         Returns:
             str: 生成された応答。APIクライアントが初期化されていない場合はエラーメッセージ。
@@ -252,7 +279,11 @@ class Alignment:
         if not self.groq_client:
             return "GroqError: API client not initialized. Check GROQ_API_KEY."
         return self._generate_response(
-            self.groq_client, model_id, self.groq_system_content, prompt
+            self.groq_client,
+            model_id,
+            self.groq_system_content,
+            prompt,
+            response_format,
         )
 
     def generate_OpenAI_response(self, prompt: str, model_id: str) -> str:
@@ -508,3 +539,130 @@ class Alignment:
         matches = re.findall(pattern, groq_result, re.DOTALL)
         revised_prompt: str = matches[0] if matches else "Revised prompt not found."
         return revised_prompt.strip()
+
+
+class Optimizer(Alignment):
+    """
+    Alignmentクラスを継承し、プロンプトの最適化機能を追加したクラス。
+    """
+
+    def __init__(
+        self, lang_store: Optional[Dict[str, str]] = None, language: str = "ja"
+    ) -> None:
+        """
+        Optimizerクラスのコンストラクタ。
+        Alignmentクラスのコンストラクタを呼び出し、
+        プロンプトファイルを読み込みます。
+        """
+        super().__init__(lang_store, language)
+        self._load_prompts()
+
+    def _load_prompts(self) -> None:
+        """
+        プロンプトファイルを読み込むヘルパーメソッド。
+        """
+        prompt_dir = Path(__file__).parent / "prompt"
+        try:
+            with open(
+                prompt_dir / "error_analysis_classification.prompt", encoding="utf-8"
+            ) as f:
+                self.error_analysis_classification_prompt = f.read()
+            with open(prompt_dir / "error_analysis_rank.prompt", encoding="utf-8") as f:
+                self.error_analysis_rank_prompt = f.read()
+            with open(
+                prompt_dir / "step_prompt_classification.prompt", encoding="utf-8"
+            ) as f:
+                self.step_prompt_classification_prompt = f.read()
+        except FileNotFoundError as e:
+            logging.error(f"Prompt file not found: {e}")
+            # プロンプトが読み込めない場合は、関連するプロンプトを空文字列に設定
+            self.error_analysis_classification_prompt = ""
+            self.error_analysis_rank_prompt = ""
+            self.step_prompt_classification_prompt = ""
+
+    def _get_error_analysis_classification(
+        self, prompt_input: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        エラー分析（分類）プロンプトを実行し、結果をJSONとして返します。
+        """
+        if not self.error_analysis_classification_prompt:
+            logging.error("Error analysis classification prompt not loaded.")
+            return None
+        try:
+            content = self.generate_groq_response(
+                self.error_analysis_classification_prompt.format(**prompt_input),
+                EVAL_MODEL_ID,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "error_classification",
+                        "description": "The classification of the error.",
+                        "schema": ErrorClassification.model_json_schema(),
+                    },
+                },
+            )
+            if content.startswith("GroqError:"):
+                raise Exception(content)
+            return ErrorClassification.model_validate(json.loads(content)).model_dump()
+        except (json.JSONDecodeError, ValidationError, Exception) as e:
+            logging.error(f"Error parsing error analysis classification: {e}")
+            return None
+
+    def _get_error_analysis_rank(
+        self, prompt_input: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        エラー分析（ランク付け）プロンプトを実行し、結果をJSONとして返します。
+        """
+        if not self.error_analysis_rank_prompt:
+            logging.error("Error analysis rank prompt not loaded.")
+            return None
+        try:
+            content = self.generate_groq_response(
+                self.error_analysis_rank_prompt.format(**prompt_input),
+                EVAL_MODEL_ID,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "error_rank",
+                        "description": "The rank of the error.",
+                        "schema": ErrorRank.model_json_schema(),
+                    },
+                },
+            )
+            if content.startswith("GroqError:"):
+                raise Exception(content)
+            return ErrorRank.model_validate(json.loads(content)).model_dump()
+        except (json.JSONDecodeError, ValidationError, Exception) as e:
+            logging.error(f"Error parsing error analysis rank: {e}")
+            return None
+
+    def _get_step_prompt_classification(
+        self, prompt_input: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        ステッププロンプト（分類）を実行し、結果をJSONとして返します。
+        """
+        if not self.step_prompt_classification_prompt:
+            logging.error("Step prompt classification prompt not loaded.")
+            return None
+        try:
+            content = self.generate_groq_response(
+                self.step_prompt_classification_prompt.format(**prompt_input),
+                EVAL_MODEL_ID,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "step_classification",
+                        "description": "The classification for the step.",
+                        "schema": StepClassification.model_json_schema(),
+                    },
+                },
+            )
+            if content.startswith("GroqError:"):
+                raise Exception(content)
+            return StepClassification.model_validate(json.loads(content)).model_dump()
+        except (json.JSONDecodeError, ValidationError, Exception) as e:
+            logging.error(f"Error parsing step prompt classification: {e}")
+            return None
