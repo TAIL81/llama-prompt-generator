@@ -45,7 +45,7 @@ class PreferredInstruction(BaseModel):
 @dataclass
 class GroqConfig:
     rewrite_model: str = (
-        "meta-llama/llama-4-scout-17b-16e-instruct"  # プロンプト書き換えに使用するモデル
+        "moonshotai/kimi-k2-instruct"  # プロンプト書き換えに使用するモデル
     )
     detect_lang_model: str = (
         "meta-llama/llama-4-scout-17b-16e-instruct"  # 言語検出に使用するモデル
@@ -215,7 +215,9 @@ class GuideBased:
                 return result
             except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
-                    f"Rate limit exceeded in __call__. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                    f"Rate limit exceeded in __call__. Attempt {attempt + 1}/{max_retries}. Retrying in {retry_delay} seconds.\n"
+                    f"  - Headers: {getattr(e.response, 'headers', 'N/A')}\n"
+                    f"  - Body: {getattr(e.response, 'text', 'N/A')}"
                 )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
@@ -298,7 +300,9 @@ class GuideBased:
                 return ""
             except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
-                    f"Rate limit exceeded in detect_lang. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
+                    f"Rate limit exceeded in detect_lang. Attempt {attempt + 1}/{max_retries}. Retrying in {retry_delay} seconds.\n"
+                    f"  - Headers: {getattr(e.response, 'headers', 'N/A')}\n"
+                    f"  - Body: {getattr(e.response, 'text', 'N/A')}"
                 )
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
