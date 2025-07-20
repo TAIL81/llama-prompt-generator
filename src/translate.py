@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from groq import APIError, Groq, RateLimitError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+from pydantic import BaseModel, Field, ValidationError
 
 # 環境変数を .env ファイルから読み込みます
 env_path = Path(__file__).parent.parent / ".env"  # .envファイルのパスを構築
@@ -19,6 +20,26 @@ load_dotenv(env_path)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+
+class Language(BaseModel):
+    """言語検出APIのレスポンスを定義するPydanticモデル"""
+
+    lang: str = Field(
+        ...,
+        description="Detected language code (e.g., 'en', 'ja', 'ch').",
+        examples=["ja"],
+    )
+
+
+class PreferredInstruction(BaseModel):
+    """プロンプト評価APIのレスポンスを定義するPydanticモデル"""
+
+    Preferred: str = Field(
+        ...,
+        description="The name of the preferred instruction (e.g., 'Instruction 1').",
+        examples=["Instruction 1"],
+    )
 
 
 @dataclass
@@ -219,6 +240,7 @@ class GuideBased:
     def detect_lang(self, initial_prompt: str) -> str:
         """
         与えられたプロンプトの言語を検出します (英語、中国語または日本語)。
+        GroqのStructured Outputs機能を使用して、信頼性の高いJSON出力を保証します。
 
         Args:
             initial_prompt (str): 言語を検出する対象のプロンプト。
@@ -226,26 +248,19 @@ class GuideBased:
         Returns:
             str: 検出された言語コード ("en", "ch" または "ja")。エラーの場合は空文字列。
         """
-        lang_example: str = json.dumps({"lang": "ja"})
-        prompt: str = (
-            """
-            Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
+        prompt = f"""
+        Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
 
-            <document>
-            {document}
-            </document>
-
-            Use JSON format with key `lang` when return result. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
-            Output example: {lang_example}
-            """.strip()  # プロンプトテンプレートの終わり
-        )
+        <document>
+        {initial_prompt}
+        </document>
+        """
         messages: List[ChatCompletionMessageParam] = [
             {
-                "role": "user",
-                "content": prompt.format(
-                    document=initial_prompt, lang_example=lang_example
-                ),
+                "role": "system",
+                "content": "You are an AI assistant that detects the language of a given text and responds in a structured JSON format.",
             },
+            {"role": "user", "content": prompt},
         ]
         max_retries = 3
         backoff_factor = 2
@@ -256,21 +271,30 @@ class GuideBased:
                 completion = self.groq_client.chat.completions.create(
                     model=self.config.detect_lang_model,
                     messages=messages,
-                    max_completion_tokens=self.config.max_tokens,
-                    temperature=self.config.temperature_detect_lang,
-                )  # API呼び出し
-                # LLMからの応答をログに出力
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "language_detection",
+                            "description": "The detected language.",
+                            "schema": Language.model_json_schema(),
+                        },
+                    },
+                )
                 content = completion.choices[0].message.content
                 logging.info(f"detect_lang LLM response: {content}")
-                if not content:  # 応答内容が空の場合
+                if not content:
                     logging.error("No content in response for language detection")
                     return ""
-                # 結果のJSONをパースして言語コードを取得します
-                lang = json.loads(content)["lang"]  # 言語コードを抽出
-                return lang
-            except (json.JSONDecodeError, KeyError) as e:
-                # エラーが発生した場合は空文字列を返します
-                logging.error(f"言語検出のためのLLM応答のパースエラー: {e}")
+
+                # Pydanticモデルでレスポンスを検証・パース
+                detected_language = Language.model_validate(json.loads(content))
+                return detected_language.lang
+
+            except json.JSONDecodeError as e:
+                logging.error(f"JSONパースエラー: {e}\nAPIレスポンス: {content}")
+                return ""
+            except ValidationError as e:
+                logging.error(f"Pydantic検証エラー: {e}\nAPIレスポンス: {content}")
                 return ""
             except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
@@ -289,29 +313,12 @@ class GuideBased:
         )
         return ""
 
-    def _clean_json_response(self, content: str) -> str:
-        """
-        JSONレスポンスからコードブロックマーカーや不要な文字を除去
-
-        Args:
-            content (str): 生のLLMレスポンス
-
-        Returns:
-            str: クリーニングされたJSON文字列
-        """
-        # ```json ... ``` のパターンを除去
-        if content.startswith("```json") and content.endswith("```"):
-            content = content[7:-3].strip()
-        # 一般的な ``` ... ``` ブロックを除去
-        elif content.startswith("```") and content.endswith("```"):
-            content = content[3:-3].strip()
-        # その他の不正文字をフィルタリング
-        return content.replace("```", "").strip()
+    
 
     def judge(self, candidates: List[str]) -> Optional[int]:
         """
         複数のプロンプト候補を評価し、最も良いものを選択します。
-        レスポンスフォーマットの変動に対応するため、前処理とフォールバック処理を追加。
+        GroqのStructured Outputs機能を使用して、信頼性の高いJSON出力を保証します。
 
         Args:
             candidates (List[str]): 評価対象のプロンプト候補のリスト。
@@ -324,7 +331,7 @@ class GuideBased:
             Instruction_prompts.append(
                 f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>"
             )
-        example: str = json.dumps({"Preferred": "Instruction 1"})
+
         prompt: str = (
             """
             You are an instruction engineer. Your task is to evaluate which of the three instructions given below is better based on the guide in the <guide> xml tag.
@@ -336,8 +343,7 @@ class GuideBased:
 
             {Instruction_prompts}
 
-            Use JSON format when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
-            {example}
+            Your response must be only the JSON object, with no other text before or after it.
             """.strip()
         )
         messages: List[ChatCompletionMessageParam] = [
@@ -346,7 +352,6 @@ class GuideBased:
                 "content": prompt.format(
                     guide=PromptGuide,
                     Instruction_prompts="\n\n".join(Instruction_prompts),
-                    example=example,
                 ),
             },
         ]
@@ -359,8 +364,14 @@ class GuideBased:
                 completion = self.groq_client.chat.completions.create(
                     model=self.config.judge_model,
                     messages=messages,
-                    max_completion_tokens=self.config.max_tokens,
-                    temperature=self.config.temperature_judge,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "preferred_instruction",
+                            "description": "The preferred instruction.",
+                            "schema": PreferredInstruction.model_json_schema(),
+                        },
+                    },
                 )
                 content = completion.choices[0].message.content
                 logging.info(f"judge LLM response (raw): {content}")
@@ -369,40 +380,23 @@ class GuideBased:
                     logging.error("No content in response for judge")
                     return None
 
-                # JSONレスポンスのクリーニング
-                cleaned_content = self._clean_json_response(content)
-                logging.info(f"Cleaned JSON content: {cleaned_content}")
-
-                try:
-                    # クリーニング後のコンテンツをJSONパース
-                    result: Dict[str, str] = json.loads(cleaned_content)
-                except json.JSONDecodeError as e:
-                    # JSONパース失敗時のフォールバック処理
-                    logging.error(
-                        f"JSONパースエラー: {e}\nコンテンツ: {cleaned_content}"
-                    )
-
-                    # 正規表現でJSONオブジェクトを抽出
-                    if match := re.search(
-                        r'\{"Preferred":\s*"Instruction\s*\d+"\}', cleaned_content
-                    ):
-                        result = json.loads(match.group(0))
-                        logging.info(f"Regex fallback successful: {result}")
-                    else:
-                        logging.error("JSONオブジェクトを抽出できませんでした")
-                        return None
+                # Pydanticモデルでレスポンスを検証・パース
+                result = PreferredInstruction.model_validate(json.loads(content))
 
                 # 結果の抽出
                 final_result = None
                 for idx in range(len(candidates)):
-                    if str(idx + 1) in result["Preferred"]:
+                    if str(idx + 1) in result.Preferred:
                         final_result = idx
                         break
 
                 return final_result
 
-            except (json.JSONDecodeError, KeyError) as e:
-                logging.error(f"LLM応答のパースエラー: {e}")
+            except json.JSONDecodeError as e:
+                logging.error(f"JSONパースエラー: {e}\nAPIレスポンス: {content}")
+                return None
+            except ValidationError as e:
+                logging.error(f"Pydantic検証エラー: {e}\nAPIレスポンス: {content}")
                 return None
             except RateLimitError as e:
                 logging.warning(

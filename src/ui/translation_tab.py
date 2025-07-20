@@ -118,11 +118,9 @@ def create_translation_tab(component_manager, config):
         )  # rewriteコンポーネントを使用してプロンプトを生成
         return create_single_textbox(result)
 
-    import concurrent.futures
-
-    def generate_multiple_prompts_parallel(original_prompt: str) -> List[str]:
+    def generate_multiple_prompts_sequential(original_prompt: str) -> List[str]:
         """
-        複数回生成モードでプロンプトを並列に生成します。（マルチスレッド）
+        複数回生成モードでプロンプトを逐次生成します。
 
         Args:
             original_prompt (str): 元のプロンプト。
@@ -130,9 +128,7 @@ def create_translation_tab(component_manager, config):
         Returns:
             List[str]: 生成されたプロンプト候補のリスト。
         """
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(rewrite, original_prompt) for _ in range(3)]
-            candidates = [future.result() for future in futures]
+        candidates = [rewrite(original_prompt) for _ in range(3)]
         return candidates
 
     def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
