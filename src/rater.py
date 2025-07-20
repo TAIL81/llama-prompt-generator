@@ -108,7 +108,7 @@ class Rater:
                 for i in unrated_indices
             ]
             # 逐次的にGroqモデルから出力を取得
-            outputs = self._get_outputs_parallel(unrated_prompts)
+            outputs = self._get_outputs_sequentially(unrated_prompts)
             # 取得した出力を対応する候補に格納
             for i, output in zip(unrated_indices, outputs):
                 candidates[i]["input"] = self._replace_placeholders(
@@ -166,7 +166,7 @@ class Rater:
             text = text.replace(k, v)
         return text
 
-    def _get_outputs_parallel(self, prompts: List[str]) -> List[Optional[str]]:
+    def _get_outputs_sequentially(self, prompts: List[str]) -> List[Optional[str]]:
         """
         複数のプロンプトに対してGroqモデルを逐次実行し、出力を取得します。
 
