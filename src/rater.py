@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 import groq
 from groq import APIError, Groq, RateLimitError
 from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+from pydantic import BaseModel, Field, ValidationError
 
 # --- 初期化処理 ---
 # Groq APIキーを環境変数から取得します。
@@ -26,6 +27,18 @@ sync_groq_client = Groq(api_key=groq_api_key, timeout=600.0)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+
+# --- Pydanticモデル ---
+class PreferredResponse(BaseModel):
+    """プロンプト評価APIのレスポンスを定義するPydanticモデル"""
+
+    Preferred: str = Field(
+        ...,
+        description="The name of the preferred response (e.g., 'Response 1').",
+        examples=["Response 1"],
+    )
+
 
 
 # --- データクラス ---
@@ -230,7 +243,7 @@ class Rater:
     ) -> Optional[int]:
         """
         Groqモデルを使用して、複数の候補応答の中から最も良いものを評価させます。
-        このメソッドは同期的に実行されます。
+        GroqのStructured Outputs機能を使用して、信頼性の高いJSON出力を保証します。
 
         Args:
             initial_prompt (str): 評価の基準となる初期プロンプト。
@@ -245,8 +258,6 @@ class Rater:
             logging.debug("Rater.rater - No candidates provided. Returning None.")
             return None
 
-        # 評価モデルへの指示に含める出力例をJSON形式で準備
-        rater_example = json.dumps({"Preferred": "Response 1"})
         # 各候補プロンプトの入力と出力を整形して、評価プロンプトに含める文字列を作成
         response_prompts = [
             f"Response {i+1}:\nInput: {c.get('input', 'N/A')}\nOutput: {c.get('output', 'N/A')}\n</response_{i+1}>".strip()
@@ -267,10 +278,7 @@ class Rater:
         {Response_prompt}
 
         Finally, select which response is the most helpful and honest.
-
-        Use JSON format with key `Preferred` when returning results. The value should be a string like "Response 1". Please only output the result in json format, and do the json format check and return, don't include other extra text!
-        An example of output is as follows:
-        Output example: {rater_example}
+        Your response must be only the JSON object, with no other text before or after it.
         """.strip()
 
         # 評価モデルへのメッセージリストを構築
@@ -280,72 +288,75 @@ class Rater:
                 "content": rater_prompt.format(
                     instruction=initial_prompt,
                     Response_prompt=response_prompt_str,
-                    rater_example=rater_example,
                 ),
             }
         ]
 
-        max_retries = 3  # 最大リトライ回数
-        backoff_factor = 2  # リトライ遅延のバックオフ係数
-        retry_delay = 1  # 初期リトライ遅延（秒）
+        max_retries = 3
+        backoff_factor = 2
+        retry_delay = 1
 
-        # 指定された回数だけリトライを試みるループ
         for attempt in range(max_retries):
             try:
-                # Groq APIを同期的に呼び出し
                 completion = sync_groq_client.chat.completions.create(
                     model=self.config.rater_model,
                     messages=messages,
-                    max_completion_tokens=self.config.max_tokens_rater,
-                    temperature=self.config.temperature_rater,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "preferred_response",
+                            "description": "The preferred response.",
+                            "schema": PreferredResponse.model_json_schema(),
+                        },
+                    },
                 )
                 content = completion.choices[0].message.content
                 if not content:
-                    raise json.JSONDecodeError("No content from LLM", "", 0)
+                    logging.error("No content from LLM")
+                    continue  # リトライ
 
-                # モデルの応答をJSONとしてパース
-                result_json = json.loads(content)
-                preferred_text = result_json.get("Preferred")
-                if not preferred_text:
-                    raise ValueError("LLM response JSON is missing 'Preferred' key.")
+                # Pydanticモデルでレスポンスを検証・パース
+                result = PreferredResponse.model_validate(json.loads(content))
+                preferred_text = result.Preferred
 
-                # 正規表現を使用して、"Response N" の "N" 部分を抽出
+                # "Response N" から "N" を抽出
                 match = re.search(r"\d+", preferred_text)
                 if match:
-                    # 1-based index (例: "Response 1") を0-based indexに変換
                     final_result = int(match.group(0)) - 1
-                    # 抽出されたインデックスが有効な範囲内にあるか確認
                     if 0 <= final_result < len(candidates):
                         logging.info(f"Rater.rater successful, result: {final_result}")
                         return final_result
 
-                # 有効なインデックスをパースできなかった場合
-                raise ValueError(
+                logging.error(
                     f"Could not parse a valid index from LLM response: '{preferred_text}'"
                 )
+                # 不正なレスポンスでも、スキーマには合致しているためリトライしない
+                return None
 
-            except (json.JSONDecodeError, KeyError, ValueError) as e:
-                # JSONパース、キーエラー、値エラーの場合
-                logging.error(f"Rater.rater - Error processing LLM response: {e}")
+            except json.JSONDecodeError as e:
+                logging.error(f"JSONパースエラー: {e}\nAPIレスポンス: {content}")
+                # JSONモードでも失敗する場合があるのでリトライ
                 if attempt >= max_retries - 1:
-                    return None  # 最終試行でも失敗したらNoneを返す
+                    return None
+                time.sleep(retry_delay)
+                retry_delay *= backoff_factor
+            except ValidationError as e:
+                logging.error(f"Pydantic検証エラー: {e}\nAPIレスポンス: {content}")
+                # スキーマ違反はリトライしても治らない可能性が高い
+                return None
             except RateLimitError:
-                # レートリミットエラーの場合、警告をログに出力し、指定された時間待機してからリトライ
                 logging.warning(
                     f"Rate limit exceeded. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
                 time.sleep(retry_delay)
-                retry_delay *= backoff_factor  # 遅延時間を指数関数的に増加
+                retry_delay *= backoff_factor
             except APIError as e:
-                # Groq APIからのエラーの場合、エラーをログに出力し、Noneを返す
                 logging.error(f"Rater.rater - Groq APIError: {e}")
                 return None
             except Exception as e:
-                # その他の予期せぬエラーの場合、エラーをログに出力し、Noneを返す
                 logging.error(f"Rater.rater - Unexpected error: {e}")
                 return None
 
-        # 最大リトライ回数に達しても成功しなかった場合
         logging.error(
             "Max retries reached for rater. Failed to get a response from Groq API."
         )
