@@ -40,7 +40,6 @@ class PreferredResponse(BaseModel):
     )
 
 
-
 # --- データクラス ---
 @dataclass
 class GroqConfig:
@@ -297,6 +296,7 @@ class Rater:
         retry_delay = 1
 
         for attempt in range(max_retries):
+            content = None  # 変数を事前に初期化
             try:
                 completion = sync_groq_client.chat.completions.create(
                     model=self.config.rater_model,
@@ -334,7 +334,13 @@ class Rater:
                 return None
 
             except json.JSONDecodeError as e:
-                logging.error(f"JSONパースエラー: {e}\nAPIレスポンス: {content}")
+                # contentがNoneの場合のハンドリングを追加
+                error_msg = f"JSONパースエラー: {e}"
+                if content is not None:
+                    error_msg += f"\nAPIレスポンス: {content}"
+                else:
+                    error_msg += "\nAPIレスポンス: なし"
+                logging.error(error_msg)
                 # JSONモードでも失敗する場合があるのでリトライ
                 if attempt >= max_retries - 1:
                     return None

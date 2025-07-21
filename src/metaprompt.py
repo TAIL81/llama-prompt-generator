@@ -77,10 +77,14 @@ class MetaPrompt:
         self._validate_inputs(task, variables)
 
         # 入力された改行区切りの変数文字列をリストに変換
-        parsed_variables: List[str] = [v.strip() for v in variables.split("\n") if v.strip()]
+        parsed_variables: List[str] = [
+            v.strip() for v in variables.split("\n") if v.strip()
+        ]
 
         # メタプロンプトで使用する変数文字列を生成
-        variable_string: str = "\n".join([f"{{{{{v.upper()}}}}}" for v in parsed_variables])
+        variable_string: str = "\n".join(
+            [f"{{{{{v.upper()}}}}}" for v in parsed_variables]
+        )
 
         # 基本的なメタプロンプトを読み込み、タスクと変数を挿入
         prompt: str = self.metaprompt.replace("{{TASK}}", task)
@@ -89,7 +93,6 @@ class MetaPrompt:
         # JSONモードで応答を要求する指示を追加
         prompt += '\n\nPlease provide the rewritten prompt in a JSON object with two keys: "prompt_template" and "variables". The "variables" key should contain a list of all variables found in the "prompt_template".'
         prompt += "\nPlease use Japanese for rewriting."
-
 
         messages: List[ChatCompletionMessageParam] = [
             {"role": "user", "content": prompt},
@@ -100,6 +103,8 @@ class MetaPrompt:
         )
         logging.info(f"Calling Groq API with model: {self.config.metaprompt_model}")
 
+        message: str = ""  # この行をtryブロックの外に移動
+
         try:
             completion = self.groq_client.chat.completions.create(
                 model=self.config.metaprompt_model,
@@ -108,7 +113,7 @@ class MetaPrompt:
                 temperature=self.config.temperature,
                 response_format={"type": "json_object"},
             )
-            message: str = completion.choices[0].message.content or ""
+            message = completion.choices[0].message.content or ""
 
             logging.info("Received response from Groq API")
             logging.info(f"API Response: {message}")
@@ -127,7 +132,6 @@ class MetaPrompt:
         except Exception as e:
             logging.error(f"An unexpected error occurred: {e}")
             return f"Error: {e}", ""
-
 
     # --- 入力検証 ---
     def _validate_inputs(self, task: str, variables: str) -> None:

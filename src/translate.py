@@ -268,6 +268,7 @@ class GuideBased:
         backoff_factor = 2
         retry_delay = 1
         for attempt in range(max_retries):
+            content = None  # 変数を事前に初期化
             try:
                 # Groq APIを使用して言語検出をリクエストします
                 completion = self.groq_client.chat.completions.create(
@@ -293,10 +294,22 @@ class GuideBased:
                 return detected_language.lang
 
             except json.JSONDecodeError as e:
-                logging.error(f"JSONパースエラー: {e}\nAPIレスポンス: {content}")
+                # contentがNoneの場合のハンドリングを追加
+                error_msg = f"JSONパースエラー: {e}"
+                if content is not None:
+                    error_msg += f"\nAPIレスポンス: {content}"
+                else:
+                    error_msg += "\nAPIレスポンス: なし"
+                logging.error(error_msg)
                 return ""
             except ValidationError as e:
-                logging.error(f"Pydantic検証エラー: {e}\nAPIレスポンス: {content}")
+                # contentがNoneの場合のハンドリングを追加
+                error_msg = f"Pydantic検証エラー: {e}"
+                if content is not None:
+                    error_msg += f"\nAPIレスポンス: {content}"
+                else:
+                    error_msg += "\nAPIレスポンス: なし"
+                logging.error(error_msg)
                 return ""
             except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
@@ -312,12 +325,10 @@ class GuideBased:
             except Exception as e:  # その他の予期せぬエラーが発生した場合
                 logging.error(f"GuideBased.detect_lang - Unexpected error: {e}")
                 return ""
-        logging.error(  # 最大リトライ回数に達した場合
+        logging.error(  # 最大リトライ次に達した場合
             "Max retries reached for detect_lang. Failed to get a response from Groq API."
         )
         return ""
-
-    
 
     def judge(self, candidates: List[str]) -> Optional[int]:
         """
@@ -364,6 +375,7 @@ class GuideBased:
         retry_delay = 1
 
         for attempt in range(max_retries):
+            content = None  # 変数を事前に初期化
             try:
                 completion = self.groq_client.chat.completions.create(
                     model=self.config.judge_model,
@@ -397,10 +409,22 @@ class GuideBased:
                 return final_result
 
             except json.JSONDecodeError as e:
-                logging.error(f"JSONパースエラー: {e}\nAPIレスポンス: {content}")
+                # contentがNoneの場合のハンドリングを追加
+                error_msg = f"JSONパースエラー: {e}"
+                if content is not None:
+                    error_msg += f"\nAPIレスポンス: {content}"
+                else:
+                    error_msg += "\nAPIレスポンス: なし"
+                logging.error(error_msg)
                 return None
             except ValidationError as e:
-                logging.error(f"Pydantic検証エラー: {e}\nAPIレスポンス: {content}")
+                # contentがNoneの場合のハンドリングを追加
+                error_msg = f"Pydantic検証エラー: {e}"
+                if content is not None:
+                    error_msg += f"\nAPIレスポンス: {content}"
+                else:
+                    error_msg += "\nAPIレスポンス: なし"
+                logging.error(error_msg)
                 return None
             except RateLimitError as e:
                 logging.warning(
