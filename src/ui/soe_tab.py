@@ -1,6 +1,9 @@
-from src.application.soe_prompt import SOEPrompt
-import gradio as gr
 from typing import Tuple
+
+import gradio as gr
+
+from src.application.soe_prompt import SOEPrompt
+
 
 def create_soe_tab(component_manager, config):
     """
@@ -59,18 +62,20 @@ def create_soe_tab(component_manager, config):
                         ],
                         file_types=["image", "video"],
                         file_count="multiple",
-                        scale=1
+                        scale=1,
                     )
                 with gr.Row():
                     # 商品説明生成ボタン
                     generate_button = gr.Button(
-                        config.lang_store[config.language]["Generate Product Description"],
-                        scale=4
+                        config.lang_store[config.language][
+                            "Generate Product Description"
+                        ],
+                        scale=4,
                     )
                     # クリアボタン
                     clear_button_soe = gr.Button(
                         config.lang_store[config.language].get("Clear", "Clear"),
-                        scale=1
+                        scale=1,
                     )
 
         # 生成された商品説明表示セクション
@@ -82,7 +87,7 @@ def create_soe_tab(component_manager, config):
                 lines=10,
                 interactive=False,
             )
-        
+
         # イベントハンドラを登録
         # 商品説明生成ボタンがクリックされたときの処理
         generate_button.click(
@@ -109,10 +114,11 @@ def create_soe_tab(component_manager, config):
                 brand_name,
                 usage_description,
                 target_customer,
-                image_preview, # image_uploadはクリアできないためプレビューをクリア
+                image_preview,  # image_uploadはクリアできないためプレビューをクリア
                 product_description,
             ],
         )
+
 
 def clear_soe_tab() -> Tuple[str, str, str, str, None, str]:
     """

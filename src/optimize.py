@@ -23,6 +23,7 @@ logging.basicConfig(
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
+
 # --- Pydanticモデル定義 ---
 class ErrorClassification(BaseModel):
     classification: str = Field(..., description="The classification of the error.")

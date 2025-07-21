@@ -1,8 +1,9 @@
-from src.translate import GuideBased
 from enum import Enum
 from typing import List, Tuple, cast
 
 import gradio as gr
+
+from src.translate import GuideBased
 
 
 # 最適化レベルをEnumで定義し、マジックストリングを排除

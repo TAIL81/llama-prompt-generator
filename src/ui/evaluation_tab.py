@@ -1,7 +1,8 @@
-from src.optimize import Alignment
 from typing import Any, Dict, Tuple
 
 import gradio as gr
+
+from src.optimize import Alignment
 
 # モデルの選択肢を定数として定義
 OPENAI_MODEL_CHOICES = [
@@ -227,7 +228,9 @@ def create_evaluation_tab(component_manager: Any, config: Any):
             )
             # プロンプト改善ボタンクリックイベント
             revise_button.click(
-                component_manager.get(Alignment).generate_revised_prompt,  # eval_model_id は削除
+                component_manager.get(
+                    Alignment
+                ).generate_revised_prompt,  # eval_model_id は削除
                 inputs=[feedback_input, user_prompt_eval, OpenAI_output, groq_output],
                 outputs=revised_prompt_output,
             )

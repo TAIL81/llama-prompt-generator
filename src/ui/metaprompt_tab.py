@@ -1,8 +1,11 @@
-import gradio as gr
 import logging
 from typing import Tuple
-from src.metaprompt import MetaPrompt
+
+import gradio as gr
+
 from src.ape import APE
+from src.metaprompt import MetaPrompt
+
 
 def create_metaprompt_tab(component_manager, config):
     """
@@ -130,9 +133,7 @@ def create_metaprompt_tab(component_manager, config):
                 "Please input your variables, one variable per line"
             ],
             lines=5,
-            placeholder=lang_store[language][
-                "CUSTOMER_COMPLAINT\nCOMPANY_NAME"
-            ],
+            placeholder=lang_store[language]["CUSTOMER_COMPLAINT\nCOMPANY_NAME"],
         )
         # ボタンを配置するためのカラムと行
         with gr.Column(scale=2):
@@ -154,18 +155,14 @@ def create_metaprompt_tab(component_manager, config):
             with gr.Column():
                 # メタプロンプト出力：プロンプトテンプレート
                 prompt_result_meta = gr.Textbox(
-                    label=lang_store[language][
-                        "MetaPrompt Output: Prompt Template"
-                    ],
+                    label=lang_store[language]["MetaPrompt Output: Prompt Template"],
                     lines=30,
                     show_copy_button=True,
                     interactive=False,
                 )
                 # メタプロンプト出力：変数
                 variables_result_meta = gr.Textbox(
-                    label=lang_store[language][
-                        "MetaPrompt Output: Variables"
-                    ],
+                    label=lang_store[language]["MetaPrompt Output: Variables"],
                     lines=5,
                     show_copy_button=True,
                     interactive=False,
@@ -173,9 +170,7 @@ def create_metaprompt_tab(component_manager, config):
             with gr.Column():
                 # APE出力：プロンプトテンプレート
                 prompt_result_ape = gr.Textbox(
-                    label=lang_store[language][
-                        "APE Output: Prompt Template"
-                    ],
+                    label=lang_store[language]["APE Output: Prompt Template"],
                     lines=30,
                     show_copy_button=True,
                     interactive=False,

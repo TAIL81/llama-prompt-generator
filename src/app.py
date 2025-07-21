@@ -133,7 +133,9 @@ class ComponentManager:
         self._initializers: Dict[Type, Callable[[], Any]] = {
             APE: lambda: APE(),
             GuideBased: lambda: GuideBased(),
-            Alignment: lambda: Alignment(lang_store=self._config.lang_store, language=self._config.language),
+            Alignment: lambda: Alignment(
+                lang_store=self._config.lang_store, language=self._config.language
+            ),
             MetaPrompt: lambda: MetaPrompt(),
             SOEPrompt: lambda: SOEPrompt(),
             CalibrationPrompt: lambda: CalibrationPrompt(),
@@ -255,7 +257,8 @@ def kill_child_processes(parent_pid, sig=signal.SIGTERM):
             print(f"子プロセス {child.pid} を終了します")
             child.send_signal(sig)
     except psutil.NoSuchProcess:
-        return # 親プロセスがすでに存在しない場合は何もしない
+        return  # 親プロセスがすでに存在しない場合は何もしない
+
 
 # シグナルハンドラ
 def signal_handler(sig, frame):

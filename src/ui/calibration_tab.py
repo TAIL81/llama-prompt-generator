@@ -1,12 +1,15 @@
-from src.calibration import CalibrationPrompt
-import gradio as gr
 from typing import Tuple
+
+import gradio as gr
+
+from src.calibration import CalibrationPrompt
 
 # モジュールレベルでデフォルトコードを定義し、重複を排除
 DEFAULT_POSTPROCESS_CODE = """
 def postprocess(llm_output):
     return llm_output
 """.strip()
+
 
 def create_calibration_tab(component_manager, config):
     """
@@ -16,9 +19,7 @@ def create_calibration_tab(component_manager, config):
         component_manager: アプリケーションのコンポーネントを管理するオブジェクト。
         config: アプリケーションの設定オブジェクト。
     """
-    with gr.Tab(
-        config.lang_store[config.language]["Prompt Calibration"]
-    ):
+    with gr.Tab(config.lang_store[config.language]["Prompt Calibration"]):
         # 入力セクション
         with gr.Row():
             with gr.Column(scale=2):
@@ -44,13 +45,11 @@ def create_calibration_tab(component_manager, config):
                         "Please input your postprocess code"
                     ],
                     lines=3,
-                    value=DEFAULT_POSTPROCESS_CODE, # デフォルト値を設定
+                    value=DEFAULT_POSTPROCESS_CODE,  # デフォルト値を設定
                 )
                 # データセットファイルアップロード用のコンポーネント
-                dataset_file = gr.File(
-                    file_types=["csv"], type="binary"
-                )
-        
+                dataset_file = gr.File(file_types=["csv"], type="binary")
+
         # タスクタイプとエポック数選択セクション
         with gr.Row():
             # タスクタイプ選択用のラジオボタン
@@ -63,18 +62,17 @@ def create_calibration_tab(component_manager, config):
             steps_num = gr.Slider(
                 1, 5, value=1, step=1, label=config.lang_store[config.language]["Epoch"]
             )
-        
+
         # ボタンセクション
         with gr.Row():
             # 最適化実行ボタン
             calibration_optimization = gr.Button(
                 config.lang_store[config.language]["Optimization based on prediction"],
-                scale=4
+                scale=4,
             )
             # クリアボタン
             clear_button_calibration = gr.Button(
-                config.lang_store[config.language].get("Clear", "Clear"),
-                scale=1
+                config.lang_store[config.language].get("Clear", "Clear"), scale=1
             )
 
         # 改訂されたプロンプト表示用のテキストボックス
@@ -84,7 +82,7 @@ def create_calibration_tab(component_manager, config):
             show_copy_button=True,
             interactive=False,
         )
-        
+
         # イベントハンドラの登録
         # 最適化ボタンがクリックされたときの処理
         calibration_optimization.click(
@@ -98,7 +96,7 @@ def create_calibration_tab(component_manager, config):
             ],
             outputs=calibration_prompt,
         )
-        
+
         # クリアボタンがクリックされたときの処理
         clear_button_calibration.click(
             clear_calibration_tab,
@@ -112,6 +110,7 @@ def create_calibration_tab(component_manager, config):
                 calibration_prompt,
             ],
         )
+
 
 def clear_calibration_tab() -> Tuple[str, str, str, None, int, str]:
     """
