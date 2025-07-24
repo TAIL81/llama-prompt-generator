@@ -229,9 +229,12 @@ def ape_prompt(original_prompt: str, user_data: str) -> List[gr.Textbox]:
 
 
 # Gradioインターフェースを定義
+valid_themes = ["default", "soft", "glass"]
+theme_name = "soft" if "soft" in valid_themes else "default"
+
 with gr.Blocks(
     title=config.lang_store[config.language]["Automatic Prompt Engineering"],
-    theme="soft",
+    theme=theme_name,
 ) as demo:
     # クリアボタンのラベルを取得
     clear_button_label = config.lang_store[config.language].get("Clear", "Clear")
@@ -280,7 +283,7 @@ if __name__ == "__main__":
     load_dotenv()  # .envファイルから環境変数をロード
     try:
         # Gradioアプリを起動し、サーバーインスタンスを取得
-        app, local_url, share_url = demo.launch()
+        app, local_url, share_url = demo.launch(ssr_mode=True, share=True)
     except Exception as e:
         logging.error(f"サーバー起動エラー: {e}")
         # エラー発生時に子プロセスをクリーンアップ
