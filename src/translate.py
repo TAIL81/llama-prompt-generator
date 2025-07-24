@@ -44,7 +44,9 @@ class PreferredInstruction(BaseModel):
 
 @dataclass
 class GroqConfig:
-    rewrite_model: str = "qwen/qwen3-32b"  # プロンプト書き換えに使用するモデル
+    rewrite_model: str = (
+        "moonshotai/kimi-k2-instruct"  # プロンプト書き換えに使用するモデル
+    )
     detect_lang_model: str = (
         "meta-llama/llama-4-scout-17b-16e-instruct"  # 言語検出に使用するモデル
     )
@@ -55,10 +57,8 @@ class GroqConfig:
     reasoning_effort: Literal["none", "default"] = (
         "none"  # "default" for thinking, "none" for non-thinking
     )
-    temperature_rewrite: float = 0.7
-    top_p_rewrite: float = 0.8
-    top_k_rewrite: int = 20
-    min_p_rewrite: float = 0.0
+    temperature_rewrite: float = 0.6
+    top_p_rewrite: float = 1.0
     temperature_detect_lang: float = 0.0
     temperature_judge: float = 0.0
 
@@ -206,8 +206,6 @@ class GuideBased:
                     "max_tokens": self.config.max_tokens,
                     "temperature": self.config.temperature_rewrite,
                     "top_p": self.config.top_p_rewrite,
-                    "top_k": self.config.top_k_rewrite,
-                    "min_p": self.config.min_p_rewrite,
                 }
                 # reasoning_effortは新しいパラメータなので条件付きで追加
                 if hasattr(self.groq_client.chat.completions, "reasoning_effort"):
