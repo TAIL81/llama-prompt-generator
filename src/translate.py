@@ -484,7 +484,7 @@ def translate(text: str, target_lang: str, source_lang: str = "en") -> str:
                 ],
                 model="llama3-8b-8192",
             )
-            return chat_completion.choices[0].message.content
+            return chat_completion.choices[0].message.content or ""
 
         except RateLimitError as e:
             logging.warning(
