@@ -45,7 +45,7 @@ class PreferredInstruction(BaseModel):
 @dataclass
 class GroqConfig:
     rewrite_model: str = (
-        "moonshotai/kimi-k2-instruct"  # プロンプト書き換えに使用するモデル
+        "meta-llama/llama-4-scout-17b-16e-instruct"  # プロンプト書き換えに使用するモデル
     )
     detect_lang_model: str = (
         "meta-llama/llama-4-scout-17b-16e-instruct"  # 言語検出に使用するモデル
@@ -453,4 +453,5 @@ class GuideBased:
         logging.error(
             "Max retries reached for judge. Failed to get a response from Groq API."
         )
+        return None
         return None
