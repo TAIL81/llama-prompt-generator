@@ -35,7 +35,7 @@ class Language(BaseModel):
 class PreferredInstruction(BaseModel):
     """プロンプト評価APIのレスポンスを定義するPydanticモデル"""
 
-    Preferred: str = Field(
+    preferred: str = Field(
         ...,
         description="The name of the preferred instruction (e.g., 'Instruction 1').",
         examples=["Instruction 1"],
@@ -243,7 +243,6 @@ class GuideBased:
         )
         raise Exception("Failed to rewrite prompt after multiple retries.")
 
-
     def _validate_initial_prompt(self, initial_prompt: str) -> None:
         """
         initial_promptの入力検証を行います。
@@ -414,7 +413,7 @@ class GuideBased:
                 # 結果の抽出
                 final_result = None
                 for idx in range(len(candidates)):
-                    if str(idx + 1) in result.Preferred:
+                    if str(idx + 1) in result.preferred:
                         final_result = idx
                         break
 
@@ -476,25 +475,27 @@ def translate(text: str, target_lang: str, source_lang: str = "en") -> str:
                 messages=[
                     {
                         "role": "system",
-                        "content": f"You are a translator. Translate the following text from {source_lang} to {target_lang}."
+                        "content": f"You are a translator. Translate the following text from {source_lang} to {target_lang}.",
                     },
                     {
                         "role": "user",
                         "content": text,
-                    }
+                    },
                 ],
                 model="llama3-8b-8192",
             )
             return chat_completion.choices[0].message.content
 
         except RateLimitError as e:
-            logging.warning(f"Rate limit exceeded. Attempt {attempt + 1} of {max_retries}.")
+            logging.warning(
+                f"Rate limit exceeded. Attempt {attempt + 1} of {max_retries}."
+            )
             # Groq APIのレート制限ヘッダーを確認 (存在する場合)
             if e.response and e.response.headers:
                 logging.info(f"Response headers: {e.response.headers}")
 
             # 指数バックオフ
-            delay = base_delay * (2 ** attempt)
+            delay = base_delay * (2**attempt)
             logging.info(f"Retrying in {delay} seconds...")
             time.sleep(delay)
 
