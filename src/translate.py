@@ -47,12 +47,8 @@ class GroqConfig:
     rewrite_model: str = (
         "meta-llama/llama-4-scout-17b-16e-instruct"  # プロンプト書き換えに使用するモデル
     )
-    detect_lang_model: str = (
-        "meta-llama/llama-4-scout-17b-16e-instruct"  # 言語検出に使用するモデル
-    )
-    judge_model: str = (
-        "meta-llama/llama-4-scout-17b-16e-instruct"  # 評価に使用するモデル
-    )
+    detect_lang_model: str = "llama-3.3-70b-versatile"  # 言語検出に使用するモデル
+    judge_model: str = "llama-3.3-70b-versatile"  # 評価に使用するモデル
     max_tokens: int = 8192  # モデルからの応答の最大トークン数
     reasoning_effort: Literal["none", "default"] = (
         "none"  # "default" for thinking, "none" for non-thinking
@@ -253,16 +249,18 @@ class GuideBased:
     def detect_lang(self, initial_prompt: str) -> str:
         """
         与えられたプロンプトの言語を検出します (英語、中国語または日本語)。
-        GroqのStructured Outputs機能を使用して、信頼性の高いJSON出力を保証します。
+        GroqのJSON Object Modeを使用して、信頼性の高いJSON出力を保証します。
 
         Args:
             initial_prompt (str): 言語を検出する対象のプロンプト。
 
         Returns:
-            str: 検出された言語コード ("en", "ch" または "ja")。エラーの場合は空文字列。
+            str: 検出された言語コード ("en", "ch" または "ja")。エラーの場合は空文字列を返す。
         """
         prompt = f"""
         Please determine what language the document below is in? English (en), Chinese (ch) or Japanese (ja)?
+        Your response must be only the JSON object, with no other text before or after it.
+        The JSON object must have a key named "lang" with the detected language code as its value (e.g., {{"lang": "ja"}}).
 
         <document>
         {initial_prompt}
@@ -271,7 +269,7 @@ class GuideBased:
         messages: List[ChatCompletionMessageParam] = [
             {
                 "role": "system",
-                "content": "You are an AI assistant that detects the language of a given text and responds in a structured JSON format.",
+                "content": "You are an AI assistant that detects the language of a given text and responds in a structured JSON format as requested by the user.",
             },
             {"role": "user", "content": prompt},
         ]
@@ -285,14 +283,7 @@ class GuideBased:
                 completion = self.groq_client.chat.completions.create(
                     model=self.config.detect_lang_model,
                     messages=messages,
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "language_detection",
-                            "description": "The detected language.",
-                            "schema": Language.model_json_schema(),
-                        },
-                    },
+                    response_format={"type": "json_object"},
                 )
                 content = completion.choices[0].message.content
                 logging.info(f"detect_lang LLM response: {content}")
@@ -344,13 +335,13 @@ class GuideBased:
     def judge(self, candidates: List[str]) -> Optional[int]:
         """
         複数のプロンプト候補を評価し、最も良いものを選択します。
-        GroqのStructured Outputs機能を使用して、信頼性の高いJSON出力を保証します。
+        GroqのJSON Object Modeを使用して、信頼性の高いJSON出力を保証します。
 
         Args:
             candidates (List[str]): 評価対象のプロンプト候補のリスト。
 
         Returns:
-            Optional[int]: 最も良いと判断された候補のインデックス。エラーの場合はNone。
+            Optional[int]: 最も良いと判断された候補のインデックス。エラーの場合はNoneを返す。
         """
         Instruction_prompts: List[str] = []
         for idx, candidate in enumerate(candidates):
@@ -370,6 +361,7 @@ class GuideBased:
             {Instruction_prompts}
 
             Your response must be only the JSON object, with no other text before or after it.
+            The JSON object must have a key named "preferred" with the name of the preferred instruction as its value (e.g., {{"preferred": "Instruction 1"}}).
             """.strip()
         )
         messages: List[ChatCompletionMessageParam] = [
@@ -391,14 +383,7 @@ class GuideBased:
                 completion = self.groq_client.chat.completions.create(
                     model=self.config.judge_model,
                     messages=messages,
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "preferred_instruction",
-                            "description": "The preferred instruction.",
-                            "schema": PreferredInstruction.model_json_schema(),
-                        },
-                    },
+                    response_format={"type": "json_object"},
                 )
                 content = completion.choices[0].message.content
                 logging.info(f"judge LLM response (raw): {content}")
@@ -482,7 +467,7 @@ def translate(text: str, target_lang: str, source_lang: str = "en") -> str:
                         "content": text,
                     },
                 ],
-                model="llama3-8b-8192",
+                model="llama-3.1-8b-instant",
             )
             return chat_completion.choices[0].message.content or ""
 
