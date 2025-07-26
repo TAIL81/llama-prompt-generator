@@ -226,22 +226,23 @@ class GuideBased:
                 return result
             except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
-                    f"Rate limit exceeded in __call__. Attempt {attempt + 1}/{max_retries}. Retrying in {retry_delay} seconds.\n"
-                    f"  - Headers: {getattr(e.response, 'headers', 'N/A')}\n"
-                    f"  - Body: {getattr(e.response, 'text', 'N/A')}"
+                    f"Rate limit exceeded in __call__. Attempt {attempt + 1}/{max_retries}. Retrying in {retry_delay} seconds."
                 )
+                if e.response:
+                    logging.info(f"Response headers: {e.response.headers}")
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:  # Groq APIエラーが発生した場合
                 logging.error(f"GuideBased.__call__ - Groq APIError: {e}")
-                return ""
+                raise  # エラーを再発生させて呼び出し元に通知
             except Exception as e:  # その他の予期せぬエラーが発生した場合
                 logging.error(f"GuideBased.__call__ - Unexpected error: {e}")
-                return ""
+                raise  # エラーを再発生させて呼び出し元に通知
         logging.error(  # 最大リトライ回数に達した場合
             "Max retries reached for __call__. Failed to get a response from Groq API."
         )
-        return ""
+        raise Exception("Failed to rewrite prompt after multiple retries.")
+
 
     def _validate_initial_prompt(self, initial_prompt: str) -> None:
         """
@@ -324,10 +325,10 @@ class GuideBased:
                 return ""
             except RateLimitError as e:  # レート制限エラーが発生した場合
                 logging.warning(
-                    f"Rate limit exceeded in detect_lang. Attempt {attempt + 1}/{max_retries}. Retrying in {retry_delay} seconds.\n"
-                    f"  - Headers: {getattr(e.response, 'headers', 'N/A')}\n"
-                    f"  - Body: {getattr(e.response, 'text', 'N/A')}"
+                    f"Rate limit exceeded in detect_lang. Attempt {attempt + 1}/{max_retries}. Retrying in {retry_delay} seconds."
                 )
+                if e.response:
+                    logging.info(f"Response headers: {e.response.headers}")
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:  # Groq APIエラーが発生した場合
@@ -441,17 +442,65 @@ class GuideBased:
                 logging.warning(
                     f"Rate limit exceeded in judge. Retrying in {retry_delay} seconds. Attempt {attempt + 1}/{max_retries}"
                 )
+                if e.response:
+                    logging.info(f"Response headers: {e.response.headers}")
                 time.sleep(retry_delay)
                 retry_delay *= backoff_factor
             except APIError as e:
                 logging.error(f"GuideBased.judge - Groq APIError: {e}")
-                return None
+                raise
             except Exception as e:
                 logging.error(f"Unexpected error in judge method: {e}")
-                return None
+                raise
 
         logging.error(
             "Max retries reached for judge. Failed to get a response from Groq API."
         )
-        return None
-        return None
+        raise Exception("Failed to judge prompt after multiple retries.")
+
+
+def translate(text: str, target_lang: str, source_lang: str = "en") -> str:
+    """
+    テキストを指定された言語に翻訳します。
+    レート制限エラーが発生した場合は、指数バックオフでリトライします。
+    """
+    client = Groq(
+        api_key=os.environ.get("GROQ_API_KEY"),
+    )
+    max_retries = 5
+    base_delay = 1  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"You are a translator. Translate the following text from {source_lang} to {target_lang}."
+                    },
+                    {
+                        "role": "user",
+                        "content": text,
+                    }
+                ],
+                model="llama3-8b-8192",
+            )
+            return chat_completion.choices[0].message.content
+
+        except RateLimitError as e:
+            logging.warning(f"Rate limit exceeded. Attempt {attempt + 1} of {max_retries}.")
+            # Groq APIのレート制限ヘッダーを確認 (存在する場合)
+            if e.response and e.response.headers:
+                logging.info(f"Response headers: {e.response.headers}")
+
+            # 指数バックオフ
+            delay = base_delay * (2 ** attempt)
+            logging.info(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
+
+        except Exception as e:
+            logging.error(f"An unexpected error occurred: {e}")
+            # その他のエラーはリトライせずに終了
+            raise
+
+    raise Exception("Failed to translate after multiple retries.")

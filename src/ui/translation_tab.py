@@ -116,10 +116,14 @@ def create_translation_tab(component_manager, config):
         Returns:
             List[gr.components.Textbox]: 生成されたプロンプトを含むテキストボックスのリスト。
         """
-        result = rewrite(
-            original_prompt
-        )  # rewriteコンポーネントを使用してプロンプトを生成
-        return create_single_textbox(result)
+        try:
+            result = rewrite(
+                original_prompt
+            )  # rewriteコンポーネントを使用してプロンプトを生成
+            return create_single_textbox(result)
+        except Exception as e:
+            gr.Warning(f"Error: {e}")
+            return create_single_textbox("Failed to generate prompt.")
 
     def generate_multiple_prompts_sequential(original_prompt: str) -> List[str]:
         """
@@ -131,8 +135,12 @@ def create_translation_tab(component_manager, config):
         Returns:
             List[str]: 生成されたプロンプト候補のリスト。
         """
-        candidates = [rewrite(original_prompt) for _ in range(3)]
-        return candidates
+        try:
+            candidates = [rewrite(original_prompt) for _ in range(3)]
+            return candidates
+        except Exception as e:
+            gr.Warning(f"Error: {e}")
+            return ["Failed to generate prompt."] * 3
 
     def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
         """
@@ -150,11 +158,15 @@ def create_translation_tab(component_manager, config):
             return generate_single_prompt(original_prompt)
         elif level == OptimizeLevel.MULTIPLE.value:
             # 複数回生成モードの場合
-            candidates = generate_multiple_prompts_sequential(
-                original_prompt
-            )  # 複数の候補を逐次に生成
-            judge_result = rewrite.judge(candidates)  # 最も良い候補を判断
-            return create_multiple_textboxes(candidates, judge_result)
+            try:
+                candidates = generate_multiple_prompts_sequential(
+                    original_prompt
+                )  # 複数の候補を逐次に生成
+                judge_result = rewrite.judge(candidates)  # 最も良い候補を判断
+                return create_multiple_textboxes(candidates, judge_result)
+            except Exception as e:
+                gr.Warning(f"Error: {e}")
+                return create_multiple_textboxes(["Failed to judge prompt."] * 3, -1)
         return []  # どのレベルにも一致しない場合は空リストを返す
 
     # Gradio UIの定義
