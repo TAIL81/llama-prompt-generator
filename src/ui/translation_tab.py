@@ -63,7 +63,8 @@ def create_translation_tab(component_manager, config):
                 gr.Textbox(
                     label=lang_store[language]["Prompt Template Generated"],
                     value=value,
-                    lines=3,
+                    lines=1,
+                    max_lines=20,
                     show_copy_button=True,
                     interactive=False,
                 ),
@@ -95,7 +96,8 @@ def create_translation_tab(component_manager, config):
                     gr.Textbox(
                         label=f'{lang_store[language]["Prompt Template Generated"]} #{i+1} {is_best}',
                         value=candidates[i],
-                        lines=3,
+                        lines=1,
+                        max_lines=20,
                         show_copy_button=True,
                         visible=True,  # 複数回生成モードではすべて表示
                         interactive=False,
@@ -190,7 +192,8 @@ def create_translation_tab(component_manager, config):
                     t = gr.Textbox(
                         label=lang_store[language]["Prompt Template Generated"],
                         elem_id=f"textbox_id_{i}",  # ユニークなIDを付与
-                        lines=3,
+                        lines=1,
+                        max_lines=20,
                         show_copy_button=True,
                         interactive=False,
                         visible=(
