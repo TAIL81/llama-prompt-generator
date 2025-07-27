@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Dict, List, Mapping, Optional, Union
@@ -33,6 +34,7 @@ Instruction guide:
 You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
 which is included using double pointed brackets is customizable text that will be replaced at runtime. This needs to be kept as is.
 Please same language as the initial instruction for rewriting.
+Please respond with a JSON object containing the rewritten instruction in the "rewritten_instruction" field.
 
 <instruction>
 {initial}
@@ -144,8 +146,8 @@ class APE:
         else:
             best_candidate_obj = filtered_candidates[0]
             logging.warning(
-                "Rater returned invalid index or failed, using first candidate as fallback."  # Raterが不正なインデックスを返した場合のフォールバック
-            )
+                "Rater returned invalid index or failed, using first candidate as fallback."
+            )  # Raterが不正なインデックスを返した場合のフォールバック
 
         for i in range(epoch):
             more_candidate_prompt: Optional[str] = self.generate_more(
@@ -205,22 +207,30 @@ class APE:
     def _call_groq_api(
         self,
         messages: List[ChatCompletionMessageParam],
-        method_name: str,  # Groq API呼び出しの共通化
+        method_name: str,
+        json_mode: bool = False,
     ) -> Optional[str]:
         """Groq APIを呼び出し、エラーハンドリングを共通化します。"""
         try:
-            completion = groq_client.chat.completions.create(
-                model=self.config.rewrite_model,
-                messages=messages,
-                max_completion_tokens=self.config.max_tokens,  # 最大トークン数を設定
-                temperature=self.config.temperature,
-            )
+            params = {
+                "model": self.config.rewrite_model,
+                "messages": messages,
+                "max_completion_tokens": self.config.max_tokens,
+                "temperature": self.config.temperature,
+            }
+            if json_mode:
+                params["response_format"] = {"type": "json_object"}
+
+            completion = groq_client.chat.completions.create(**params)
             result = completion.choices[0].message.content or ""
-            if result.startswith("<instruction>"):
-                result = result[13:]
-            if result.endswith("</instruction>"):
-                result = result[:-14]
-            result = result.strip()
+
+            if not json_mode:
+                if result.startswith("<instruction>"):
+                    result = result[13:]
+                if result.endswith("</instruction>"):
+                    result = result[:-14]
+                result = result.strip()
+
             logging.debug(f"APE.{method_name} successful, result: {result}")
             return result
         except groq.InternalServerError as e:
@@ -231,7 +241,7 @@ class APE:
             )
             logging.error(
                 f"APE.{method_name} - Groq InternalServerError: {error_message} (Details: {e})"
-            )  # 内部サーバーエラーのログ出力
+            )
             return None
         except groq.APIError as e:
             error_message = (
@@ -241,21 +251,36 @@ class APE:
             )
             logging.error(
                 f"APE.{method_name} - Groq APIError: {error_message} (Details: {e})"
-            )  # APIエラーのログ出力
+            )
             return None
         except Exception as e:
             logging.error(
                 f"APE.{method_name} - Unexpected error: {e}"
-            )  # その他の予期せぬエラーのログ出力
+            )
             return None
 
     def rewrite(self, initial_prompt: str) -> Optional[str]:
-        """初期プロンプトをInstruction guideに基づいて書き換えます。"""  # プロンプト書き換え関数
+        """初期プロンプトをInstruction guideに基づいて書き換えます。"""
         prompt = BASE_PROMPT_TEMPLATE.format(guide=PromptGuide, initial=initial_prompt)
         messages: List[ChatCompletionMessageParam] = [
             {"role": "user", "content": prompt}
         ]
-        return self._call_groq_api(messages, "rewrite")
+        raw_result = self._call_groq_api(messages, "rewrite", json_mode=True)
+        if raw_result:
+            try:
+                data = json.loads(raw_result)
+                rewritten_instruction = data.get("rewritten_instruction")
+                if rewritten_instruction and isinstance(rewritten_instruction, str):
+                    return rewritten_instruction.strip()
+                else:
+                    logging.error(
+                        "JSON response does not contain a valid 'rewritten_instruction' string."
+                    )
+                    return None
+            except json.JSONDecodeError:
+                logging.error(f"Failed to parse JSON response: {raw_result}")
+                return None
+        return None
 
     def generate_more(self, initial_prompt: str, example: str) -> Optional[str]:
         """初期プロンプトと既存の良い例を基に、さらにプロンプト候補を生成します。"""
@@ -263,9 +288,24 @@ class APE:
             guide=PromptGuide, initial=initial_prompt, demo=example
         )
         final_prompt = (
-            f"{prompt_with_example}\n\nPlease only output the rewrite result."
+            f'{prompt_with_example}\n\nPlease provide the rewritten instruction as a JSON object with the \'rewritten_instruction\' key, based on the initial instruction and the good example provided.'
         )
         messages: List[ChatCompletionMessageParam] = [
             {"role": "user", "content": final_prompt}
         ]
-        return self._call_groq_api(messages, "generate_more")
+        raw_result = self._call_groq_api(messages, "generate_more", json_mode=True)
+        if raw_result:
+            try:
+                data = json.loads(raw_result)
+                rewritten_instruction = data.get("rewritten_instruction")
+                if rewritten_instruction and isinstance(rewritten_instruction, str):
+                    return rewritten_instruction.strip()
+                else:
+                    logging.error(
+                        "JSON response does not contain a valid 'rewritten_instruction' string."
+                    )
+                    return None
+            except json.JSONDecodeError:
+                logging.error(f"Failed to parse JSON response: {raw_result}")
+                return None
+        return None
