@@ -24,7 +24,7 @@ logging.basicConfig(
 class GroqConfig:
     """Groq APIの設定を保持するデータクラス。"""
 
-    metaprompt_model: str = "compound-beta-kimi"
+    metaprompt_model: str = "moonshotai/kimi-k2-instruct"
     max_tokens: int = 8192
     temperature: float = 0.6
 
