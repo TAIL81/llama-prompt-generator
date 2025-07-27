@@ -31,7 +31,7 @@ def test_groq_config_defaults():
     config = GroqConfig()
     assert config.rewrite_model == "meta-llama/llama-4-scout-17b-16e-instruct"
     assert config.max_tokens == 8192
-    assert config.temperature == 0.6
+    assert config.temperature == 0.7
 
 
 def test_ape_call_success(ape_instance):

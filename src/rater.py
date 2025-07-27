@@ -49,17 +49,17 @@ class GroqConfig:
     """
 
     # 出力生成に使用するモデル名
-    get_output_model: str = "meta-llama/llama-guard-4-12b"
+    get_output_model: str = "meta-llama/llama-4-maverick-17b-128e-instruct"
     # 評価（レーティング）に使用するモデル名
     rater_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     # 出力生成時の最大トークン数
-    max_tokens_get_output: int = 1024
+    max_tokens_get_output: int = 8192
     # 評価時の最大トークン数
     max_tokens_rater: int = 8192
     # 出力生成時の温度（ランダム性）
-    temperature_get_output: float = 0.0
+    temperature_get_output: float = 0.7
     # 評価時の温度（ランダム性）
-    temperature_rater: float = 0.0
+    temperature_rater: float = 0.7
 
 
 # --- メインクラス ---

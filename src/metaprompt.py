@@ -24,9 +24,9 @@ logging.basicConfig(
 class GroqConfig:
     """Groq APIの設定を保持するデータクラス。"""
 
-    metaprompt_model: str = "moonshotai/kimi-k2-instruct"
+    metaprompt_model: str = "compound-beta-kimi"
     max_tokens: int = 8192
-    temperature: float = 0.0
+    temperature: float = 0.6
 
 
 # 現在のスクリプトが配置されているディレクトリを取得します

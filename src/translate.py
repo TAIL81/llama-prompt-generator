@@ -53,7 +53,7 @@ class GroqConfig:
     reasoning_effort: Literal["none", "default"] = (
         "none"  # "default" for thinking, "none" for non-thinking
     )
-    temperature_rewrite: float = 0.6
+    temperature_rewrite: float = 0.7
     top_p_rewrite: float = 1.0
     temperature_detect_lang: float = 0.0
     temperature_judge: float = 0.0
