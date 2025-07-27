@@ -123,17 +123,12 @@ class APE:
             logging.warning(
                 "No candidates left after filtering for customizable variables."
             )
-            
-            # フィルタリングされた理由を詳細にログに出力
-            for i, c in enumerate(candidate_dicts):
-                missing_vars = [var for var in customizable_variable_list if var not in c["prompt"]]
-                if missing_vars:
-                    logging.warning(
-                        f"Candidate {i+1} was filtered out because it was missing variables: {', '.join(missing_vars)}. Content: {c['prompt']}"
-                    )
-                else:
-                    logging.warning(f"Candidate {i+1} was unexpectedly filtered out. Content: {c['prompt']}")
-
+            candidates_log_str = "\n".join(
+                f"--- Candidate {i+1} ---\n{c}" for i, c in enumerate(candidates)
+            )
+            logging.warning(
+                f"The following candidates were filtered out:\n{candidates_log_str}"
+            )
             return {
                 "prompt": initial_prompt,
                 "error": "No valid candidates after filtering. The rewritten prompts might be missing some required variables.",
