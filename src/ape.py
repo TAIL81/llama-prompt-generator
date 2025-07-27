@@ -1,6 +1,5 @@
 import logging
 import os
-import json
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Dict, List, Mapping, Optional, Union
@@ -38,11 +37,6 @@ Please same language as the initial instruction for rewriting.
 <instruction>
 {initial}
 </instruction>
-
-IMPORTANT: You must respond with a valid JSON object in the following format:
-{{
-  "rewritten_instruction": "Your rewritten instruction here"
-}}
 """.strip()
 
 EXAMPLE_TEMPLATE = """
@@ -58,7 +52,6 @@ class GroqConfig:
     rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     max_tokens: int = 8192  # 生成される応答の最大トークン数
     temperature: float = 0.7  # 応答の多様性を制御する温度パラメータ
-    use_json_mode: bool = True  # JSON Object Modeを使用するかどうか
 
 
 # --- 初期化処理 ---
@@ -209,22 +202,6 @@ class APE:
             else:
                 logging.debug(f"    {value}")
 
-    def _parse_json_response(self, response: str, method_name: str) -> Optional[str]:
-        """JSON形式のレスポンスを解析し、指示された内容を抽出します。"""
-        try:
-            json_data = json.loads(response)
-            if "rewritten_instruction" in json_data:
-                return json_data["rewritten_instruction"].strip()
-            else:
-                logging.error(
-                    f"APE.{method_name} - JSON response missing 'rewritten_instruction' key"
-                )
-                return None
-        except json.JSONDecodeError as e:
-            logging.error(f"APE.{method_name} - Failed to parse JSON response: {e}")
-            logging.debug(f"Raw response: {response}")
-            return None
-
     def _call_groq_api(
         self,
         messages: List[ChatCompletionMessageParam],
@@ -232,34 +209,20 @@ class APE:
     ) -> Optional[str]:
         """Groq APIを呼び出し、エラーハンドリングを共通化します。"""
         try:
-            # API呼び出しパラメータを準備
-            api_params = {
-                "model": self.config.rewrite_model,
-                "messages": messages,
-                "max_completion_tokens": self.config.max_tokens,
-                "temperature": self.config.temperature,
-            }
-
-            # JSON Object Modeが有効な場合、response_formatを追加
-            if self.config.use_json_mode:
-                api_params["response_format"] = {"type": "json_object"}
-
-            completion = groq_client.chat.completions.create(**api_params)
+            completion = groq_client.chat.completions.create(
+                model=self.config.rewrite_model,
+                messages=messages,
+                max_completion_tokens=self.config.max_tokens,  # 最大トークン数を設定
+                temperature=self.config.temperature,
+            )
             result = completion.choices[0].message.content or ""
-
-            # JSON Object Modeの場合はJSON解析を行う
-            if self.config.use_json_mode:
-                return self._parse_json_response(result, method_name)
-            else:
-                # 従来の処理（XMLタグの除去）
-                if result.startswith("<instruction>"):
-                    result = result[13:]
-                if result.endswith("</instruction>"):
-                    result = result[:-14]
-                result = result.strip()
-                logging.debug(f"APE.{method_name} successful, result: {result}")
-                return result
-
+            if result.startswith("<instruction>"):
+                result = result[13:]
+            if result.endswith("</instruction>"):
+                result = result[:-14]
+            result = result.strip()
+            logging.debug(f"APE.{method_name} successful, result: {result}")
+            return result
         except groq.InternalServerError as e:
             error_message = (
                 e.body.get("error", {}).get("message", str(e))
@@ -296,31 +259,13 @@ class APE:
 
     def generate_more(self, initial_prompt: str, example: str) -> Optional[str]:
         """初期プロンプトと既存の良い例を基に、さらにプロンプト候補を生成します。"""
-        # JSON Object Mode用のプロンプトテンプレート
-        if self.config.use_json_mode:
-            prompt_with_example = f"""{BASE_PROMPT_TEMPLATE}
-
-{EXAMPLE_TEMPLATE}
-
-Please only output the rewrite result in the required JSON format.
-IMPORTANT: You must respond with a valid JSON object in the following format:
-{{
-  "rewritten_instruction": "Your rewritten instruction here"
-}}""".format(
-                guide=PromptGuide, initial=initial_prompt, demo=example
-            )
-        else:
-            # 従来のプロンプト
-            prompt_with_example = (
-                f"{BASE_PROMPT_TEMPLATE}\n\n{EXAMPLE_TEMPLATE}".format(
-                    guide=PromptGuide, initial=initial_prompt, demo=example
-                )
-            )
-            prompt_with_example = (
-                f"{prompt_with_example}\n\nPlease only output the rewrite result."
-            )
-
+        prompt_with_example = f"{BASE_PROMPT_TEMPLATE}\n\n{EXAMPLE_TEMPLATE}".format(
+            guide=PromptGuide, initial=initial_prompt, demo=example
+        )
+        final_prompt = (
+            f"{prompt_with_example}\n\nPlease only output the rewrite result."
+        )
         messages: List[ChatCompletionMessageParam] = [
-            {"role": "user", "content": prompt_with_example}
+            {"role": "user", "content": final_prompt}
         ]
         return self._call_groq_api(messages, "generate_more")
