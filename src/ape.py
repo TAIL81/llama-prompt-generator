@@ -221,9 +221,7 @@ class APE:
             if result.endswith("</instruction>"):
                 result = result[:-14]
             result = result.strip()
-            logging.info(
-                f"APE.{method_name} successful, result: \n{result}\n"
-            )  # 成功時のログ出力
+            logging.debug(f"APE.{method_name} successful, result: {result}")
             return result
         except groq.InternalServerError as e:
             error_message = (

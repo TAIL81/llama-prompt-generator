@@ -119,7 +119,7 @@ class Rater:
         initial_prompt_filled = self._replace_placeholders(initial_prompt, demo_data)
         # 評価モデルを使用して最適な候補を決定
         rate = self.rater(initial_prompt_filled, candidates)
-        logging.info(f"Rater.__call__ return: {rate}")
+        logging.debug(f"Rater.__call__ return: {rate}")
         return rate
 
     def _validate_inputs(
@@ -214,7 +214,7 @@ class Rater:
                     temperature=self.config.temperature_get_output,
                 )
                 result = completion.choices[0].message.content
-                logging.info(f"Rater._get_output_sync successful, result: {result}")
+                logging.debug(f"Rater._get_output_sync successful, result: {result}")
                 return result
             except RateLimitError:
                 # レートリミットエラーの場合、警告をログに出力し、指定された時間待機してからリトライ
@@ -324,7 +324,7 @@ class Rater:
                 if match:
                     final_result = int(match.group(0)) - 1
                     if 0 <= final_result < len(candidates):
-                        logging.info(f"Rater.rater successful, result: {final_result}")
+                        logging.debug(f"Rater.rater successful, result: {final_result}")
                         return final_result
 
                 logging.error(

@@ -98,8 +98,8 @@ class MetaPrompt:
             {"role": "user", "content": prompt},
         ]
 
-        logging.info(
-            f"MetaPrompt Request JSON: {json.dumps(messages, ensure_ascii=False, indent=2)}"
+        logging.debug(
+            f"MetaPrompt Request JSON: {json.dumps(messages, ensure_ascii=False)}"
         )
         logging.info(f"Calling Groq API with model: {self.config.metaprompt_model}")
 
@@ -116,7 +116,7 @@ class MetaPrompt:
             message = completion.choices[0].message.content or ""
 
             logging.info("Received response from Groq API")
-            logging.info(f"API Response: {message}")
+            logging.debug(f"API Response: {message}")
 
             # API応答（JSON文字列）をパース
             response_data = json.loads(message)
