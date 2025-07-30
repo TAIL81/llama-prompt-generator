@@ -1,8 +1,9 @@
+import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Dict, List, Mapping, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 import groq
 from dotenv import load_dotenv  # 環境変数をロードするためのライブラリ
@@ -10,6 +11,7 @@ from groq import Groq  # Groq APIクライアント
 from groq.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam,
 )  # チャット補完メッセージの型ヒント
+from groq.types.chat.completion_create_params import ResponseFormat
 
 from src.rater import Rater  # Raterクラスを絶対インポートに変更
 
@@ -23,21 +25,26 @@ logging.basicConfig(
 # --- 定数定義 ---
 # プロンプトテンプレートを共通化
 BASE_PROMPT_TEMPLATE = """
-You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
+You are an instruction engineer. Your task is to rewrite the initial instruction in the <instruction> XML tag based on the suggestions in the instruction guide in the <guide> XML tag.
 
 Instruction guide:
 <guide>
 {guide}
 </guide>
 
-You are a instruction engineer. Your task is to rewrite the initial instruction in <instruction> xml tag based on the suggestions in the instruction guide in <guide> xml tag.
-which is included using double pointed brackets is customizable text that will be replaced at runtime. This needs to be kept as is.
-Please same language as the initial instruction for rewriting.
+The rewritten instruction must be a JSON object with two keys: "prompt_text" and "variables".
+- "prompt_text": The rewritten instruction text.
+- "variables": A list of strings, where each string is a customizable variable found in the "prompt_text".
+
+Customizable variables are enclosed in double curly braces (e.g., {{{{variable_name}}}}). You must preserve these variables exactly as they appear in the initial instruction.
+
+Please use the same language as the initial instruction for rewriting.
 
 <instruction>
 {initial}
 </instruction>
 """.strip()
+
 
 EXAMPLE_TEMPLATE = """
 <example>
@@ -52,6 +59,9 @@ class GroqConfig:
     rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     max_tokens: int = 8192  # 生成される応答の最大トークン数
     temperature: float = 0.7  # 応答の多様性を制御する温度パラメータ
+    response_format: Optional[ResponseFormat] = field(
+        default_factory=lambda: {"type": "json_object"}
+    )
 
 
 # --- 初期化処理 ---
@@ -84,32 +94,41 @@ class APE:
     def __call__(
         self, initial_prompt: str, epoch: int, demo_data: Dict[str, str]
     ) -> Mapping[str, Union[str, None]]:
-        """APE処理を実行します。"""  # APE (Automatic Prompt Engineering) のメイン実行関数
+        """APE処理を実行します。"""
         self._validate_inputs(initial_prompt, demo_data)
 
-        candidates: List[str] = []
+        # --- 初期候補生成 ---
+        raw_candidates: List[Dict] = []
         for _ in range(2):
-            rewritten_prompt: Optional[str] = self.rewrite(initial_prompt)
-            if rewritten_prompt:
-                candidates.append(rewritten_prompt)
-        # 候補が生成されなかった場合のエラーハンドリング
-        if not candidates:
+            response_str = self.rewrite(initial_prompt)
+            if response_str:
+                try:
+                    rewritten_data = json.loads(response_str)
+                    if (
+                        "prompt_text" in rewritten_data
+                        and "variables" in rewritten_data
+                    ):
+                        raw_candidates.append(rewritten_data)
+                    else:
+                        logging.warning(
+                            f"Invalid JSON format from rewrite: {response_str}"
+                        )
+                except json.JSONDecodeError:
+                    logging.error(f"Failed to decode JSON from rewrite: {response_str}")
+
+        if not raw_candidates:
             logging.error("Initial prompt rewriting failed for all attempts.")
             return {
                 "prompt": initial_prompt,
                 "error": "Initial prompt rewriting failed.",
             }
 
-        candidate_dicts: List[Dict[str, str]] = [
-            {"prompt": c} for c in candidates
-        ]  # 候補プロンプトを辞書形式に変換
-        customizable_variable_list: List[str] = list(
-            demo_data.keys()
-        )  # カスタマイズ可能な変数リスト
-        filtered_candidates: List[Dict[str, str]] = [
-            c  # カスタマイズ可能な変数がすべて含まれている候補のみをフィルタリング
-            for c in candidate_dicts
-            if all(var in c["prompt"] for var in customizable_variable_list)
+        # --- 候補フィルタリング ---
+        customizable_variable_set = set(demo_data.keys())
+        filtered_candidates = [
+            c
+            for c in raw_candidates
+            if set(c.get("variables", [])) == customizable_variable_set
         ]
 
         if not filtered_candidates:
@@ -117,22 +136,22 @@ class APE:
                 "No candidates left after filtering for customizable variables."
             )
             candidates_log_str = "\n".join(
-                f"--- Candidate {i+1} ---\n{c}" for i, c in enumerate(candidates)
+                f"--- Candidate {i+1} ---\n{json.dumps(c, indent=2)}"
+                for i, c in enumerate(raw_candidates)
             )
             logging.warning(
                 f"The following candidates were filtered out:\n{candidates_log_str}"
             )
             return {
                 "prompt": initial_prompt,
-                "error": "No valid candidates after filtering. The rewritten prompts might be missing some required variables.",
+                "error": "No valid candidates after filtering. The rewritten prompts might be missing required variables.",
             }
 
-        logging.info(
-            "Rating initial candidates generated by APE.rewrite..."
-        )  # 初期候補の評価を開始
-        best_candidate_idx: Optional[int] = self.rater(
-            initial_prompt, filtered_candidates, demo_data
-        )
+        # --- 初期評価 ---
+        logging.info("Rating initial candidates generated by APE.rewrite...")
+        # Raterが期待する形式に変換
+        rater_candidates = [{"prompt": c["prompt_text"]} for c in filtered_candidates]
+        best_candidate_idx = self.rater(initial_prompt, rater_candidates, demo_data)
         logging.info(
             f"Initial rating completed. Best candidate index: {best_candidate_idx}"
         )
@@ -144,43 +163,77 @@ class APE:
         else:
             best_candidate_obj = filtered_candidates[0]
             logging.warning(
-                "Rater returned invalid index or failed, using first candidate as fallback."  # Raterが不正なインデックスを返した場合のフォールバック
+                "Rater returned invalid index or failed, using first candidate as fallback."
             )
 
+        # --- 反復的な改善 ---
         for i in range(epoch):
-            more_candidate_prompt: Optional[str] = self.generate_more(
-                initial_prompt, best_candidate_obj["prompt"]
+            # generate_moreに渡すのはプロンプトテキスト
+            more_candidate_response = self.generate_more(
+                initial_prompt, best_candidate_obj["prompt_text"]
             )
-            if more_candidate_prompt:
-                current_rating_candidates: List[Dict[str, str]] = [
-                    best_candidate_obj,
-                    {
-                        "prompt": more_candidate_prompt
-                    },  # 現在の最良候補と新しく生成された候補を比較
-                ]
-                logging.info(
-                    f"Rating candidates in epoch {i+1}: [current_best vs new_generated]"
-                )
-                rated_idx_loop: Optional[int] = self.rater(
-                    initial_prompt, current_rating_candidates, demo_data
-                )
-                logging.info(
-                    f"Epoch {i+1} rating completed. Winning index: {rated_idx_loop}"
-                )
+            if more_candidate_response:
+                try:
+                    more_candidate_data = json.loads(more_candidate_response)
+                    if not (
+                        "prompt_text" in more_candidate_data
+                        and "variables" in more_candidate_data
+                    ):
+                        logging.warning(
+                            f"Invalid JSON format from generate_more: {more_candidate_response}"
+                        )
+                        continue
+                    # 変数チェック
+                    if (
+                        set(more_candidate_data.get("variables", []))
+                        != customizable_variable_set
+                    ):
+                        logging.warning(
+                            f"generate_more produced a prompt with incorrect variables: {more_candidate_response}"
+                        )
+                        continue
 
-                if rated_idx_loop is not None:
-                    best_candidate_obj = current_rating_candidates[rated_idx_loop]
-                else:
-                    logging.warning(  # Raterが失敗した場合の警告
-                        f"Rater failed in epoch {i+1}. Keeping previous best candidate."
+                    current_rating_candidates_obj = [
+                        best_candidate_obj,
+                        more_candidate_data,
+                    ]
+                    # Raterが期待する形式に変換
+                    rater_loop_candidates = [
+                        {"prompt": c["prompt_text"]}
+                        for c in current_rating_candidates_obj
+                    ]
+
+                    logging.info(
+                        f"Rating candidates in epoch {i+1}: [current_best vs new_generated]"
+                    )
+                    rated_idx_loop = self.rater(
+                        initial_prompt, rater_loop_candidates, demo_data
+                    )
+                    logging.info(
+                        f"Epoch {i+1} rating completed. Winning index: {rated_idx_loop}"
+                    )
+
+                    if rated_idx_loop is not None:
+                        best_candidate_obj = current_rating_candidates_obj[
+                            rated_idx_loop
+                        ]
+                    else:
+                        logging.warning(
+                            f"Rater failed in epoch {i+1}. Keeping previous best candidate."
+                        )
+
+                except json.JSONDecodeError:
+                    logging.error(
+                        f"Failed to decode JSON from generate_more: {more_candidate_response}"
                     )
             else:
                 logging.warning(
                     f"generate_more failed in epoch {i+1}. Keeping previous best candidate."
                 )
 
-        self._log_final_candidate(best_candidate_obj)
-        return best_candidate_obj
+        final_prompt = {"prompt": best_candidate_obj["prompt_text"]}
+        self._log_final_candidate(final_prompt)
+        return final_prompt
 
     def _validate_inputs(self, initial_prompt: str, demo_data: Dict[str, str]) -> None:
         """入力パラメータの検証を行います。"""  # 入力検証関数
@@ -205,22 +258,18 @@ class APE:
     def _call_groq_api(
         self,
         messages: List[ChatCompletionMessageParam],
-        method_name: str,  # Groq API呼び出しの共通化
+        method_name: str,
     ) -> Optional[str]:
         """Groq APIを呼び出し、エラーハンドリングを共通化します。"""
         try:
             completion = groq_client.chat.completions.create(
                 model=self.config.rewrite_model,
                 messages=messages,
-                max_completion_tokens=self.config.max_tokens,  # 最大トークン数を設定
+                max_tokens=self.config.max_tokens,  # max_tokensをmax_completion_tokensに変更
                 temperature=self.config.temperature,
+                response_format=self.config.response_format,
             )
             result = completion.choices[0].message.content or ""
-            if result.startswith("<instruction>"):
-                result = result[13:]
-            if result.endswith("</instruction>"):
-                result = result[:-14]
-            result = result.strip()
             logging.debug(f"APE.{method_name} successful, result: {result}")
             return result
         except groq.InternalServerError as e:
@@ -262,9 +311,7 @@ class APE:
         prompt_with_example = f"{BASE_PROMPT_TEMPLATE}\n\n{EXAMPLE_TEMPLATE}".format(
             guide=PromptGuide, initial=initial_prompt, demo=example
         )
-        final_prompt = (
-            f"{prompt_with_example}\n\nPlease only output the rewrite result."
-        )
+        final_prompt = f"{prompt_with_example}\n\nPlease only output the rewrite result in JSON format."
         messages: List[ChatCompletionMessageParam] = [
             {"role": "user", "content": final_prompt}
         ]
