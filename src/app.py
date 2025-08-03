@@ -30,6 +30,7 @@ from src.ui.evaluation_tab import create_evaluation_tab
 from src.ui.metaprompt_tab import create_metaprompt_tab
 from src.ui.soe_tab import create_soe_tab
 from src.ui.translation_tab import create_translation_tab
+from src.ui.chat_tab import create_chat_tab
 
 
 # 設定管理クラスの導入
@@ -249,6 +250,7 @@ with gr.Blocks(
     create_evaluation_tab(component_manager, config)
     create_soe_tab(component_manager, config)
     create_calibration_tab(component_manager, config)
+    create_chat_tab()
 
 
 def kill_child_processes(parent_pid, sig=signal.SIGTERM):
