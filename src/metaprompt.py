@@ -26,7 +26,7 @@ class GroqConfig:
 
     metaprompt_model: str = "moonshotai/kimi-k2-instruct"
     max_tokens: int = 16384
-    temperature: float = 0.4
+    temperature: float = 0.3
 
 
 # 現在のスクリプトが配置されているディレクトリを取得します
