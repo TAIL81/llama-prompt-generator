@@ -34,7 +34,7 @@ Instruction guide:
 
 The rewritten instruction must be a JSON object with two keys: "prompt_text" and "variables".
 - "prompt_text": The rewritten instruction text.
-- "variables": A list of strings, where each string is a customizable variable found in the "prompt_text".
+- "variables": A list of strings, where each string is a customizable variable found in the "prompt_text". Each variable in this list must be in the double curly brace format (e.g., `{{variable_name}}`).
 
 Customizable variables are enclosed in double curly braces (e.g., {{{{variable_name}}}}). You must preserve these variables exactly as they appear in the initial instruction.
 
