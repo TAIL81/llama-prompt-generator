@@ -49,9 +49,9 @@ class GroqConfig:
     """
 
     # 出力生成に使用するモデル名
-    get_output_model: str = "meta-llama/llama-4-maverick-17b-128e-instruct"
+    get_output_model: str = "compound-beta-mini"
     # 評価（レーティング）に使用するモデル名
-    rater_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    rater_model: str = "llama-3.3-70b-versatile"
     # 出力生成時の最大トークン数
     max_tokens_get_output: int = 8192
     # 評価時の最大トークン数
