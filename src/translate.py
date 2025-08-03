@@ -57,6 +57,7 @@ class GroqConfig:
     top_p_rewrite: float = 1.0
     temperature_detect_lang: float = 0.0
     temperature_judge: float = 0.0
+    translate_model: str = "llama-3.1-8b-instant"  # 翻訳に使用するモデル
 
 
 # 現在のスクリプトが配置されているディレクトリを取得します
@@ -442,51 +443,49 @@ class GuideBased:
         )
         raise Exception("Failed to judge prompt after multiple retries.")
 
+    def translate(self, text: str, target_lang: str, source_lang: str = "en") -> str:
+        """
+        テキストを指定された言語に翻訳します。
+        レート制限エラーが発生した場合は、指数バックオフでリトライします。
+        """
+        max_retries = 5
+        base_delay = 1  # seconds
 
-def translate(text: str, target_lang: str, source_lang: str = "en") -> str:
-    """
-    テキストを指定された言語に翻訳します。
-    レート制限エラーが発生した場合は、指数バックオフでリトライします。
-    """
-    client = Groq(
-        api_key=os.environ.get("GROQ_API_KEY"),
-    )
-    max_retries = 5
-    base_delay = 1  # seconds
+        messages: List[ChatCompletionMessageParam] = [
+            {
+                "role": "system",
+                "content": f"You are a translator. Translate the following text from {source_lang} to {target_lang}.",
+            },
+            {
+                "role": "user",
+                "content": text,
+            },
+        ]
 
-    for attempt in range(max_retries):
-        try:
-            chat_completion = client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"You are a translator. Translate the following text from {source_lang} to {target_lang}.",
-                    },
-                    {
-                        "role": "user",
-                        "content": text,
-                    },
-                ],
-                model="llama-3.1-8b-instant",
-            )
-            return chat_completion.choices[0].message.content or ""
+        for attempt in range(max_retries):
+            try:
+                chat_completion = self.groq_client.chat.completions.create(
+                    messages=messages,
+                    model=self.config.translate_model,
+                )
+                return chat_completion.choices[0].message.content or ""
 
-        except RateLimitError as e:
-            logging.warning(
-                f"Rate limit exceeded. Attempt {attempt + 1} of {max_retries}."
-            )
-            # Groq APIのレート制限ヘッダーを確認 (存在する場合)
-            if e.response and e.response.headers:
-                logging.info(f"Response headers: {e.response.headers}")
+            except RateLimitError as e:
+                logging.warning(
+                    f"Rate limit exceeded during translation. Attempt {attempt + 1} of {max_retries}."
+                )
+                # Groq APIのレート制限ヘッダーを確認 (存在する場合)
+                if e.response and e.response.headers:
+                    logging.info(f"Response headers: {e.response.headers}")
 
-            # 指数バックオフ
-            delay = base_delay * (2**attempt)
-            logging.info(f"Retrying in {delay} seconds...")
-            time.sleep(delay)
+                # 指数バックオフ
+                delay = base_delay * (2**attempt)
+                logging.info(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
 
-        except Exception as e:
-            logging.error(f"An unexpected error occurred: {e}")
-            # その他のエラーはリトライせずに終了
-            raise
+            except Exception as e:
+                logging.error(f"An unexpected error occurred during translation: {e}")
+                # その他のエラーはリトライせずに終了
+                raise
 
-    raise Exception("Failed to translate after multiple retries.")
+        raise Exception("Failed to translate after multiple retries.")
