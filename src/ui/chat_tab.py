@@ -35,7 +35,9 @@ def create_chat_tab(config: Any):
                     label=lang_store[language].get("Chatbot", "Chatbot")
                 )
                 msg = gr.Textbox(
-                    label=lang_store[language].get("Your Message", "Your Message")
+                    label=lang_store[language].get("Your Message", "Your Message"),
+                    lines=2,  # 初期表示の行数を設定
+                    max_lines=15,  # 最大の高さをこの行数分に制限
                 )
             with gr.Column(scale=1):
                 system_prompt = gr.Textbox(
