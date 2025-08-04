@@ -250,7 +250,7 @@ with gr.Blocks(
     create_evaluation_tab(component_manager, config)
     create_soe_tab(component_manager, config)
     create_calibration_tab(component_manager, config)
-    create_chat_tab()
+    create_chat_tab(config)
 
 
 def kill_child_processes(parent_pid, sig=signal.SIGTERM):
