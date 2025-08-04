@@ -20,8 +20,8 @@ load_dotenv()  # .env から環境変数を読み込み
 
 # 環境変数の取得
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "openrouter/horizon-beta")
 OPENAI_API_VERSION = os.getenv("OPENAI_API_VERSION")  # Azure などで使用
 
 if not OPENAI_API_KEY:
@@ -36,7 +36,9 @@ client = OpenAI(
     base_url=OPENAI_API_BASE,
 )
 
-SYSTEM_PROMPT = "You are a helpful assistant."
+SYSTEM_PROMPT = (
+    "Act as a helpful assistant. Think step by step. Reply in fluent Japanese."
+)
 
 
 def _convert_history_to_messages(
