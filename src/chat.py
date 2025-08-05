@@ -245,7 +245,11 @@ class ChatService:
                 "value": "[エラー] OpenAIクライアントが初期化されていません。APIキーを確認してください。",
             }
             return {
-                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "usage": {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
                 "cost_usd": 0.0,
             }
 
@@ -295,14 +299,24 @@ class ChatService:
                                     "id": tc_chunk.id,
                                     "type": "function",
                                     "function": {
-                                        "name": tc_chunk.function.name if tc_chunk.function else "",
-                                        "arguments": tc_chunk.function.arguments if tc_chunk.function else "",
+                                        "name": (
+                                            tc_chunk.function.name
+                                            if tc_chunk.function
+                                            else ""
+                                        ),
+                                        "arguments": (
+                                            tc_chunk.function.arguments
+                                            if tc_chunk.function
+                                            else ""
+                                        ),
                                     },
                                 }
                             else:
                                 # 既存のツール呼び出しに引数を追記
                                 if tc_chunk.function and tc_chunk.function.arguments:
-                                    collected_tool_calls[idx]["function"]["arguments"] += tc_chunk.function.arguments
+                                    collected_tool_calls[idx]["function"][
+                                        "arguments"
+                                    ] += tc_chunk.function.arguments
 
                 if collected_tool_calls:
                     yield {
@@ -310,7 +324,9 @@ class ChatService:
                         "value": list(collected_tool_calls.values()),
                     }
 
-                completion_tokens = self._estimate_tokens_from_text(full_response_content)
+                completion_tokens = self._estimate_tokens_from_text(
+                    full_response_content
+                )
                 usage = {
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": completion_tokens,
@@ -340,30 +356,54 @@ class ChatService:
             except (RateLimitError, APITimeoutError, APIConnectionError, APIError) as e:
                 if attempt >= self.max_retries - 1:
                     error_msg = f"[{type(e).__name__}] {getattr(e, 'message', str(e))}"
-                    logger.error(f"API error after {self.max_retries} attempts: {error_msg}")
+                    logger.error(
+                        f"API error after {self.max_retries} attempts: {error_msg}"
+                    )
                     self._append_usage_log(
-                        success=False, model=self.model,
-                        usage={"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens},
-                        cost_usd=0.0, system_prompt=system_prompt, history_count=len(history), error_message=error_msg,
+                        success=False,
+                        model=self.model,
+                        usage={
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": 0,
+                            "total_tokens": prompt_tokens,
+                        },
+                        cost_usd=0.0,
+                        system_prompt=system_prompt,
+                        history_count=len(history),
+                        error_message=error_msg,
                     )
                     yield {"type": "error", "value": error_msg}
                     break
 
                 wait_time = self.retry_backoff_base ** (attempt + 1)
-                logger.warning(f"API error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds...")
+                logger.warning(
+                    f"API error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds..."
+                )
                 time.sleep(wait_time)
 
             except Exception as e:
                 logger.exception("An unexpected error occurred.")
                 error_msg = f"[不明なエラー] {str(e)}"
                 self._append_usage_log(
-                    success=False, model=self.model,
-                    usage={"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens},
-                    cost_usd=0.0, system_prompt=system_prompt, history_count=len(history), error_message=error_msg,
+                    success=False,
+                    model=self.model,
+                    usage={
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": 0,
+                        "total_tokens": prompt_tokens,
+                    },
+                    cost_usd=0.0,
+                    system_prompt=system_prompt,
+                    history_count=len(history),
+                    error_message=error_msg,
                 )
                 yield {"type": "error", "value": error_msg}
                 break
 
         # すべてのリトライが失敗した場合
-        final_usage = {"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens}
+        final_usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": 0,
+            "total_tokens": prompt_tokens,
+        }
         return {"usage": final_usage, "cost_usd": 0.0}
