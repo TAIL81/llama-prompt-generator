@@ -4,6 +4,7 @@ from typing import List, Tuple, cast
 import gradio as gr
 
 from src.translate import GuideBased
+from src.ui.utils import strip_wrapping_tags
 
 
 # 最適化レベルをEnumで定義し、マジックストリングを排除
@@ -120,6 +121,7 @@ def create_translation_tab(component_manager, config):
             result = rewrite(
                 original_prompt
             )  # rewriteコンポーネントを使用してプロンプトを生成
+            result = strip_wrapping_tags(result)  # UI出力前に余計なタグを除去
             return create_single_textbox(result)
         except Exception as e:
             gr.Warning(f"Error: {e}")
@@ -136,7 +138,9 @@ def create_translation_tab(component_manager, config):
             List[str]: 生成されたプロンプト候補のリスト。
         """
         try:
-            candidates = [rewrite(original_prompt) for _ in range(3)]
+            candidates = [
+                strip_wrapping_tags(rewrite(original_prompt)) for _ in range(3)
+            ]
             return candidates
         except Exception as e:
             gr.Warning(f"Error: {e}")
