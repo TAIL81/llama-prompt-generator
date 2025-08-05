@@ -28,6 +28,7 @@ def create_chat_tab(config: Any):
                 chatbot = gr.Chatbot(
                     label=lang_store[language].get("Chatbot", "Chatbot"),
                     type="messages",
+                    height=400,
                 )
                 with gr.Row():
                     msg = gr.Textbox(
@@ -40,6 +41,11 @@ def create_chat_tab(config: Any):
                         value=lang_store[language].get("Send", "Send"), scale=1
                     )
             with gr.Column(scale=1):
+                gr.Textbox(
+                    label=lang_store[language].get("Model Name", "Model Name"),
+                    value=chat_service.model,
+                    interactive=False,
+                )
                 system_prompt = gr.Textbox(
                     label=lang_store[language].get("System Prompt", "System Prompt"),
                     value=default_system_prompt,
