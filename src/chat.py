@@ -21,7 +21,8 @@ from openai.types.chat import ChatCompletionMessageParam
 from openai.types.chat.chat_completion_chunk import ChoiceDelta, ChoiceDeltaToolCall
 
 # ロガーの設定
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig() は呼び出し元で設定することを想定し、ここでは削除。
+# ライブラリとして利用される際に、利用側のロギング設定を上書きしないようにするため。
 logger = logging.getLogger(__name__)
 
 
@@ -177,27 +178,40 @@ class ChatService:
     ) -> List[ChatCompletionMessageParam]:
         """
         メッセージ履歴がmax_context_tokensを超えないようにトリミングします。
-        システムプロンプトは常に保持されます。
+        システムプロンプトと最新のユーザーメッセージは常に保持されます。
+        履歴は古いものからペア（ユーザー/アシスタント）で削除されます。
         """
+        # 先にトークン数を計算
         token_count = self._num_tokens_from_messages(messages)
         if token_count <= self.max_context_tokens:
             return messages
 
-        # システムプロンプトを保持
-        system_message = messages[0]
-        history_messages = messages[1:]
+        # 各パーツを分離
+        system_message = []
+        if messages and messages[0]["role"] == "system":
+            system_message = messages[:1]
+            messages = messages[1:]
 
-        while token_count > self.max_context_tokens and len(history_messages) > 1:
-            # 最も古いメッセージ（通常はユーザーメッセージ）を削除
-            history_messages.pop(0)
-            # トークン数を再計算
-            trimmed_messages = [system_message] + history_messages
-            token_count = self._num_tokens_from_messages(trimmed_messages)
+        # 最新のメッセージは常に保持
+        latest_message = messages[-1:]
+        history = messages[:-1]
+
+        # 履歴を古いペアから削除していく
+        while history:
+            current_messages = system_message + history + latest_message
+            token_count = self._num_tokens_from_messages(current_messages)
+            if token_count <= self.max_context_tokens:
+                break
+            # 履歴の先頭から2件（ユーザーとアシスタントのペアを想定）を削除
+            history = history[2:]
+
+        final_messages = system_message + history + latest_message
+        final_token_count = self._num_tokens_from_messages(final_messages)
 
         logger.info(
-            f"Messages trimmed to {token_count} tokens to fit within the {self.max_context_tokens} limit."
+            f"Messages trimmed to {final_token_count} tokens to fit within the {self.max_context_tokens} limit."
         )
-        return [system_message] + history_messages
+        return final_messages
 
     def chat_completion_stream(
         self,
@@ -207,39 +221,39 @@ class ChatService:
         temperature: float,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[str] = None,
-    ) -> Generator[Union[str, Dict[str, Any]], Any, Dict[str, Any]]:
+    ) -> Generator[Dict[str, Any], Any, Dict[str, Any]]:
         """
-        ストリーミングチャット補完リクエストを送信し、以下の機能をサポートします:
+        ストリーミングチャット補完リクエストを送信し、イベントをyieldします。
+
         - 指数バックオフ付きの自動再試行
-        - トークン使用量の追跡
+        - トークン使用量の追跡とロギング
         - コンテキスト長の自動トリミング
-        - ツール呼び出し
+        - ツール呼び出しのサポート
 
         Yields:
-        - str: 生成されたテキストトークン。
-        - Dict: ツール呼び出しやエラー情報。
+            Dict[str, Any]: イベントを表す辞書。以下のtypeを持つ。
+                - 'content': テキストトークン (`{'type': 'content', 'value': str}`)
+                - 'tool_calls': 完成したツール呼び出しのリスト (`{'type': 'tool_calls', 'value': List[Dict]}`)
+                - 'error': エラーメッセージ (`{'type': 'error', 'value': str}`)
 
         Returns:
-        - Dict: トークン使用量の統計。
+            Dict[str, Any]: トークン使用量とコストの統計情報。
         """
         if not self.client:
             yield {
-                "error": "[エラー] OpenAIクライアントが初期化されていません。APIキーを確認してください。"
+                "type": "error",
+                "value": "[エラー] OpenAIクライアントが初期化されていません。APIキーを確認してください。",
             }
             return {
-                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "cost_usd": 0.0,
             }
 
-        # メッセージリストを構築し、トリミング
         messages: List[ChatCompletionMessageParam] = [
             {"role": "system", "content": system_prompt}
         ]
         messages.extend(self._convert_history_to_messages(history))
-        # tool_callsを持つアシスタントメッセージを履歴に追加するロジックが必要な場合、ここに挿入
         messages.append({"role": "user", "content": message})
-
-        # 最後のメッセージがツールからのレスポンスの場合、role=toolを設定する必要がある
-        # このロジックは呼び出し側で管理されると仮定
 
         messages = self._trim_messages(messages)
         prompt_tokens = self._num_tokens_from_messages(messages)
@@ -263,82 +277,45 @@ class ChatService:
                 )
 
                 full_response_content = ""
-                collected_tool_calls: Dict[int, ChoiceDeltaToolCall] = {}
+                # tool_callsをインデックスごとに格納する辞書
+                collected_tool_calls: Dict[int, Dict[str, Any]] = {}
 
                 for chunk in stream:
                     delta: ChoiceDelta = chunk.choices[0].delta
                     if delta.content:
                         full_response_content += delta.content
-                        yield delta.content
+                        yield {"type": "content", "value": delta.content}
 
                     if delta.tool_calls:
-                        for tool_call_chunk in delta.tool_calls:
-                            idx = tool_call_chunk.index
+                        for tc_chunk in delta.tool_calls:
+                            idx = tc_chunk.index
                             if idx not in collected_tool_calls:
-                                collected_tool_calls[idx] = tool_call_chunk
+                                # 新しいツール呼び出しの開始
+                                collected_tool_calls[idx] = {
+                                    "id": tc_chunk.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc_chunk.function.name if tc_chunk.function else "",
+                                        "arguments": tc_chunk.function.arguments if tc_chunk.function else "",
+                                    },
+                                }
                             else:
-                                # 既存のツール呼び出しに関数引数を追記（None セーフ）
-                                if (
-                                    tool_call_chunk.function is not None
-                                    and collected_tool_calls[idx].function is not None
-                                ):
-                                    existing_fn = collected_tool_calls[idx].function
-                                    new_fn = tool_call_chunk.function
-                                    # None セーフに arguments を文字列として取得
-                                    existing_args_any = getattr(
-                                        existing_fn, "arguments", None
-                                    )
-                                    new_args_any = getattr(new_fn, "arguments", None)
-                                    existing_args = (
-                                        existing_args_any
-                                        if isinstance(existing_args_any, str)
-                                        else ""
-                                    )
-                                    new_args = (
-                                        new_args_any
-                                        if isinstance(new_args_any, str)
-                                        else ""
-                                    )
-                                    # 連結結果を代入（Pylance の None 警告を抑止）
-                                    concatenated: str = f"{existing_args}{new_args}"
-                                    setattr(existing_fn, "arguments", concatenated)
+                                # 既存のツール呼び出しに引数を追記
+                                if tc_chunk.function and tc_chunk.function.arguments:
+                                    collected_tool_calls[idx]["function"]["arguments"] += tc_chunk.function.arguments
 
                 if collected_tool_calls:
-                    # ツール呼び出しが完了したら、それをyield
-                    tool_calls_payload = []
-                    for tc in collected_tool_calls.values():
-                        func_name = None
-                        func_args = None
-                        # None 安全にアクセス
-                        if tc.function is not None:
-                            func_name = tc.function.name
-                            func_args = (
-                                tc.function.arguments
-                                if tc.function.arguments is not None
-                                else None
-                            )
-                        tool_calls_payload.append(
-                            {
-                                "id": tc.id,
-                                "type": tc.type,
-                                "function": {
-                                    "name": func_name,
-                                    "arguments": func_args,
-                                },
-                            }
-                        )
-                    yield {"tool_calls": tool_calls_payload}
+                    yield {
+                        "type": "tool_calls",
+                        "value": list(collected_tool_calls.values()),
+                    }
 
-                # usage がストリームで提供されないケースがあるため概算
-                completion_tokens = self._estimate_tokens_from_text(
-                    full_response_content
-                )
+                completion_tokens = self._estimate_tokens_from_text(full_response_content)
                 usage = {
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": completion_tokens,
                     "total_tokens": prompt_tokens + completion_tokens,
                 }
-
                 cost_usd = self._estimate_cost(usage)
                 self._append_usage_log(
                     success=True,
@@ -349,7 +326,6 @@ class ChatService:
                     history_count=len(history),
                     error_message=None,
                 )
-
                 logger.info(
                     f"Request successful. Token usage: {usage}, cost_usd: {cost_usd:.8f}"
                 )
@@ -358,70 +334,36 @@ class ChatService:
             except (AuthenticationError, BadRequestError) as e:
                 error_msg = f"[{type(e).__name__}] {getattr(e, 'message', str(e))}"
                 logger.error(f"Fatal API error: {error_msg}")
-                yield {"error": error_msg}
-                break
+                yield {"type": "error", "value": error_msg}
+                break  # Fatal errors should not be retried
 
             except (RateLimitError, APITimeoutError, APIConnectionError, APIError) as e:
                 if attempt >= self.max_retries - 1:
                     error_msg = f"[{type(e).__name__}] {getattr(e, 'message', str(e))}"
-                    logger.error(
-                        f"API error after {self.max_retries} attempts: {error_msg}"
-                    )
+                    logger.error(f"API error after {self.max_retries} attempts: {error_msg}")
                     self._append_usage_log(
-                        success=False,
-                        model=self.model,
-                        usage={
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": 0,
-                            "total_tokens": prompt_tokens,
-                        },
-                        cost_usd=0.0,
-                        system_prompt=system_prompt,
-                        history_count=len(history),
-                        error_message=error_msg,
+                        success=False, model=self.model,
+                        usage={"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens},
+                        cost_usd=0.0, system_prompt=system_prompt, history_count=len(history), error_message=error_msg,
                     )
-                    yield {"error": error_msg}
+                    yield {"type": "error", "value": error_msg}
                     break
 
                 wait_time = self.retry_backoff_base ** (attempt + 1)
-                logger.warning(
-                    f"API error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds..."
-                )
+                logger.warning(f"API error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds...")
                 time.sleep(wait_time)
 
             except Exception as e:
                 logger.exception("An unexpected error occurred.")
-                err = f"[不明なエラー] {str(e)}"
+                error_msg = f"[不明なエラー] {str(e)}"
                 self._append_usage_log(
-                    success=False,
-                    model=self.model,
-                    usage={
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": 0,
-                        "total_tokens": prompt_tokens,
-                    },
-                    cost_usd=0.0,
-                    system_prompt=system_prompt,
-                    history_count=len(history),
-                    error_message=err,
+                    success=False, model=self.model,
+                    usage={"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens},
+                    cost_usd=0.0, system_prompt=system_prompt, history_count=len(history), error_message=error_msg,
                 )
-                yield {"error": err}
+                yield {"type": "error", "value": error_msg}
                 break
 
         # すべてのリトライが失敗した場合
-        final_usage = {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": 0,
-            "total_tokens": prompt_tokens,
-        }
-        # 最終的に失敗したケースでもログに記録
-        self._append_usage_log(
-            success=False,
-            model=self.model,
-            usage=final_usage,
-            cost_usd=0.0,
-            system_prompt=system_prompt,
-            history_count=len(history),
-            error_message="Retries exhausted",
-        )
+        final_usage = {"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens}
         return {"usage": final_usage, "cost_usd": 0.0}
