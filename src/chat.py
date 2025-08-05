@@ -1,5 +1,11 @@
+import hashlib
+import json
+import logging
 import os
-from typing import Any, Generator, List
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Generator, List, Optional, Union
 
 from dotenv import load_dotenv
 from openai import (
@@ -12,37 +18,186 @@ from openai import (
     RateLimitError,
 )
 from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat.chat_completion_chunk import ChoiceDelta, ChoiceDeltaToolCall
+
+# ロガーの設定
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 class ChatService:
-    def __init__(self):
+    def _estimate_cost(self, usage: Dict[str, int]) -> float:
+        """
+        価格は 100万トークンあたりの USD を環境変数から受け取り、トークン数に比例計算。
+        """
+        prompt_rate = (
+            self.prompt_price_per_million / 1_000_000.0
+            if self.prompt_price_per_million > 0
+            else 0.0
+        )
+        completion_rate = (
+            self.completion_price_per_million / 1_000_000.0
+            if self.completion_price_per_million > 0
+            else 0.0
+        )
+        cost = (
+            usage.get("prompt_tokens", 0) * prompt_rate
+            + usage.get("completion_tokens", 0) * completion_rate
+        )
+        return float(cost)
+
+    def _append_usage_log(
+        self,
+        success: bool,
+        model: str,
+        usage: Dict[str, int],
+        cost_usd: float,
+        system_prompt: str,
+        history_count: int,
+        error_message: Optional[str],
+    ) -> None:
+        """
+        1 リクエストごとのメタ情報を JSONL で追記保存。
+        """
+        try:
+            # ディレクトリ作成
+            log_path = Path(self.usage_log_path)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+
+            entry = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "success": success,
+                "model": model,
+                "usage": usage,
+                "cost_usd": round(cost_usd, 8),
+                "system_prompt_sha256": hashlib.sha256(
+                    (system_prompt or "").encode("utf-8")
+                ).hexdigest(),
+                "history_count": history_count,
+                "error": error_message,
+            }
+            with log_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception:
+            logger.exception("Failed to append usage log.")
+
+    def __init__(
+        self,
+        max_retries: int = 3,
+        retry_backoff_base: float = 2.0,
+        max_context_tokens: int = 8192,
+    ):
+        """
+        ChatServiceを初期化します。
+
+        引数:
+        - max_retries: APIエラー時の最大再試行回数。
+        - retry_backoff_base: 再試行時の指数バックオフの底。
+        - max_context_tokens: モデルに送信する最大トークン数。
+        """
         load_dotenv()
+
         self.api_key = os.getenv("OPENAI_API_KEY")
         self.api_base = os.getenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
         self.model = os.getenv("OPENAI_MODEL", "openrouter/horizon-beta")
         self.api_version = os.getenv("OPENAI_API_VERSION")
-        self.client = self._create_client()
 
-    def _create_client(self) -> OpenAI | None:
+        self.max_retries = int(os.getenv("MAX_RETRIES", max_retries))
+        self.retry_backoff_base = float(
+            os.getenv("RETRY_BACKOFF_BASE", retry_backoff_base)
+        )
+        self.max_context_tokens = int(
+            os.getenv("MAX_CONTEXT_TOKENS", max_context_tokens)
+        )
+
+        self.client = self._create_client()
+        # 概算トークン計測用の係数（文字数/トークン）
+        self.chars_per_token = float(os.getenv("TOKEN_CHARS_PER_TOKEN", "4.0"))
+        # コスト推定用（USD, 100万トークンあたり）
+        self.prompt_price_per_million = float(
+            os.getenv("PROMPT_PRICE_PER_MILLION", "0")
+        )
+        self.completion_price_per_million = float(
+            os.getenv("COMPLETION_PRICE_PER_MILLION", "0")
+        )
+        # ログ出力先
+        self.usage_log_path = os.getenv("USAGE_LOG_PATH", "logs/chat_usage.jsonl")
+
+    def _create_client(self) -> Optional[OpenAI]:
+        """
+        OpenAI互換クライアントを作成して返します。
+        APIキーが設定されていない場合はNoneを返します。
+        """
         if not self.api_key:
             return None
-        return OpenAI(
-            api_key=self.api_key,
-            base_url=self.api_base,
-        )
+        return OpenAI(api_key=self.api_key, base_url=self.api_base)
 
     def _convert_history_to_messages(
         self, history: List[List[str]]
     ) -> List[ChatCompletionMessageParam]:
         """
-        gr.ChatInterface の history を OpenAI API が要求する形式に変換する。
+        Gradioの履歴形式をOpenAIのメッセージ形式に変換します。
         """
         messages: List[ChatCompletionMessageParam] = []
         for user_msg, assistant_msg in history:
             if user_msg:
                 messages.append({"role": "user", "content": user_msg})
             if assistant_msg:
+                # tool_callsを持つアシスタントメッセージも考慮する必要があるかもしれないが、
+                # Gradioの基本形式では単純な文字列と仮定する。
                 messages.append({"role": "assistant", "content": assistant_msg})
         return messages
+
+    def _estimate_tokens_from_text(self, text: str) -> int:
+        """
+        概算: 文字数 / chars_per_token でトークン数を見積もる。
+        """
+        if not text:
+            return 0
+        return max(1, int(len(text) / self.chars_per_token))
+
+    def _num_tokens_from_messages(
+        self, messages: List[ChatCompletionMessageParam]
+    ) -> int:
+        """
+        OpenAI Cookbook のオーバーヘッド近似を維持しつつ、各文字列を概算でカウント。
+        """
+        num_tokens = 0
+        for message in messages:
+            num_tokens += 4  # メッセージごとのオーバーヘッド
+            for key, value in message.items():
+                if value and isinstance(value, str):
+                    num_tokens += self._estimate_tokens_from_text(value)
+                if key == "name":
+                    num_tokens -= 1  # name がある場合の補正
+        return num_tokens + 3  # リプライのプライミング
+
+    def _trim_messages(
+        self, messages: List[ChatCompletionMessageParam]
+    ) -> List[ChatCompletionMessageParam]:
+        """
+        メッセージ履歴がmax_context_tokensを超えないようにトリミングします。
+        システムプロンプトは常に保持されます。
+        """
+        token_count = self._num_tokens_from_messages(messages)
+        if token_count <= self.max_context_tokens:
+            return messages
+
+        # システムプロンプトを保持
+        system_message = messages[0]
+        history_messages = messages[1:]
+
+        while token_count > self.max_context_tokens and len(history_messages) > 1:
+            # 最も古いメッセージ（通常はユーザーメッセージ）を削除
+            history_messages.pop(0)
+            # トークン数を再計算
+            trimmed_messages = [system_message] + history_messages
+            token_count = self._num_tokens_from_messages(trimmed_messages)
+
+        logger.info(
+            f"Messages trimmed to {token_count} tokens to fit within the {self.max_context_tokens} limit."
+        )
+        return [system_message] + history_messages
 
     def chat_completion_stream(
         self,
@@ -50,47 +205,223 @@ class ChatService:
         history: List[List[str]],
         system_prompt: str,
         temperature: float,
-    ) -> Generator[str | None, Any, Any]:
-        if not self.client:
-            yield "[エラー] OpenAIクライアントが初期化されていません。APIキーを確認してください。"
-            return
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
+    ) -> Generator[Union[str, Dict[str, Any]], Any, Dict[str, Any]]:
+        """
+        ストリーミングチャット補完リクエストを送信し、以下の機能をサポートします:
+        - 指数バックオフ付きの自動再試行
+        - トークン使用量の追跡
+        - コンテキスト長の自動トリミング
+        - ツール呼び出し
 
-        # システムプロンプトを追加し、履歴を結合
+        Yields:
+        - str: 生成されたテキストトークン。
+        - Dict: ツール呼び出しやエラー情報。
+
+        Returns:
+        - Dict: トークン使用量の統計。
+        """
+        if not self.client:
+            yield {
+                "error": "[エラー] OpenAIクライアントが初期化されていません。APIキーを確認してください。"
+            }
+            return {
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            }
+
+        # メッセージリストを構築し、トリミング
         messages: List[ChatCompletionMessageParam] = [
             {"role": "system", "content": system_prompt}
         ]
         messages.extend(self._convert_history_to_messages(history))
+        # tool_callsを持つアシスタントメッセージを履歴に追加するロジックが必要な場合、ここに挿入
         messages.append({"role": "user", "content": message})
 
-        # Azure の場合は API バージョンが必要
-        extra_params = {}
+        # 最後のメッセージがツールからのレスポンスの場合、role=toolを設定する必要がある
+        # このロジックは呼び出し側で管理されると仮定
+
+        messages = self._trim_messages(messages)
+        prompt_tokens = self._num_tokens_from_messages(messages)
+
+        extra_params: Dict[str, Any] = {}
         if self.api_version:
             extra_params["api_version"] = self.api_version
+        if tools:
+            extra_params["tools"] = tools
+        if tool_choice:
+            extra_params["tool_choice"] = tool_choice
 
-        try:
-            # ストリーミングレスポンス
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                stream=True,
-                temperature=temperature,
-                **extra_params,
-            )
-            # チャンクを逐次連結して送る
-            for chunk in stream:
-                delta = chunk.choices[0].delta
-                if delta and getattr(delta, "content", None):
-                    token = delta.content
-                    yield token
-        except AuthenticationError:
-            yield "[認証エラー] API キーまたは認可情報を確認してください。"
-        except RateLimitError:
-            yield "[レート制限] 少し時間をおいて再試行してください。"
-        except (APITimeoutError, APIConnectionError):
-            yield "[接続エラー] ネットワークまたはエンドポイントを確認してください。"
-        except BadRequestError as e:
-            yield f"[リクエストエラー] {getattr(e, 'message', str(e))}"
-        except APIError as e:
-            yield f"[サーバーエラー] {getattr(e, 'message', str(e))}"
-        except Exception as e:
-            yield f"[不明なエラー] {str(e)}"
+        for attempt in range(self.max_retries):
+            try:
+                stream = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    stream=True,
+                    temperature=temperature,
+                    **extra_params,
+                )
+
+                full_response_content = ""
+                collected_tool_calls: Dict[int, ChoiceDeltaToolCall] = {}
+
+                for chunk in stream:
+                    delta: ChoiceDelta = chunk.choices[0].delta
+                    if delta.content:
+                        full_response_content += delta.content
+                        yield delta.content
+
+                    if delta.tool_calls:
+                        for tool_call_chunk in delta.tool_calls:
+                            idx = tool_call_chunk.index
+                            if idx not in collected_tool_calls:
+                                collected_tool_calls[idx] = tool_call_chunk
+                            else:
+                                # 既存のツール呼び出しに関数引数を追記（None セーフ）
+                                if (
+                                    tool_call_chunk.function is not None
+                                    and collected_tool_calls[idx].function is not None
+                                ):
+                                    existing_fn = collected_tool_calls[idx].function
+                                    new_fn = tool_call_chunk.function
+                                    # None セーフに arguments を文字列として取得
+                                    existing_args_any = getattr(
+                                        existing_fn, "arguments", None
+                                    )
+                                    new_args_any = getattr(new_fn, "arguments", None)
+                                    existing_args = (
+                                        existing_args_any
+                                        if isinstance(existing_args_any, str)
+                                        else ""
+                                    )
+                                    new_args = (
+                                        new_args_any
+                                        if isinstance(new_args_any, str)
+                                        else ""
+                                    )
+                                    # 連結結果を代入（Pylance の None 警告を抑止）
+                                    concatenated: str = f"{existing_args}{new_args}"
+                                    setattr(existing_fn, "arguments", concatenated)
+
+                if collected_tool_calls:
+                    # ツール呼び出しが完了したら、それをyield
+                    tool_calls_payload = []
+                    for tc in collected_tool_calls.values():
+                        func_name = None
+                        func_args = None
+                        # None 安全にアクセス
+                        if tc.function is not None:
+                            func_name = tc.function.name
+                            func_args = (
+                                tc.function.arguments
+                                if tc.function.arguments is not None
+                                else None
+                            )
+                        tool_calls_payload.append(
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {
+                                    "name": func_name,
+                                    "arguments": func_args,
+                                },
+                            }
+                        )
+                    yield {"tool_calls": tool_calls_payload}
+
+                # usage がストリームで提供されないケースがあるため概算
+                completion_tokens = self._estimate_tokens_from_text(
+                    full_response_content
+                )
+                usage = {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                }
+
+                cost_usd = self._estimate_cost(usage)
+                self._append_usage_log(
+                    success=True,
+                    model=self.model,
+                    usage=usage,
+                    cost_usd=cost_usd,
+                    system_prompt=system_prompt,
+                    history_count=len(history),
+                    error_message=None,
+                )
+
+                logger.info(
+                    f"Request successful. Token usage: {usage}, cost_usd: {cost_usd:.8f}"
+                )
+                return {"usage": usage, "cost_usd": cost_usd}
+
+            except (AuthenticationError, BadRequestError) as e:
+                error_msg = f"[{type(e).__name__}] {getattr(e, 'message', str(e))}"
+                logger.error(f"Fatal API error: {error_msg}")
+                yield {"error": error_msg}
+                break
+
+            except (RateLimitError, APITimeoutError, APIConnectionError, APIError) as e:
+                if attempt >= self.max_retries - 1:
+                    error_msg = f"[{type(e).__name__}] {getattr(e, 'message', str(e))}"
+                    logger.error(
+                        f"API error after {self.max_retries} attempts: {error_msg}"
+                    )
+                    self._append_usage_log(
+                        success=False,
+                        model=self.model,
+                        usage={
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": 0,
+                            "total_tokens": prompt_tokens,
+                        },
+                        cost_usd=0.0,
+                        system_prompt=system_prompt,
+                        history_count=len(history),
+                        error_message=error_msg,
+                    )
+                    yield {"error": error_msg}
+                    break
+
+                wait_time = self.retry_backoff_base ** (attempt + 1)
+                logger.warning(
+                    f"API error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds..."
+                )
+                time.sleep(wait_time)
+
+            except Exception as e:
+                logger.exception("An unexpected error occurred.")
+                err = f"[不明なエラー] {str(e)}"
+                self._append_usage_log(
+                    success=False,
+                    model=self.model,
+                    usage={
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": 0,
+                        "total_tokens": prompt_tokens,
+                    },
+                    cost_usd=0.0,
+                    system_prompt=system_prompt,
+                    history_count=len(history),
+                    error_message=err,
+                )
+                yield {"error": err}
+                break
+
+        # すべてのリトライが失敗した場合
+        final_usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": 0,
+            "total_tokens": prompt_tokens,
+        }
+        # 最終的に失敗したケースでもログに記録
+        self._append_usage_log(
+            success=False,
+            model=self.model,
+            usage=final_usage,
+            cost_usd=0.0,
+            system_prompt=system_prompt,
+            history_count=len(history),
+            error_message="Retries exhausted",
+        )
+        return {"usage": final_usage, "cost_usd": 0.0}
