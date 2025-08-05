@@ -13,10 +13,8 @@ from openai import OpenAI  # OpenAI APIクライアント
 from openai.types.chat import ChatCompletion  # OpenAIのチャットAPIの型
 from pydantic import BaseModel, Field, ValidationError
 
-# ロギング設定
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# モジュールロガー（basicConfigはアプリ側で設定）
+logger = logging.getLogger(__name__)
 
 # 環境変数の読み込み
 # .envファイルは現在のスクリプトの親ディレクトリに存在すると仮定
@@ -145,14 +143,14 @@ class Alignment:
                 http_client=httpx.Client(),  # httpx.Clientを使用
             )
         except Exception as e:
-            logging.error(f"OpenAI client initialization failed: {e}")
+            logger.error(f"OpenAI client initialization failed: {e}")
             self.OpenAI_client = None
 
         try:
             # Groq APIクライアントの初期化
             self.groq_client: Optional[Groq] = Groq(api_key=groq_api_key)
         except Exception as e:
-            logging.error(f"Groq client initialization failed: {e}")
+            logger.error(f"Groq client initialization failed: {e}")
             self.groq_client = None
 
         # 言語設定に基づいて指示を定義
@@ -252,12 +250,12 @@ class Alignment:
 
             completion: Any = client.chat.completions.create(**params)
             if not self._validate_response(completion):
-                logging.error(f"Invalid response structure from API: {completion}")
+                logger.error(f"Invalid response structure from API: {completion}")
                 return "Error: Invalid response structure from API"
 
             return completion.choices[0].message.content or ""
         except Exception as e:
-            logging.error(f"API Error: {e}")
+            logger.error(f"API Error: {e}")
             return f"API Error: {str(e)}"
 
     def generate_groq_response(
@@ -316,7 +314,7 @@ class Alignment:
             output_component (gr.Textbox): 出力を表示するGradioテキストボックスコンポーネント。
         """
         if not self.OpenAI_client:
-            logging.error(
+            logger.error(
                 "OpenAIError: API client not initialized. Check OPENAI_API_KEY."
             )
             gr.update("OpenAIError: API client not initialized. Check OPENAI_API_KEY.")
@@ -339,7 +337,7 @@ class Alignment:
                 ):
                     gr.update(chunk.choices[0].delta.content, append=True)
         except Exception as e:
-            logging.error(f"OpenAI API Error during streaming: {e}")
+            logger.error(f"OpenAI API Error during streaming: {e}")
             gr.update(f"OpenAI API Error during streaming: {str(e)}")
 
     def invoke_prompt(
@@ -381,7 +379,7 @@ class Alignment:
         # OpenAIクライアントが初期化されているか確認
         if self.OpenAI_client is None:
             error_msg = "OpenAIError: API client not initialized. Check OPENAI_API_KEY and OPENAI_BASE_URL."
-            logging.error(error_msg)
+            logger.error(error_msg)
             yield gr.update(value=error_msg), gr.update(value=error_msg)
             return
 
@@ -407,7 +405,7 @@ class Alignment:
         # Groqクライアントが初期化されているか確認
         if self.groq_client is None:
             error_msg = "GroqError: API client not initialized. Check GROQ_API_KEY."
-            logging.error(error_msg)
+            logger.error(error_msg)
             yield gr.update(value=error_msg), gr.update(value=error_msg)
             return
         # Groq API を呼び出し、応答を生成
@@ -432,7 +430,7 @@ class Alignment:
         """
         # Groqクライアントが初期化されているか確認
         if not self.groq_client:
-            logging.error(
+            logger.error(
                 "GroqError: API client for evaluation not initialized. Check GROQ_API_KEY."
             )
             return "GroqError: API client for evaluation not initialized. Check GROQ_API_KEY."
@@ -451,7 +449,7 @@ class Alignment:
         )
         # Groq APIからのエラーをチェック
         if isinstance(groq_result, str) and groq_result.startswith("Groq API Error:"):
-            logging.error(f"Evaluation Error: {groq_result}")
+            logger.error(f"Evaluation Error: {groq_result}")
             return f"Evaluation Error: {groq_result}"  # エラーメッセージを返す
 
         # 生成された結果からフィードバックと推奨事項を抽出
@@ -575,7 +573,7 @@ class Optimizer(Alignment):
             ) as f:
                 self.step_prompt_classification_prompt = f.read()
         except FileNotFoundError as e:
-            logging.error(f"Prompt file not found: {e}")
+            logger.error(f"Prompt file not found: {e}")
             # プロンプトが読み込めない場合は、関連するプロンプトを空文字列に設定
             self.error_analysis_classification_prompt = ""
             self.error_analysis_rank_prompt = ""
@@ -588,7 +586,7 @@ class Optimizer(Alignment):
         エラー分析（分類）プロンプトを実行し、結果をJSONとして返します。
         """
         if not self.error_analysis_classification_prompt:
-            logging.error("Error analysis classification prompt not loaded.")
+            logger.error("Error analysis classification prompt not loaded.")
             return None
         try:
             content = self.generate_groq_response(
@@ -607,7 +605,7 @@ class Optimizer(Alignment):
                 raise Exception(content)
             return ErrorClassification.model_validate(json.loads(content)).model_dump()
         except (json.JSONDecodeError, ValidationError, Exception) as e:
-            logging.error(f"Error parsing error analysis classification: {e}")
+            logger.error(f"Error parsing error analysis classification: {e}")
             return None
 
     def _get_error_analysis_rank(
@@ -617,7 +615,7 @@ class Optimizer(Alignment):
         エラー分析（ランク付け）プロンプトを実行し、結果をJSONとして返します。
         """
         if not self.error_analysis_rank_prompt:
-            logging.error("Error analysis rank prompt not loaded.")
+            logger.error("Error analysis rank prompt not loaded.")
             return None
         try:
             content = self.generate_groq_response(
@@ -636,7 +634,7 @@ class Optimizer(Alignment):
                 raise Exception(content)
             return ErrorRank.model_validate(json.loads(content)).model_dump()
         except (json.JSONDecodeError, ValidationError, Exception) as e:
-            logging.error(f"Error parsing error analysis rank: {e}")
+            logger.error(f"Error parsing error analysis rank: {e}")
             return None
 
     def _get_step_prompt_classification(
@@ -646,7 +644,7 @@ class Optimizer(Alignment):
         ステッププロンプト（分類）を実行し、結果をJSONとして返します。
         """
         if not self.step_prompt_classification_prompt:
-            logging.error("Step prompt classification prompt not loaded.")
+            logger.error("Step prompt classification prompt not loaded.")
             return None
         try:
             content = self.generate_groq_response(
@@ -665,5 +663,5 @@ class Optimizer(Alignment):
                 raise Exception(content)
             return StepClassification.model_validate(json.loads(content)).model_dump()
         except (json.JSONDecodeError, ValidationError, Exception) as e:
-            logging.error(f"Error parsing step prompt classification: {e}")
+            logger.error(f"Error parsing step prompt classification: {e}")
             return None

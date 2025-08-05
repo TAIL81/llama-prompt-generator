@@ -6,24 +6,20 @@ from functools import lru_cache
 from typing import Any, Dict, List, Mapping, Optional, Union
 
 import groq
-from dotenv import load_dotenv  # 環境変数をロードするためのライブラリ
-from groq import Groq  # Groq APIクライアント
-from groq.types.chat.chat_completion_message_param import (
-    ChatCompletionMessageParam,
-)  # チャット補完メッセージの型ヒント
+from dotenv import load_dotenv
+from groq import Groq
+from groq.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from groq.types.chat.completion_create_params import ResponseFormat
 
-from src.rater import Rater  # Raterクラスを絶対インポートに変更
+from src.rater import Rater
 
-# 環境変数を読み込みます
+# .env 読み込み（アプリ側と二重設定しない前提で軽量に実行）
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# モジュールロガー（basicConfigはアプリ側で設定）
+logger = logging.getLogger(__name__)
 
 # --- 定数定義 ---
-# プロンプトテンプレートを共通化
 BASE_PROMPT_TEMPLATE = """
 You are an instruction engineer. Your task is to rewrite the initial instruction in the <instruction> XML tag based on the suggestions in the instruction guide in the <guide> XML tag.
 
@@ -45,7 +41,6 @@ Please use the same language as the initial instruction for rewriting.
 </instruction>
 """.strip()
 
-
 EXAMPLE_TEMPLATE = """
 <example>
 {demo}
@@ -56,9 +51,11 @@ EXAMPLE_TEMPLATE = """
 # --- データクラス ---
 @dataclass
 class GroqConfig:
+    """Groq API 呼び出し設定"""
+
     rewrite_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
-    max_tokens: int = 8192  # 生成される応答の最大トークン数
-    temperature: float = 0.7  # 応答の多様性を制御する温度パラメータ
+    max_tokens: int = 8192
+    temperature: float = 0.7
     response_format: Optional[ResponseFormat] = field(
         default_factory=lambda: {"type": "json_object"}
     )
@@ -71,32 +68,40 @@ prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
 
 @lru_cache(maxsize=1)
 def load_prompt_guide(path: str) -> str:
-    """PromptGuide.md ファイルを読み込み、キャッシュします。"""  # PromptGuide.mdファイルを読み込む関数
+    """PromptGuide.md を読み込み、キャッシュする。"""
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
 
-PromptGuide = load_prompt_guide(prompt_guide_path)  # プロンプトガイドの内容をロード
+PromptGuide = load_prompt_guide(prompt_guide_path)
 
 groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
-if not groq_api_key:  # Groq APIキーが設定されているか確認
-    logging.error("GROQ_API_KEY環境変数が設定されていません。")
-    raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
+if not groq_api_key:
+    logger.error("GROQ_API_KEY 環境変数が設定されていません。")
+    raise ValueError("GROQ_API_KEY 環境変数が設定されていません。")
 groq_client = Groq(api_key=groq_api_key)
 
 
-# --- メインクラス ---
 class APE:
+    """
+    APE: Automatic Prompt Engineering
+    - 初期プロンプトをガイドに基づき書き換え、候補を生成/評価/反復して最良を返す。
+    """
+
     def __init__(self) -> None:
         self.rater = Rater()
         self.config = GroqConfig()
 
+    # 旧I/F維持のための内部共通呼び出し
     def _call_groq_api(
         self,
         messages: List[ChatCompletionMessageParam],
         method_name: str,
     ) -> Optional[str]:
-        """Groq APIを呼び出し、エラーハンドリングを共通化します。"""
+        """
+        Groq API を呼び出す共通関数。
+        成功: content(str)、失敗: None
+        """
         try:
             completion = groq_client.chat.completions.create(
                 model=self.config.rewrite_model,
@@ -105,209 +110,212 @@ class APE:
                 temperature=self.config.temperature,
                 response_format=self.config.response_format,
             )
-            result = completion.choices[0].message.content or ""
-            logging.debug(f"APE.{method_name} successful, result: {result}")
-            return result
+            content = completion.choices[0].message.content or ""
+            logger.debug("APE.%s 成功: len=%s", method_name, len(content))
+            return content
         except groq.InternalServerError as e:
-            error_message = (
+            # e.body の安全な取り扱い
+            message = (
                 e.body.get("error", {}).get("message", str(e))
                 if hasattr(e, "body") and isinstance(e.body, dict)
                 else str(e)
             )
-            logging.error(
-                f"APE.{method_name} - Groq InternalServerError: {error_message} (Details: {e})"
-            )
+            logger.error("APE.%s - Groq InternalServerError: %s", method_name, message)
             return None
         except groq.APIError as e:
-            error_message = (
+            message = (
                 e.body.get("error", {}).get("message", str(e))
                 if hasattr(e, "body") and isinstance(e.body, dict)
                 else str(e)
             )
-            logging.error(
-                f"APE.{method_name} - Groq APIError: {error_message} (Details: {e})"
-            )
+            logger.error("APE.%s - Groq APIError: %s", method_name, message)
             return None
         except Exception as e:
-            logging.error(f"APE.{method_name} - Unexpected error: {e}")
+            logger.error("APE.%s - 想定外エラー: %s", method_name, e)
             return None
 
     def rewrite(self, initial_prompt: str) -> Optional[str]:
-        """初期プロンプトをInstruction guideに基づいて書き換えます。"""
-        prompt = BASE_PROMPT_TEMPLATE.format(guide=PromptGuide, initial=initial_prompt)
+        """初期プロンプトをガイドに基づき JSON 形式へ書き換える。"""
+        prompt_text = BASE_PROMPT_TEMPLATE.format(
+            guide=PromptGuide, initial=initial_prompt
+        )
         messages: List[ChatCompletionMessageParam] = [
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt_text}
         ]
         return self._call_groq_api(messages, "rewrite")
 
     def generate_more(self, initial_prompt: str, example: str) -> Optional[str]:
-        """初期プロンプトと既存の良い例を基に、さらにプロンプト候補を生成します。"""
-        prompt_with_example = f"{BASE_PROMPT_TEMPLATE}\n\n{EXAMPLE_TEMPLATE}".format(
+        """
+        初期プロンプト + 良い例(example) を元に、追加候補を 1 つ生成。
+        JSON 形式のみの出力を指示。
+        """
+        base_with_example = f"{BASE_PROMPT_TEMPLATE}\n\n{EXAMPLE_TEMPLATE}".format(
             guide=PromptGuide, initial=initial_prompt, demo=example
         )
-        final_prompt = f"{prompt_with_example}\n\nPlease only output the rewrite result in JSON format."
+        final_prompt = f"{base_with_example}\n\nPlease only output the rewrite result in JSON format."
         messages: List[ChatCompletionMessageParam] = [
             {"role": "user", "content": final_prompt}
         ]
         return self._call_groq_api(messages, "generate_more")
 
     def _validate_inputs(self, initial_prompt: str, demo_data: Dict[str, str]) -> None:
-        """入力パラメータの検証を行います。"""
+        """入力を検証。デモデータ未提供は warning に留める。"""
         if not initial_prompt.strip():
-            raise ValueError("初期プロンプトが空です")
+            raise ValueError("初期プロンプトが空です。")
         if not demo_data:
-            logging.warning(
-                "デモデータが提供されていません。APEの実行に影響する可能性があります。"
+            logger.warning(
+                "デモデータが提供されていません。APE の評価精度に影響する可能性があります。"
             )
 
     def _log_final_candidate(self, candidate: Dict[str, str]) -> None:
-        """最終的な候補をデバッグログに出力します。"""
-        logging.debug("APE.__call__ return:")
+        """最終候補をデバッグログへ整形出力。"""
+        logger.debug("APE.__call__ return(最終候補):")
         for key, value in candidate.items():
-            logging.debug(f"  {key}:")
+            logger.debug("  %s:", key)
             if isinstance(value, str):
                 for line in value.splitlines():
-                    logging.debug(f"    {line}")
+                    logger.debug("    %s", line)
             else:
-                logging.debug(f"    {value}")
+                logger.debug("    %s", value)
 
-    def _generate_initial_candidates(
+    def _create_initial_candidates(
         self, initial_prompt: str, num_candidates: int = 2
     ) -> List[Dict[str, Any]]:
-        """初期プロンプトから複数の候補を生成します。"""
-        raw_candidates = []
+        """
+        初期プロンプトから複数候補を生成して JSON をパース。
+        不正フォーマットは除外。
+        """
+        candidates: List[Dict[str, Any]] = []
         for _ in range(num_candidates):
             response_str = self.rewrite(initial_prompt)
             if not response_str:
                 continue
             try:
-                rewritten_data = json.loads(response_str)
-                if "prompt_text" in rewritten_data and "variables" in rewritten_data:
-                    raw_candidates.append(rewritten_data)
+                data = json.loads(response_str)
+                if "prompt_text" in data and "variables" in data:
+                    candidates.append(data)
                 else:
-                    logging.warning(f"Invalid JSON format from rewrite: {response_str}")
+                    logger.warning("rewrite の JSON 形式が不正: %s", response_str)
             except json.JSONDecodeError:
-                logging.error(f"Failed to decode JSON from rewrite: {response_str}")
-        return raw_candidates
+                logger.error("rewrite の JSON デコードに失敗: %s", response_str)
+        return candidates
 
-    def _filter_candidates(
+    def _filter_candidates_by_variables(
         self, candidates: List[Dict[str, Any]], demo_data: Dict[str, str]
     ) -> List[Dict[str, Any]]:
-        """カスタマイズ可能な変数に基づいて候補をフィルタリングします。"""
-        customizable_variable_set = set(demo_data.keys())
+        """デモデータのキー集合と variables が一致する候補のみを残す。"""
+        expected_vars = set(demo_data.keys())
         filtered = [
-            c
-            for c in candidates
-            if set(c.get("variables", [])) == customizable_variable_set
+            c for c in candidates if set(c.get("variables", [])) == expected_vars
         ]
 
         if not filtered:
-            logging.warning("No candidates left after filtering for customizable variables.")
-            candidates_log_str = "\n".join(
-                f"--- Candidate {i+1} ---\n{json.dumps(c, indent=2)}"
+            logger.warning("変数一致フィルタ後に候補が残りませんでした。")
+            dump = "\n".join(
+                f"--- Candidate {i+1} ---\n{json.dumps(c, indent=2, ensure_ascii=False)}"
                 for i, c in enumerate(candidates)
             )
-            logging.warning(
-                f"The following candidates were filtered out:\n{candidates_log_str}"
-            )
+            logger.warning("除外された候補一覧:\n%s", dump)
         return filtered
 
-    def _rate_and_select_best_candidate(
+    def _rate_and_select_best(
         self,
         initial_prompt: str,
         candidates: List[Dict[str, Any]],
         demo_data: Dict[str, str],
     ) -> Dict[str, Any]:
-        """候補を評価し、最良のものを選択します。"""
-        logging.info("Rating initial candidates generated by APE.rewrite...")
-        rater_candidates = [{"prompt": c["prompt_text"]} for c in candidates]
-        best_candidate_idx = self.rater(initial_prompt, rater_candidates, demo_data)
-        logging.info(f"Initial rating completed. Best candidate index: {best_candidate_idx}")
+        """Rater で評価しベスト候補を選ぶ。失敗時は先頭をフォールバック。"""
+        logger.info("APE.rewrite の初期候補を評価中...")
+        rater_inputs = [{"prompt": c["prompt_text"]} for c in candidates]
+        best_idx = self.rater(initial_prompt, rater_inputs, demo_data)
+        logger.info("初期評価完了。ベスト候補 index=%s", best_idx)
 
-        if best_candidate_idx is not None and 0 <= best_candidate_idx < len(candidates):
-            return candidates[best_candidate_idx]
-        
-        logging.warning("Rater returned invalid index or failed, using first candidate as fallback.")
+        if best_idx is not None and 0 <= best_idx < len(candidates):
+            return candidates[best_idx]
+
+        logger.warning("Rater 失敗/不正 index のため先頭候補を採用。")
         return candidates[0]
 
-    def _iteratively_improve(
+    def _iterate_improvement(
         self,
         initial_prompt: str,
-        best_candidate_obj: Dict[str, Any],
+        best: Dict[str, Any],
         demo_data: Dict[str, str],
         epoch: int,
     ) -> Dict[str, Any]:
-        """最良の候補を反復的に改善します。"""
-        customizable_variable_set = set(demo_data.keys())
+        """
+        ベスト候補に対し epoch 回の改善ループを行い、勝者を都度更新。
+        variables は demo_data.keys() と一致するもののみ採用。
+        """
+        expected_vars = set(demo_data.keys())
+        current_best = best
+
         for i in range(epoch):
-            more_candidate_response = self.generate_more(
-                initial_prompt, best_candidate_obj["prompt_text"]
-            )
-            if not more_candidate_response:
-                logging.warning(f"generate_more failed in epoch {i+1}. Keeping previous best candidate.")
+            more_json = self.generate_more(initial_prompt, current_best["prompt_text"])
+            if not more_json:
+                logger.warning("generate_more 失敗: epoch=%s。現状維持。", i + 1)
                 continue
 
             try:
-                more_candidate_data = json.loads(more_candidate_response)
-                if not ("prompt_text" in more_candidate_data and "variables" in more_candidate_data):
-                    logging.warning(f"Invalid JSON format from generate_more: {more_candidate_response}")
-                    continue
-                
-                if set(more_candidate_data.get("variables", [])) != customizable_variable_set:
-                    logging.warning(f"generate_more produced a prompt with incorrect variables: {more_candidate_response}")
+                candidate = json.loads(more_json)
+                if not ("prompt_text" in candidate and "variables" in candidate):
+                    logger.warning("generate_more の JSON 形式が不正: %s", more_json)
                     continue
 
-                # Rate new candidate against the current best
-                current_rating_candidates_obj = [best_candidate_obj, more_candidate_data]
-                rater_loop_candidates = [{"prompt": c["prompt_text"]} for c in current_rating_candidates_obj]
+                if set(candidate.get("variables", [])) != expected_vars:
+                    logger.warning("generate_more の variables が不一致: %s", more_json)
+                    continue
 
-                logging.info(f"Rating candidates in epoch {i+1}: [current_best vs new_generated]")
-                rated_idx_loop = self.rater(initial_prompt, rater_loop_candidates, demo_data)
-                logging.info(f"Epoch {i+1} rating completed. Winning index: {rated_idx_loop}")
+                pair = [current_best, candidate]
+                rater_pair = [{"prompt": c["prompt_text"]} for c in pair]
 
-                if rated_idx_loop is not None:
-                    best_candidate_obj = current_rating_candidates_obj[rated_idx_loop]
+                logger.info("epoch=%s の評価を実行 (current_best vs new)", i + 1)
+                winner_idx = self.rater(initial_prompt, rater_pair, demo_data)
+                logger.info("epoch=%s 勝者 index=%s", i + 1, winner_idx)
+
+                if winner_idx is not None:
+                    current_best = pair[winner_idx]
                 else:
-                    logging.warning(f"Rater failed in epoch {i+1}. Keeping previous best candidate.")
+                    logger.warning("Rater 失敗: epoch=%s。現状維持。", i + 1)
 
             except json.JSONDecodeError:
-                logging.error(f"Failed to decode JSON from generate_more: {more_candidate_response}")
-        
-        return best_candidate_obj
+                logger.error("generate_more の JSON デコード失敗: %s", more_json)
+
+        return current_best
 
     def __call__(
         self, initial_prompt: str, epoch: int, demo_data: Dict[str, str]
     ) -> Mapping[str, Union[str, None]]:
-        """APE処理を実行します。"""
+        """
+        APE のメイン処理:
+        1) 候補生成 → 2) 変数一致フィルタ → 3) 初期評価 → 4) 反復改善 → 5) 最終出力
+        """
         self._validate_inputs(initial_prompt, demo_data)
 
         # 1. 初期候補生成
-        raw_candidates = self._generate_initial_candidates(initial_prompt)
-        if not raw_candidates:
-            logging.error("Initial prompt rewriting failed for all attempts.")
+        candidates = self._create_initial_candidates(initial_prompt)
+        if not candidates:
+            logger.error("初期書き換えがすべて失敗しました。")
             return {
                 "prompt": initial_prompt,
                 "error": "Initial prompt rewriting failed.",
             }
 
-        # 2. 候補フィルタリング
-        filtered_candidates = self._filter_candidates(raw_candidates, demo_data)
-        if not filtered_candidates:
+        # 2. 変数一致でフィルタ
+        filtered = self._filter_candidates_by_variables(candidates, demo_data)
+        if not filtered:
             return {
                 "prompt": initial_prompt,
                 "error": "No valid candidates after filtering. The rewritten prompts might be missing required variables.",
             }
 
-        # 3. 初期評価と最良候補の選択
-        best_candidate_obj = self._rate_and_select_best_candidate(
-            initial_prompt, filtered_candidates, demo_data
-        )
+        # 3. 初期評価
+        best = self._rate_and_select_best(initial_prompt, filtered, demo_data)
 
-        # 4. 反復的な改善
-        best_candidate_obj = self._iteratively_improve(
-            initial_prompt, best_candidate_obj, demo_data, epoch
-        )
+        # 4. 改善ループ
+        best = self._iterate_improvement(initial_prompt, best, demo_data, epoch)
 
-        final_prompt = {"prompt": best_candidate_obj["prompt_text"]}
+        # 5. 最終結果
+        final_prompt = {"prompt": best["prompt_text"]}
         self._log_final_candidate(final_prompt)
         return final_prompt

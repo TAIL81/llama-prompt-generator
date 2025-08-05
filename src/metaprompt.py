@@ -4,107 +4,87 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 from dotenv import load_dotenv
 from groq import Groq
 from groq.types.chat import ChatCompletionMessageParam
 
-# 環境変数を .env ファイルから読み込みます
+# .env 読み込み（アプリ側と二重設定しない前提で軽量に実行）
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-# ロギング設定
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# モジュールロガー（basicConfigはアプリ側で設定）
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class GroqConfig:
-    """Groq APIの設定を保持するデータクラス。"""
+    """Groq API の設定"""
 
     metaprompt_model: str = "moonshotai/kimi-k2-instruct"
     max_tokens: int = 16384
     temperature: float = 0.3
 
 
-# 現在のスクリプトが配置されているディレクトリを取得します
+# 現在のスクリプトディレクトリとファイルパス
 current_script_path = os.path.dirname(os.path.abspath(__file__))
-
-# metaprompt.txt へのフルパスを構築します
 metaprompt_txt_path = os.path.join(current_script_path, "metaprompt.txt")
 
 
 @lru_cache(maxsize=1)
 def load_metaprompt_content(path: str) -> str:
-    """
-    metaprompt.txt ファイルを読み込み、キャッシュします。
-    """
+    """metaprompt.txt を読み込みキャッシュする。"""
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
 
-# メタプロンプトを生成し、関連情報を抽出するクラス
 class MetaPrompt:
+    """
+    メタプロンプト生成器:
+    - タスク/変数からメタプロンプトを構築
+    - Groq の JSON モード応答からテンプレートと変数一覧を抽出
+    """
+
     def __init__(self) -> None:
         self.metaprompt: str = load_metaprompt_content(metaprompt_txt_path)
-        """
-        MetaPromptクラスの初期化。
 
-        - metaprompt.txtからメタプロンプトの内容を読み込む。
-        - 環境変数からGROQ_API_KEYを取得し、Groqクライアントを初期化する。
-        - GroqConfigからAPI設定を読み込む。
-        """
         groq_api_key: Optional[str] = os.getenv("GROQ_API_KEY")
         if not groq_api_key:
-            logging.error("GROQ_API_KEY環境変数が設定されていません。")
-            raise ValueError("GROQ_API_KEY環境変数が設定されていません。")
+            logger.error("GROQ_API_KEY 環境変数が設定されていません。")
+            raise ValueError("GROQ_API_KEY 環境変数が設定されていません。")
+
         self.groq_client = Groq(api_key=groq_api_key)
         self.config = GroqConfig()
 
     def __call__(self, task: str, variables: str) -> Tuple[str, str]:
         """
-        タスクと変数に基づいてメタプロンプトを生成し、プロンプトテンプレートと変数を抽出します。
-
-        Args:
-            task (str): ユーザーが定義したタスク。
-            variables (str): 改行区切りの変数文字列。
-
-        Returns:
-            Tuple[str, str]: (抽出されたプロンプトテンプレート, 改行区切りの変数文字列)
+        タスクと変数（改行区切り）からプロンプトテンプレートと変数名一覧を抽出。
+        戻り値: (prompt_template, "変数\n改行区切り")
         """
         self._validate_inputs(task, variables)
 
-        # 入力された改行区切りの変数文字列をリストに変換
         parsed_variables: List[str] = [
             v.strip() for v in variables.split("\n") if v.strip()
         ]
-
-        # メタプロンプトで使用する変数文字列を生成
         variable_string: str = "\n".join(
-            [f"{{{{{v.upper()}}}}}" for v in parsed_variables]
+            f"{{{{{v.upper()}}}}}" for v in parsed_variables
         )
 
-        # 基本的なメタプロンプトを読み込み、タスクと変数を挿入
-        prompt: str = self.metaprompt.replace("{{TASK}}", task)
-        prompt = prompt.replace("{{VARIABLES}}", variable_string)
-
-        # JSONモードで応答を要求する指示を追加
+        prompt: str = self.metaprompt.replace("{{TASK}}", task).replace(
+            "{{VARIABLES}}", variable_string
+        )
         prompt += '\n\nPlease provide the rewritten prompt in a JSON object with two keys: "prompt_template" and "variables". The "variables" key should contain a list of all variables found in the "prompt_template".'
         prompt += "\nPlease use Japanese for rewriting."
 
         messages: List[ChatCompletionMessageParam] = [
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": prompt}
         ]
 
-        logging.debug(
-            f"MetaPrompt Request JSON: {json.dumps(messages, ensure_ascii=False)}"
-        )
-        logging.info(f"Calling Groq API with model: {self.config.metaprompt_model}")
+        logger.debug("MetaPrompt リクエスト: %s", messages)
+        logger.info("Groq API 呼び出し: model=%s", self.config.metaprompt_model)
 
-        message: str = ""  # この行をtryブロックの外に移動
-
+        raw_response: str = ""
         try:
             completion = self.groq_client.chat.completions.create(
                 model=self.config.metaprompt_model,
@@ -113,33 +93,28 @@ class MetaPrompt:
                 temperature=self.config.temperature,
                 response_format={"type": "json_object"},
             )
-            message = completion.choices[0].message.content or ""
+            raw_response = completion.choices[0].message.content or ""
+            logger.info("Groq API 応答を受信")
+            logger.debug("API 応答(raw): %s", raw_response)
 
-            logging.info("Received response from Groq API")
-            logging.debug(f"API Response: {message}")
+            data = json.loads(raw_response)
+            prompt_template: str = data.get("prompt_template", "") or ""
+            extracted_variables: List[str] = data.get("variables", []) or []
 
-            # API応答（JSON文字列）をパース
-            response_data = json.loads(message)
-            extracted_prompt_template: str = response_data.get("prompt_template", "")
-            extracted_variables: List[str] = response_data.get("variables", [])
-
-            return extracted_prompt_template.strip(), "\n".join(extracted_variables)
+            return prompt_template.strip(), "\n".join(extracted_variables)
 
         except json.JSONDecodeError as e:
-            logging.error(f"Failed to decode JSON response: {e}")
-            logging.error(f"Raw response: {message}")
+            logger.error("JSON デコード失敗: %s", e)
+            logger.error("Raw 応答: %s", raw_response)
             return "Error: Failed to parse response.", ""
         except Exception as e:
-            logging.error(f"An unexpected error occurred: {e}")
+            logger.error("想定外エラー: %s", e)
             return f"Error: {e}", ""
 
-    # --- 入力検証 ---
+    # 入力検証
     def _validate_inputs(self, task: str, variables: str) -> None:
-        """
-        入力パラメータの検証を行います。
-        """
+        """task/variables の簡易検証。"""
         if not task.strip():
-            raise ValueError("タスクが空です")
+            raise ValueError("タスクが空です。")
         if not variables.strip():
-            # 変数が空の場合でもエラーとせず、警告をログに出力して処理を続行
-            logging.warning("変数が空ですが、処理を続行します。")
+            logger.warning("変数が空ですが、処理を続行します。")

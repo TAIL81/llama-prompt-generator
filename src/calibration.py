@@ -1,6 +1,7 @@
 import ast
 import io
 import json
+import logging
 import operator
 import os
 import pathlib
@@ -18,6 +19,8 @@ from sklearn.metrics import confusion_matrix  # 混同行列の計算に使用
 
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
+# モジュールロガー（basicConfigはアプリ側で設定）
+logger = logging.getLogger(__name__)
 
 from src.safe_executor import SafeCodeExecutor
 
@@ -60,6 +63,20 @@ class CalibrationPrompt:
         groq_api_key = os.getenv("GROQ_API_KEY")
         # tempディレクトリを作成 (存在しない場合のみ)
         os.makedirs(_TEMP_DIR_PATH, exist_ok=True)
+        try:
+            self.groq_client = Groq(api_key=groq_api_key)
+        except Exception as e:
+            logger.error("Groq クライアント初期化に失敗しました: %s", e)
+            raise
+        self.safe_code_executor = (
+            SafeCodeExecutor()
+        )  # SafeCodeExecutorのインスタンスを作成
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        if not groq_api_key:
+            logger.error("GROQ_API_KEY 環境変数が設定されていません。")
+            raise ValueError("GROQ_API_KEY 環境変数が設定されていません。")
+        # tempディレクトリを作成 (存在しない場合のみ)
+        os.makedirs(_TEMP_DIR_PATH, exist_ok=True)
         self.groq_client = Groq(api_key=groq_api_key)
         self.safe_code_executor = (
             SafeCodeExecutor()
@@ -89,6 +106,7 @@ class CalibrationPrompt:
             max_completion_tokens=8192,
         )
         message = completion.choices[0].message.content or ""
+        logger.debug("invoke_model 応答長: %s chars", len(message))
         return message
 
     def get_output(
@@ -175,6 +193,7 @@ class CalibrationPrompt:
                     )
                 return postprocess_func
             except Exception as e:
+                logger.error("後処理コードの実行中にエラー: %s", e)
                 raise ValueError(f"後処理コードの実行中にエラーが発生しました: {e}")
 
         # postprocess関数を取得し、callableであることを確認
@@ -198,6 +217,7 @@ class CalibrationPrompt:
             result = self.safe_code_executor.execute_safe_code(
                 "postprocess(llm_output)", safe_context
             )
+            logger.debug("postprocess 結果(row=%s): %s", row_idx, result)
 
             results.append(result)
 
@@ -208,6 +228,7 @@ class CalibrationPrompt:
         timestr = time.strftime("%Y%m%d-%H%M%S")
         temp_file_path = os.path.join(_TEMP_DIR_PATH, f"predict_{timestr}.csv")
         df.to_csv(temp_file_path, index=False)
+        logger.info("予測結果を出力: %s", temp_file_path)
         return gr.DownloadButton(
             label=f"Download predict result (predict_{timestr}.csv)",
             value=pathlib.Path(temp_file_path),
@@ -309,6 +330,7 @@ class CalibrationPrompt:
         timestr = time.strftime("%Y%m%d-%H%M%S")
         temp_file_path = os.path.join(_TEMP_DIR_PATH, f"predict_{timestr}.csv")
         cur_dataset_with_predictions.to_csv(temp_file_path, index=False)
+        logger.info("最適化ステップ出力を保存: %s (score=%.4f)", temp_file_path, score)
         return {
             "cur_prompt": cur_prompt,
             "score": score,
@@ -393,6 +415,7 @@ class CalibrationPrompt:
         score_func = self.get_eval_function()
         dataset = score_func(dataset)
         mean_score = dataset["score"].mean()
+        logger.debug("eval_score 平均: %.6f", mean_score)
         return float(mean_score)
 
     def extract_errors(self, dataset: pd.DataFrame) -> pd.DataFrame:
@@ -404,6 +427,7 @@ class CalibrationPrompt:
         # スコアが0.5未満のレコードをエラーとして抽出します
         err_df = df[df["score"] < 0.5].copy()
         err_df.sort_values(by=["score"], inplace=True)
+        logger.debug("extract_errors 件数: %s", len(err_df))
         return err_df
 
     def add_history(
@@ -447,6 +471,10 @@ class CalibrationPrompt:
         # エラー分析プロンプトを実行
         analysis = self.invoke_model(
             error_analysis_prompt.format(**prompt_input), model="scout"
+        )
+        logger.debug(
+            "error_analysis 応答長: %s",
+            len(analysis) if isinstance(analysis, str) else -1,
         )
         pattern = r"<analysis>(.*?)</analysis>"
         match = re.search(pattern, analysis, re.DOTALL)
