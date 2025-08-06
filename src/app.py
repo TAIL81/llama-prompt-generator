@@ -26,11 +26,11 @@ from src.translate import GuideBased
 
 # UIタブ作成関数のインポート
 from src.ui.calibration_tab import create_calibration_tab
+from src.ui.chat_tab import create_chat_tab
 from src.ui.evaluation_tab import create_evaluation_tab
 from src.ui.metaprompt_tab import create_metaprompt_tab
 from src.ui.soe_tab import create_soe_tab
 from src.ui.translation_tab import create_translation_tab
-from src.ui.chat_tab import create_chat_tab
 
 
 # 設定管理クラスの導入
@@ -239,7 +239,65 @@ with gr.Blocks(
 ) as demo:
     # クリアボタンのラベルを取得
     clear_button_label = config.lang_store[config.language].get("Clear", "Clear")
-    # アプリケーションのタイトルをMarkdownで表示
+    # 全体の上余白・セクション間のgapを抑制（タブ直下の空白対策）
+    gr.Markdown(
+        """
+<style>
+/* h1の上余白をゼロにして最上段の空白を除去 */
+.gradio-container h1, .gradio-container .prose h1 {
+  margin-top: 0 !important;
+}
+/* Blocks/フォームのセクション間のデフォルトgapを縮小 */
+.gradio-container .gr-block, .gradio-container .gr-form {
+  gap: 0.25rem !important; /* 必要に応じて 0 まで縮小可 */
+}
+
+/* 追加: Tabsコンテナ周辺の余白/ギャップを最小化 */
+.gradio-container .tabs,
+.gradio-container .tabitem {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* タブバーと内容の間のギャップを除去 */
+.gradio-container .tabs > div {
+  gap: 0 !important;
+}
+
+/* タブバー下の余白/ボーダーの抑制（テーマにより存在） */
+.gradio-container .tabs .tab-nav {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom-width: 0 !important;
+}
+
+/* タブ内最初の要素の上マージンを0に固定 */
+.gradio-container .tabitem > *:first-child {
+  margin-top: 0 !important;
+}
+
+/* ここからChatタブの未使用スペース解消: タブ内容を縦に伸長させる */
+.gradio-container .tabitem {
+  min-height: calc(100vh - 140px); /* ヘッダ等を差し引いた最低高さの目安 */
+  display: flex;
+  flex-direction: column;
+}
+.gradio-container .tabitem > .gr-block {
+  flex: 1 1 auto; /* 中身を縦に伸ばす */
+}
+/* Chatbotを残り領域にフィットさせる */
+#chatbot {
+  flex: 1 1 auto;
+  min-height: 360px; /* 低い画面でも潰れすぎないように下限 */
+}
+/* 入力行の上側余白を抑制 */
+.gradio-container .row:has(#chatbot) + .row {
+  margin-top: 0 !important;
+}
+</style>
+"""
+    )
+    # アプリケーションのタイトルをMarkdownで表示（h1は維持）
     gr.Markdown(
         f"# {config.lang_store[config.language]['Automatic Prompt Engineering']}"
     )

@@ -86,7 +86,6 @@ class ChatService:
         self,
         max_retries: int = 3,
         retry_backoff_base: float = 2.0,
-        max_context_tokens: int = 8192,
     ):
         """
         ChatServiceを初期化します。
@@ -94,7 +93,6 @@ class ChatService:
         引数:
         - max_retries: APIエラー時の最大再試行回数。
         - retry_backoff_base: 再試行時の指数バックオフの底。
-        - max_context_tokens: モデルに送信する最大トークン数。
         """
         load_dotenv()
 
@@ -106,9 +104,6 @@ class ChatService:
         self.max_retries = int(os.getenv("MAX_RETRIES", max_retries))
         self.retry_backoff_base = float(
             os.getenv("RETRY_BACKOFF_BASE", retry_backoff_base)
-        )
-        self.max_context_tokens = int(
-            os.getenv("MAX_CONTEXT_TOKENS", max_context_tokens)
         )
 
         self.client = self._create_client()
@@ -173,46 +168,6 @@ class ChatService:
                     num_tokens -= 1  # name がある場合の補正
         return num_tokens + 3  # リプライのプライミング
 
-    def _trim_messages(
-        self, messages: List[ChatCompletionMessageParam]
-    ) -> List[ChatCompletionMessageParam]:
-        """
-        メッセージ履歴がmax_context_tokensを超えないようにトリミングします。
-        システムプロンプトと最新のユーザーメッセージは常に保持されます。
-        履歴は古いものからペア（ユーザー/アシスタント）で削除されます。
-        """
-        # 先にトークン数を計算
-        token_count = self._num_tokens_from_messages(messages)
-        if token_count <= self.max_context_tokens:
-            return messages
-
-        # 各パーツを分離
-        system_message = []
-        if messages and messages[0]["role"] == "system":
-            system_message = messages[:1]
-            messages = messages[1:]
-
-        # 最新のメッセージは常に保持
-        latest_message = messages[-1:]
-        history = messages[:-1]
-
-        # 履歴を古いペアから削除していく
-        while history:
-            current_messages = system_message + history + latest_message
-            token_count = self._num_tokens_from_messages(current_messages)
-            if token_count <= self.max_context_tokens:
-                break
-            # 履歴の先頭から2件（ユーザーとアシスタントのペアを想定）を削除
-            history = history[2:]
-
-        final_messages = system_message + history + latest_message
-        final_token_count = self._num_tokens_from_messages(final_messages)
-
-        logger.info(
-            f"Messages trimmed to {final_token_count} tokens to fit within the {self.max_context_tokens} limit."
-        )
-        return final_messages
-
     def chat_completion_stream(
         self,
         message: str,
@@ -259,18 +214,26 @@ class ChatService:
         messages.extend(self._convert_history_to_messages(history))
         messages.append({"role": "user", "content": message})
 
-        messages = self._trim_messages(messages)
         prompt_tokens = self._num_tokens_from_messages(messages)
 
         extra_params: Dict[str, Any] = {}
         if self.api_version:
             extra_params["api_version"] = self.api_version
 
+        # Groq-specific parameters
+        extra_params["reasoning_effort"] = "low"
+        extra_params["max_completion_tokens"] = 32766
+
         # ツールを追加
         # ユーザーがtoolsを明示的に指定しない場合、browser_searchとcode_interpreterを追加
         if tools is None:
-            extra_params["tools"] = [{"type": "browser_search"}, {"type": "code_interpreter"}]
-            extra_params["tool_choice"] = "auto" # "required" ではなく "auto" を使用して、モデルがツールを使用するかどうかを決定できるようにする
+            extra_params["tools"] = [
+                {"type": "browser_search"},
+                {"type": "code_interpreter"},
+            ]
+            extra_params["tool_choice"] = (
+                "auto"  # "required" ではなく "auto" を使用して、モデルがツールを使用するかどうかを決定できるようにする
+            )
         else:
             extra_params["tools"] = tools
             if tool_choice:

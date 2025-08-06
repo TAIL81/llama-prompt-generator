@@ -10,44 +10,38 @@ def create_chat_tab(config: Any):
     language = config.language
     # ChatService は状態に入れず、外部で保持する
     chat_service = ChatService()
+    # 温度の初期値を一元管理
+    initial_temperature = 1.0
     # gr.State には deepcopy 可能な軽量 dict のみを保持（messages形式の履歴と設定）
-    chat_state = gr.State({"messages": [], "temperature": 0.7, "system_prompt": ""})
+    chat_state = gr.State(
+        {"messages": [], "temperature": initial_temperature, "system_prompt": ""}
+    )
 
     if not chat_service.client:
         gr.Warning("OPENAI_API_KEY is not set. Chat tab will not work.")
 
-    # 多言語対応を考慮し、configからデフォルトのシステムプロンプトを取得
+    # 多言語対応を考慮し、configからデフォルトのシステムプロンプTシャツを取得
     default_system_prompt = lang_store[language].get(
         "Chat Default System Prompt",
         "Act as a helpful assistant. Think step by step. Reply in fluent Japanese.",
     )
 
     with gr.Tab(lang_store[language].get("Chat", "Chat")):
-        gr.HTML(
-            """
-            <style>
-            /* Chatbot 全体のフォントサイズを標準に近づける（Model Name 等と同程度） */
-            #chatbot, #chatbot * {
-                font-size: 1em !important;   /* 標準サイズ */
-                line-height: 1.4 !important; /* 読みやすさ確保 */
-            }
-            </style>
-            """
-        )
         with gr.Row():
             with gr.Column(scale=4):
                 chatbot = gr.Chatbot(
                     label=lang_store[language].get("Chatbot", "Chatbot"),
                     type="messages",
-                    height=400,
+                    height=None,
                     elem_classes=["chatbot-output"],
                     elem_id="chatbot",
                 )
-                with gr.Row():
+                # 入力行を独立させて下詰め固定・十分な高さを確保
+                with gr.Row(elem_id="chat-input-row"):
                     msg = gr.Textbox(
                         label=lang_store[language].get("Your Message", "Your Message"),
-                        lines=2,  # 初期表示の行数を設定
-                        max_lines=15,  # 最大の高さをこの行数分に制限
+                        lines=3,  # デフォルトの見た目の高さ
+                        max_lines=15,  # 伸び上限
                         scale=7,
                     )
                     submit_button = gr.Button(
@@ -67,7 +61,7 @@ def create_chat_tab(config: Any):
                 temperature = gr.Slider(
                     minimum=0.0,
                     maximum=2.0,
-                    value=0.7,
+                    value=initial_temperature,
                     step=0.1,
                     label=lang_store[language].get("Temperature", "Temperature"),
                 )
@@ -138,6 +132,56 @@ def create_chat_tab(config: Any):
                 chat_history[-1]["content"] += f"\n[不明なエラー] {str(e)}"
                 yield "", chat_history
 
+        # 入力行の潰れ対策CSSを注入（このタブに限定）
+        gr.HTML(
+            """
+            <style>
+              /* 左カラム内の配置: Chatbot を上、入力行を下に固定 */
+              #chatbot {
+                min-height: 360px;
+                /* チャット本文のフォントサイズをやや小さく調整 */
+                font-size: 0.9rem !important; /* 0.9rem ≒ 14.4px (16px基準) */
+                line-height: 1.5 !important;
+              }
+              /* 吹き出し内テキストも統一して小さめに */
+              #chatbot .message,
+              #chatbot .bubble,
+              #chatbot .prose,
+              #chatbot .markdown,
+              #chatbot p,
+              #chatbot li {
+                font-size: 0.9rem !important;
+                line-height: 1.5 !important;
+              }
+              /* Chatbot 内部の上下で背景色が二分されるのを防ぐ（softテーマの段差補正） */
+              #chatbot .wrap,
+              #chatbot > div {
+                background: transparent !important;
+              }
+              #chatbot > div > div {
+                background: transparent !important;
+              }
+              /* Chatbot本体の背景とボーダーを明確化
+                 - 背景は従来のカード色（--block-background-fill）
+                 - 外枠は強めのボーダー色にする */
+              #chatbot,
+              #chatbot .gr-panel,
+              #chatbot .gr-chatbot {
+                background-color: var(--block-background-fill, #1e2430) !important;
+                border: 1px solid var(--border-color-primary, #3a4150) !important;
+                box-shadow: none !important;
+              }
+              /* 入力行の余白と最低高さ */
+              #chat-input-row {
+                margin-top: 0 !important;
+                padding-top: 6px;
+              }
+              #chat-input-row textarea {
+                min-height: 72px; /* 約3行分 */
+              }
+            </style>
+            """
+        )
         clear.add([msg, chatbot])
         msg.submit(
             respond,
