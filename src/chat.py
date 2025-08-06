@@ -266,10 +266,10 @@ class ChatService:
         if self.api_version:
             extra_params["api_version"] = self.api_version
 
-        # ブラウザ検索ツールを追加
-        # ユーザーがtoolsを明示的に指定しない場合、browser_searchを追加
+        # ツールを追加
+        # ユーザーがtoolsを明示的に指定しない場合、browser_searchとcode_interpreterを追加
         if tools is None:
-            extra_params["tools"] = [{"type": "browser_search"}]
+            extra_params["tools"] = [{"type": "browser_search"}, {"type": "code_interpreter"}]
             extra_params["tool_choice"] = "auto" # "required" ではなく "auto" を使用して、モデルがツールを使用するかどうかを決定できるようにする
         else:
             extra_params["tools"] = tools
