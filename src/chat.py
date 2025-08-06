@@ -98,9 +98,9 @@ class ChatService:
         """
         load_dotenv()
 
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.api_base = os.getenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
-        self.model = os.getenv("OPENAI_MODEL", "openrouter/horizon-beta")
+        self.api_key = os.getenv("GROQ_API_KEY")
+        self.api_base = os.getenv("OPENAI_API_BASE", "https://api.groq.com/openai/v1")
+        self.model = os.getenv("OPENAI_MODEL", "openai/gpt-oss-120b")
         self.api_version = os.getenv("OPENAI_API_VERSION")
 
         self.max_retries = int(os.getenv("MAX_RETRIES", max_retries))
@@ -265,10 +265,16 @@ class ChatService:
         extra_params: Dict[str, Any] = {}
         if self.api_version:
             extra_params["api_version"] = self.api_version
-        if tools:
+
+        # ブラウザ検索ツールを追加
+        # ユーザーがtoolsを明示的に指定しない場合、browser_searchを追加
+        if tools is None:
+            extra_params["tools"] = [{"type": "browser_search"}]
+            extra_params["tool_choice"] = "auto" # "required" ではなく "auto" を使用して、モデルがツールを使用するかどうかを決定できるようにする
+        else:
             extra_params["tools"] = tools
-        if tool_choice:
-            extra_params["tool_choice"] = tool_choice
+            if tool_choice:
+                extra_params["tool_choice"] = tool_choice
 
         for attempt in range(self.max_retries):
             try:

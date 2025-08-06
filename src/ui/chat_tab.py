@@ -23,12 +23,25 @@ def create_chat_tab(config: Any):
     )
 
     with gr.Tab(lang_store[language].get("Chat", "Chat")):
+        gr.HTML(
+            """
+            <style>
+            /* Chatbot 全体のフォントサイズを標準に近づける（Model Name 等と同程度） */
+            #chatbot, #chatbot * {
+                font-size: 1em !important;   /* 標準サイズ */
+                line-height: 1.4 !important; /* 読みやすさ確保 */
+            }
+            </style>
+            """
+        )
         with gr.Row():
             with gr.Column(scale=4):
                 chatbot = gr.Chatbot(
                     label=lang_store[language].get("Chatbot", "Chatbot"),
                     type="messages",
                     height=400,
+                    elem_classes=["chatbot-output"],
+                    elem_id="chatbot",
                 )
                 with gr.Row():
                     msg = gr.Textbox(
