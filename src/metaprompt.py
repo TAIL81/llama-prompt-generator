@@ -24,7 +24,7 @@ class GroqConfig:
 
     metaprompt_model: str = "moonshotai/kimi-k2-instruct"
     max_tokens: int = 16384
-    temperature: float = 0.3
+    temperature: float = 0
 
 
 # 現在のスクリプトディレクトリとファイルパス
@@ -74,11 +74,20 @@ class MetaPrompt:
         prompt: str = self.metaprompt.replace("{{TASK}}", task).replace(
             "{{VARIABLES}}", variable_string
         )
-        prompt += '\n\nPlease provide the rewritten prompt in a JSON object with two keys: "prompt_template" and "variables". The "variables" key should contain a list of all variables found in the "prompt_template".'
-        prompt += "\nPlease use Japanese for rewriting."
+
+        system_content: str = (
+            "あなたはプロンプトの書き換え専用アシスタントです。"
+            "与えられた指示を日本語でテンプレート化し、出現する変数を抽出してください。"
+            '出力は必ず JSON オブジェクトのみで、キーは "prompt_template" と "variables" の2つのみを含めてください。'
+            '"variables" は "prompt_template" 内に現れるすべての変数名の配列（重複なし）とします。'
+            "説明文や余分なテキストは一切出力せず、厳密に JSON のみを返してください。"
+            "重要: variables の各要素は、ユーザーが与えた変数一覧（{{VARIABLES}} に相当）から派生した名前と厳密に一致させてください。"
+            "追加・改名・削除を行わず、テンプレート内の変数名もその一覧と完全一致にしてください。"
+        )
 
         messages: List[ChatCompletionMessageParam] = [
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": prompt},
         ]
 
         logger.debug("MetaPrompt リクエスト: %s", messages)
