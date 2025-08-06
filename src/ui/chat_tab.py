@@ -139,18 +139,21 @@ def create_chat_tab(config: Any):
               /* 左カラム内の配置: Chatbot を上、入力行を下に固定 */
               #chatbot {
                 min-height: 360px;
-                /* チャット本文のフォントサイズをやや小さく調整 */
-                font-size: 0.9rem !important; /* 0.9rem ≒ 14.4px (16px基準) */
+                /* 要望: 14px相当 */
+                font-size: 0.875rem !important; /* 14px (16px基準) */
                 line-height: 1.5 !important;
               }
-              /* 吹き出し内テキストも統一して小さめに */
+              /* 吹き出し内テキストも統一して14px相当に */
               #chatbot .message,
               #chatbot .bubble,
               #chatbot .prose,
               #chatbot .markdown,
               #chatbot p,
-              #chatbot li {
-                font-size: 0.9rem !important;
+              #chatbot li,
+              #chatbot code,
+              #chatbot pre,
+              #chatbot span {
+                font-size: 0.875rem !important; /* 14px */
                 line-height: 1.5 !important;
               }
               /* Chatbot 内部の上下で背景色が二分されるのを防ぐ（softテーマの段差補正） */
