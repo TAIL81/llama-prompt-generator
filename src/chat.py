@@ -27,6 +27,16 @@ logger = logging.getLogger(__name__)
 
 
 class ChatService:
+    # --- Default configuration values ---
+    DEFAULT_API_BASE = "https://api.groq.com/openai/v1"
+    DEFAULT_MODEL = "openai/gpt-oss-120b"
+    DEFAULT_MAX_RETRIES = 3
+    DEFAULT_RETRY_BACKOFF_BASE = 2.0
+    DEFAULT_CHARS_PER_TOKEN = 4.0
+    DEFAULT_PROMPT_PRICE = 0.0
+    DEFAULT_COMPLETION_PRICE = 0.0
+    DEFAULT_USAGE_LOG_PATH = "logs/chat_usage.jsonl"
+
     def _estimate_cost(self, usage: Dict[str, int]) -> float:
         """
         価格は 100万トークンあたりの USD を環境変数から受け取り、トークン数に比例計算。
@@ -82,10 +92,21 @@ class ChatService:
         except Exception:
             logger.exception("Failed to append usage log.")
 
+    def _get_env_var(self, key: str, default: Any, cast_type: type) -> Any:
+        """Get environment variable with type casting and error handling."""
+        value = os.getenv(key, default)
+        try:
+            return cast_type(value)
+        except (ValueError, TypeError):
+            logger.warning(
+                f"Invalid value for {key}: '{value}'. Using default: {default}"
+            )
+            return default
+
     def __init__(
         self,
-        max_retries: int = 3,
-        retry_backoff_base: float = 2.0,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        retry_backoff_base: float = DEFAULT_RETRY_BACKOFF_BASE,
     ):
         """
         ChatServiceを初期化します。
@@ -97,27 +118,29 @@ class ChatService:
         load_dotenv()
 
         self.api_key = os.getenv("GROQ_API_KEY")
-        self.api_base = os.getenv("OPENAI_API_BASE", "https://api.groq.com/openai/v1")
-        self.model = os.getenv("OPENAI_MODEL", "openai/gpt-oss-120b")
+        self.api_base = os.getenv("OPENAI_API_BASE", self.DEFAULT_API_BASE)
+        self.model = os.getenv("OPENAI_MODEL", self.DEFAULT_MODEL)
         self.api_version = os.getenv("OPENAI_API_VERSION")
 
-        self.max_retries = int(os.getenv("MAX_RETRIES", max_retries))
-        self.retry_backoff_base = float(
-            os.getenv("RETRY_BACKOFF_BASE", retry_backoff_base)
+        self.max_retries = self._get_env_var("MAX_RETRIES", max_retries, int)
+        self.retry_backoff_base = self._get_env_var(
+            "RETRY_BACKOFF_BASE", retry_backoff_base, float
         )
 
         self.client = self._create_client()
         # 概算トークン計測用の係数（文字数/トークン）
-        self.chars_per_token = float(os.getenv("TOKEN_CHARS_PER_TOKEN", "4.0"))
-        # コスト推定用（USD, 100万トークンあたり）
-        self.prompt_price_per_million = float(
-            os.getenv("PROMPT_PRICE_PER_MILLION", "0")
+        self.chars_per_token = self._get_env_var(
+            "TOKEN_CHARS_PER_TOKEN", self.DEFAULT_CHARS_PER_TOKEN, float
         )
-        self.completion_price_per_million = float(
-            os.getenv("COMPLETION_PRICE_PER_MILLION", "0")
+        # コスト推定用（USD, 100万トークンあたり）
+        self.prompt_price_per_million = self._get_env_var(
+            "PROMPT_PRICE_PER_MILLION", self.DEFAULT_PROMPT_PRICE, float
+        )
+        self.completion_price_per_million = self._get_env_var(
+            "COMPLETION_PRICE_PER_MILLION", self.DEFAULT_COMPLETION_PRICE, float
         )
         # ログ出力先
-        self.usage_log_path = os.getenv("USAGE_LOG_PATH", "logs/chat_usage.jsonl")
+        self.usage_log_path = os.getenv("USAGE_LOG_PATH", self.DEFAULT_USAGE_LOG_PATH)
 
     def _create_client(self) -> Optional[OpenAI]:
         """
@@ -221,7 +244,7 @@ class ChatService:
             extra_params["api_version"] = self.api_version
 
         # Groq-specific parameters
-        extra_params["reasoning_effort"] = "low"
+        extra_params["reasoning_effort"] = "medium"  # 中程度の推論努力
         extra_params["max_completion_tokens"] = 32766
 
         # ツールを追加
