@@ -5,6 +5,7 @@ import gradio as gr
 
 from src.ape import APE
 from src.metaprompt import MetaPrompt
+from src.ui.utils import notify_error
 
 
 def create_metaprompt_tab(component_manager, config):
@@ -156,14 +157,14 @@ def create_metaprompt_tab(component_manager, config):
                 # メタプロンプト出力：プロンプトテンプレート
                 prompt_result_meta = gr.Textbox(
                     label=lang_store[language]["MetaPrompt Output: Prompt Template"],
-                    lines=30,
+                    lines=16,  # 標準化
                     show_copy_button=True,
                     interactive=False,
                 )
                 # メタプロンプト出力：変数
                 variables_result_meta = gr.Textbox(
                     label=lang_store[language]["MetaPrompt Output: Variables"],
-                    lines=5,
+                    lines=16,  # 標準化
                     show_copy_button=True,
                     interactive=False,
                 )
@@ -171,7 +172,7 @@ def create_metaprompt_tab(component_manager, config):
                 # APE出力：プロンプトテンプレート
                 prompt_result_ape = gr.Textbox(
                     label=lang_store[language]["APE Output: Prompt Template"],
-                    lines=30,
+                    lines=16,  # 標準化
                     show_copy_button=True,
                     interactive=False,
                     scale=1,
@@ -179,7 +180,7 @@ def create_metaprompt_tab(component_manager, config):
                 # APE出力：変数
                 variables_result_ape = gr.Textbox(
                     label=lang_store[language]["APE Output: Variables"],
-                    lines=5,
+                    lines=16,  # 標準化
                     show_copy_button=True,
                     interactive=False,
                     scale=1,
@@ -187,8 +188,19 @@ def create_metaprompt_tab(component_manager, config):
 
         # イベントハンドラの登録
         # メタプロンプト生成ボタンがクリックされたときの処理
+        def _metaprompt_wrapper_guard(task: str, vars_str: str):
+            if not (task and task.strip()):
+                notify_error("タスクを入力してください。")
+                return "", "", "", ""
+            # 変数は空でも許容
+            try:
+                return metaprompt_wrapper(task, vars_str)
+            except Exception as e:
+                notify_error(f"メタプロンプトの生成中にエラーが発生しました: {e}")
+                return "メタプロンプトの生成に失敗しました。", "", "", ""
+
         metaprompt_button.click(
-            metaprompt_wrapper,
+            _metaprompt_wrapper_guard,
             inputs=[original_task, variables],
             outputs=[
                 prompt_result_meta,
@@ -212,8 +224,20 @@ def create_metaprompt_tab(component_manager, config):
         )
 
         # メタプロンプト出力に対してAPEを実行するボタンがクリックされたときの処理
+        def _ape_on_meta_guard(prompt_template: str, variables_str: str):
+            if not (prompt_template and prompt_template.strip()):
+                notify_error(
+                    "メタプロンプト出力（プロンプトテンプレート）が空です。先に生成してください。"
+                )
+                return "", variables_str
+            try:
+                return run_ape_on_metaprompt_output(prompt_template, variables_str)
+            except Exception as e:
+                notify_error(f"APE実行中にエラーが発生しました: {e}")
+                return "APEの実行に失敗しました。", variables_str
+
         ape_on_metaprompt_button.click(
-            run_ape_on_metaprompt_output,
+            _ape_on_meta_guard,
             inputs=[prompt_result_meta, variables_result_meta],
             outputs=[prompt_result_ape, variables_result_ape],
         )

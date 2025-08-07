@@ -1,6 +1,7 @@
-.venv/
+.gradio
+.pytest_cache
+.venv
+.vscode
+logs
 __pycache__
-temp/
-logs/
-.vscode/
-src/.env
+.env

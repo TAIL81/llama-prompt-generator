@@ -3,6 +3,7 @@ from typing import Tuple
 import gradio as gr
 
 from src.application.soe_prompt import SOEPrompt
+from src.ui.utils import notify_error
 
 
 def create_soe_tab(component_manager, config):
@@ -78,20 +79,61 @@ def create_soe_tab(component_manager, config):
                         scale=1,
                     )
 
-        # 生成された商品説明表示セクション
+        # 生成された商品説明表示セクション（標準化）
         with gr.Row():
             product_description = gr.Textbox(
                 label=config.lang_store[config.language][
                     "Generated Product Description"
                 ],
-                lines=10,
+                lines=16,  # 標準化
                 interactive=False,
+                show_copy_button=True,
             )
 
         # イベントハンドラを登録
+        # 入力検証付きラッパ
+        def _generate_wrapper(category, brand, usage, target, images):
+            if not (category and category.strip()):
+                notify_error("製品カテゴリを入力してください。")
+                return ""
+            if not (brand and brand.strip()):
+                notify_error("ブランド名を入力してください。")
+                return ""
+            if not (usage and usage.strip()):
+                notify_error("使用説明を入力してください。")
+                return ""
+            if not (target and target.strip()):
+                notify_error("ターゲット顧客を入力してください。")
+                return ""
+            # 画像/動画は任意。選択がある場合の軽微チェック（拡張子）
+            try:
+                files = images or []
+                # gr.UploadButton(file_count="multiple") は list で来る場合がある
+                if not isinstance(files, list):
+                    files = [files]
+                allowed_ext = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mov")
+                for f in files:
+                    fname = getattr(f, "name", None) or getattr(f, "orig_name", None) or ""
+                    if isinstance(f, dict):
+                        fname = f.get("name") or f.get("orig_name") or ""
+                    if fname and not fname.lower().endswith(allowed_ext):
+                        notify_error("アップロード可能な拡張子は画像/動画のみです。")
+                        return ""
+            except Exception:
+                # 取得不能時はサーバ側に委譲
+                pass
+
+            try:
+                return component_manager.get(SOEPrompt).generate_description(
+                    category, brand, usage, target, images
+                )
+            except Exception as e:
+                notify_error(f"商品説明の生成中にエラーが発生しました: {e}")
+                return ""
+
         # 商品説明生成ボタンがクリックされたときの処理
         generate_button.click(
-            component_manager.get(SOEPrompt).generate_description,
+            _generate_wrapper,
             inputs=[
                 product_category,
                 brand_name,

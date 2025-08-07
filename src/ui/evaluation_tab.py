@@ -3,6 +3,7 @@ from typing import Any, Dict, Tuple
 import gradio as gr
 
 from src.optimize import Alignment
+from src.ui.utils import notify_error
 
 # モデルの選択肢を定数として定義
 OPENAI_MODEL_CHOICES = [
@@ -147,8 +148,8 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                 label=config.lang_store[config.language][
                     "Original Prompt Output (OpenAI)"
                 ],
-                lines=3,
-                interactive=True,
+                lines=16,  # 標準化
+                interactive=False,  # 標準化
                 show_copy_button=True,
             )
             # Groqモデルの出力表示テキストボックス
@@ -156,13 +157,37 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                 label=config.lang_store[config.language][
                     "Evaluation Prompt Output (Groq)"
                 ],
-                lines=3,
-                interactive=False,
+                lines=16,  # 標準化
+                interactive=False,  # 標準化
                 show_copy_button=True,
             )
+
+            # 入力検証付きのラッパー
+            def _invoke_wrapper(
+                uo_r: str,
+                ue_r: str,
+                uo: str,
+                ue: str,
+                openai_model: str,
+                groq_model: str,
+            ):
+                if not (uo_r and uo_r.strip()):
+                    notify_error("元のプロンプトの置換結果が空です。変数置換を実行してください。")
+                    return "", ""
+                if not (ue_r and ue_r.strip()):
+                    notify_error("評価対象プロンプトの置換結果が空です。変数置換を実行してください。")
+                    return "", ""
+                try:
+                    return component_manager.get(Alignment).invoke_prompt(
+                        uo_r, ue_r, uo, ue, openai_model, groq_model
+                    )
+                except Exception as e:
+                    notify_error(f"実行中にエラーが発生しました: {e}")
+                    return "", ""
+
             # プロンプト実行イベント
             invoke_button.click(
-                component_manager.get(Alignment).invoke_prompt,
+                _invoke_wrapper,
                 inputs=[
                     user_prompt_original_replaced,
                     user_prompt_eval_replaced,
@@ -182,13 +207,13 @@ def create_evaluation_tab(component_manager: Any, config: Any):
                 placeholder=config.lang_store[config.language][
                     "Input your feedback manually or by model"
                 ],
-                lines=3,
+                lines=16,  # 標準化
                 show_copy_button=True,
             )
             # 改訂されたプロンプトの出力表示テキストボックス
             revised_prompt_output = gr.Textbox(
                 label=config.lang_store[config.language]["Revised Prompt"],
-                lines=3,
+                lines=16,  # 標準化
                 interactive=False,
                 show_copy_button=True,
             )

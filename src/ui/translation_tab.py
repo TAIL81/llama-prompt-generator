@@ -1,10 +1,10 @@
 from enum import Enum
-from typing import List, Tuple, cast
+from typing import Any, List, Tuple, cast
 
 import gradio as gr
 
 from src.translate import GuideBased
-from src.ui.utils import strip_wrapping_tags
+from src.ui.utils import notify_error, strip_wrapping_tags
 
 
 # 最適化レベルをEnumで定義し、マジックストリングを排除
@@ -32,20 +32,19 @@ def create_translation_tab(component_manager, config):
     language = config.language
     rewrite = component_manager.get(GuideBased)
 
-    def clear_translation_tab() -> Tuple[str, gr.Textbox, gr.Textbox, gr.Textbox]:
+    def clear_translation_tab() -> Tuple[str, Any, Any, Any]:
         """
         プロンプト翻訳タブのすべての入力フィールドと出力フィールドをクリアします。
 
         Returns:
-            Tuple[str, gr.Textbox, gr.Textbox, gr.Textbox]: クリアされたフィールドの空文字列タプルと、
-                                                           表示状態をリセットしたGradio Textboxコンポーネント。
+            Tuple[str, Any, Any, Any]: クリアされた値と可視性変更（gr.updateの辞書）を返す。
         """
         # 最初のテキストボックスのみ表示し、他は非表示にリセット
         return (
             "",
-            gr.Textbox(value="", visible=True),
-            gr.Textbox(value="", visible=False),
-            gr.Textbox(value="", visible=False),
+            gr.update(value="", visible=True),
+            gr.update(value="", visible=False),
+            gr.update(value="", visible=False),
         )
 
     def create_single_textbox(value: str) -> List[gr.Textbox]:
@@ -118,14 +117,17 @@ def create_translation_tab(component_manager, config):
             List[gr.components.Textbox]: 生成されたプロンプトを含むテキストボックスのリスト。
         """
         try:
+            if not original_prompt or not original_prompt.strip():
+                notify_error("元のプロンプトを入力してください。")
+                return create_single_textbox("")
             result = rewrite(
                 original_prompt
             )  # rewriteコンポーネントを使用してプロンプトを生成
             result = strip_wrapping_tags(result)  # UI出力前に余計なタグを除去
             return create_single_textbox(result)
         except Exception as e:
-            gr.Warning(f"Error: {e}")
-            return create_single_textbox("Failed to generate prompt.")
+            notify_error(f"エラーが発生しました: {e}")
+            return create_single_textbox("プロンプトの生成に失敗しました。")
 
     def generate_multiple_prompts_sequential(original_prompt: str) -> List[str]:
         """
@@ -138,13 +140,16 @@ def create_translation_tab(component_manager, config):
             List[str]: 生成されたプロンプト候補のリスト。
         """
         try:
+            if not original_prompt or not original_prompt.strip():
+                notify_error("元のプロンプトを入力してください。")
+                return [""] * 3
             candidates = [
                 strip_wrapping_tags(rewrite(original_prompt)) for _ in range(3)
             ]
             return candidates
         except Exception as e:
-            gr.Warning(f"Error: {e}")
-            return ["Failed to generate prompt."] * 3
+            notify_error(f"エラーが発生しました: {e}")
+            return ["プロンプトの生成に失敗しました。"] * 3
 
     def generate_prompt(original_prompt: str, level: str) -> List[gr.Textbox]:
         """

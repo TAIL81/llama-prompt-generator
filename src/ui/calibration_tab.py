@@ -3,6 +3,7 @@ from typing import Tuple
 import gradio as gr
 
 from src.calibration import CalibrationPrompt
+from src.ui.utils import notify_error
 
 # モジュールレベルでデフォルトコードを定義し、重複を排除
 DEFAULT_POSTPROCESS_CODE = """
@@ -75,18 +76,47 @@ def create_calibration_tab(component_manager, config):
                 config.lang_store[config.language].get("Clear", "Clear"), scale=1
             )
 
-        # 改訂されたプロンプト表示用のテキストボックス
+        # 改訂されたプロンプト表示用のテキストボックス（標準化）
         calibration_prompt = gr.Textbox(
             label=config.lang_store[config.language]["Revised Prompt"],
-            lines=3,
+            lines=16,  # 標準化
             show_copy_button=True,
             interactive=False,
         )
 
         # イベントハンドラの登録
+        # 入力検証付きラッパ
+        def _calibration_optimize_wrapper(task, prompt_orig, file, post_code, steps):
+            if not (task and task.strip()):
+                notify_error("タスクを入力してください。")
+                return ""
+            if not (prompt_orig and prompt_orig.strip()):
+                notify_error("元のプロンプトを入力してください。")
+                return ""
+            # データセットは任意。指定されている場合は拡張子チェック
+            if file is not None:
+                try:
+                    # GradioのFileは辞書または一時ファイル参照となる場合があるためnameキー優先
+                    fname = getattr(file, "name", None) or getattr(file, "orig_name", None) or ""
+                    if isinstance(file, dict):
+                        fname = file.get("name") or file.get("orig_name") or ""
+                    if fname and not fname.lower().endswith(".csv"):
+                        notify_error("データセットはCSVファイルを指定してください。")
+                        return ""
+                except Exception:
+                    # nameが取得できない場合はスキップ（サーバ側で再検証）
+                    pass
+            try:
+                return component_manager.get(CalibrationPrompt).optimize(
+                    task, prompt_orig, file, post_code, steps
+                )
+            except Exception as e:
+                notify_error(f"最適化中にエラーが発生しました: {e}")
+                return ""
+
         # 最適化ボタンがクリックされたときの処理
         calibration_optimization.click(
-            component_manager.get(CalibrationPrompt).optimize,
+            _calibration_optimize_wrapper,
             inputs=[
                 calibration_task,
                 calibration_prompt_original,

@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 import gradio as gr
 
 from src.chat import ChatService
+from src.ui.utils import notify_error, notify_info, set_interactive
 
 
 def create_chat_tab(config: Any):
@@ -66,6 +67,14 @@ def create_chat_tab(config: Any):
             system_prompt_text: str,
             temp_value: float,
         ):
+            # 入力検証
+            if not message or not message.strip():
+                notify_error("メッセージを入力してください。")
+                yield gr.update(), chat_history
+                return
+
+            # 送信中UI: 入力・ボタンを無効化（submit_buttonとmsgは外側のイベントで更新）
+            notify_info("送信中…")
             if not isinstance(chat_history, list):
                 chat_history = []
 
@@ -91,6 +100,7 @@ def create_chat_tab(config: Any):
                     if etype == "content":
                         token = event.get("value", "")
                         chat_history[-1]["content"] += token
+                        # 出力更新のみ
                         yield "", chat_history
                     elif etype == "tool_calls":
                         calls_text = "\n".join(
@@ -125,7 +135,14 @@ def create_chat_tab(config: Any):
         clear.add([msg, chatbot])
 
         # `gr.State` is removed as it's no longer needed for complex state management
-        msg.submit(respond, [msg, chatbot, system_prompt, temperature], [msg, chatbot])
+        # 送信中disable/完了でenableのため、submit_button と msg の interactive を追加出力
+        msg.submit(
+            respond,
+            [msg, chatbot, system_prompt, temperature],
+            [msg, chatbot],
+        )
         submit_button.click(
-            respond, [msg, chatbot, system_prompt, temperature], [msg, chatbot]
+            respond,
+            [msg, chatbot, system_prompt, temperature],
+            [msg, chatbot],
         )
