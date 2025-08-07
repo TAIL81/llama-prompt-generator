@@ -44,10 +44,8 @@ class AppConfig(BaseSettings):
     # アプリケーションの言語設定（デフォルトは日本語）
     language: str = Field(default="ja", validation_alias="LANGUAGE")
     # 翻訳ファイルのパス（デフォルトはスクリプトと同じディレクトリのtranslations.json）
-    TRANSLATIONS_PATH: str = Field(
-        default=os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "translations.json"
-        )
+    TRANSLATIONS_PATH: Path = Field(
+        default=Path(__file__).resolve().parent / "translations.json"
     )
     # 翻訳データを格納する辞書
     lang_store: Dict[str, Any] = {}
@@ -68,10 +66,8 @@ class AppConfig(BaseSettings):
             Dict[str, Any]: 読み込まれた翻訳データ。エラーが発生した場合は空の辞書。
         """
         try:
-            with open(self.TRANSLATIONS_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+            return json.loads(self.TRANSLATIONS_PATH.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            # 翻訳ファイルが見つからない場合のエラーログ
             logging.error(f"翻訳ファイルが見つかりません: {self.TRANSLATIONS_PATH}")
             return {}
         except json.JSONDecodeError as e:
@@ -311,16 +307,15 @@ with gr.Blocks(
     create_chat_tab(config)
 
 
-def kill_child_processes(parent_pid, sig=signal.SIGTERM):
+def kill_child_processes(parent_pid: int, sig=signal.SIGTERM) -> None:
     """指定されたPIDの子プロセスをすべて終了させる"""
     try:
         parent = psutil.Process(parent_pid)
-        children = parent.children(recursive=True)
-        for child in children:
+        for child in parent.children(recursive=True):
             print(f"子プロセス {child.pid} を終了します")
             child.send_signal(sig)
     except psutil.NoSuchProcess:
-        return  # 親プロセスがすでに存在しない場合は何もしない
+        return
 
 
 # シグナルハンドラ
@@ -340,7 +335,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 # スクリプトが直接実行された場合にGradioアプリケーションを起動
 if __name__ == "__main__":
-    load_dotenv()  # .envファイルから環境変数をロード
+    load_dotenv(Path(__file__).parent.parent / ".env")  # pathlib で .env を指定
     try:
         # Gradioアプリを起動し、サーバーインスタンスを取得
         app, local_url, share_url = demo.launch(ssr_mode=True, share=True)

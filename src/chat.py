@@ -244,7 +244,7 @@ class ChatService:
             extra_params["api_version"] = self.api_version
 
         # Groq-specific parameters
-        extra_params["reasoning_effort"] = "medium"  # 中程度の推論努力
+        extra_params["reasoning_effort"] = "low"  # 推論努力
         extra_params["max_completion_tokens"] = 32766
 
         # ツールを追加

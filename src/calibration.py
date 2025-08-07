@@ -24,63 +24,54 @@ logger = logging.getLogger(__name__)
 
 from src.safe_executor import SafeCodeExecutor
 
-# スクリプト (calibration.py) が置かれているディレクトリの絶対パス
-_CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# スクリプトディレクトリ（pathlib）
+_CURRENT_SCRIPT_DIR = Path(__file__).resolve().parent
 
+# プロジェクトルート（srcの親）
+_PROJECT_ROOT_DIR = _CURRENT_SCRIPT_DIR.parent
 
-# プロジェクトのルートディレクトリ (srcディレクトリの親)
-_PROJECT_ROOT_DIR = os.path.dirname(_CURRENT_SCRIPT_DIR)
+# prompt ディレクトリへのパス
+_PROMPT_DIR = _CURRENT_SCRIPT_DIR / "prompt"
 
-# promptディレクトリへのパス
-_PROMPT_DIR = os.path.join(_CURRENT_SCRIPT_DIR, "prompt")
+# temp ディレクトリへのパス (src/temp)
+_TEMP_DIR_PATH = _CURRENT_SCRIPT_DIR / "temp"
 
-# tempディレクトリへのパス (src/temp)
-_TEMP_DIR_PATH = os.path.join(_CURRENT_SCRIPT_DIR, "temp")
+# 各プロンプトファイルへのパス
+_ERROR_ANALYSIS_PROMPT_PATH = _PROMPT_DIR / "error_analysis_classification.prompt"
+_STEP_PROMPT_PATH = _PROMPT_DIR / "step_prompt_classification.prompt"
+_PROMPT_GUIDE_SHORT_PATH = _PROMPT_DIR / "prompt_guide_short.prompt"
 
-# 各プロンプトファイルへの絶対パス
-_ERROR_ANALYSIS_PROMPT_PATH = os.path.join(
-    _PROMPT_DIR, "error_analysis_classification.prompt"
-)
-_STEP_PROMPT_PATH = os.path.join(_PROMPT_DIR, "step_prompt_classification.prompt")
-_PROMPT_GUIDE_SHORT_PATH = os.path.join(_PROMPT_DIR, "prompt_guide_short.prompt")
-# 各プロンプトファイルを読み込みます
-with open(_ERROR_ANALYSIS_PROMPT_PATH, encoding="utf-8") as f:
-    error_analysis_prompt = f.read()
-with open(_STEP_PROMPT_PATH, encoding="utf-8") as f:
-    step_prompt = f.read()
-with open(_PROMPT_GUIDE_SHORT_PATH, encoding="utf-8") as f:
-    prompt_guide_short = f.read()
+# 各プロンプトファイルを読み込みます（pathlib）
+error_analysis_prompt = _ERROR_ANALYSIS_PROMPT_PATH.read_text(encoding="utf-8")
+step_prompt = _STEP_PROMPT_PATH.read_text(encoding="utf-8")
+prompt_guide_short = _PROMPT_GUIDE_SHORT_PATH.read_text(encoding="utf-8")
 
 
 # プロンプトキャリブレーションを行うクラス
 class CalibrationPrompt:
     def __init__(self) -> None:
         # metaprompt.txt への絶対パス (srcディレクトリ内にあると仮定)
-        _METAPROMPT_PATH = os.path.join(_CURRENT_SCRIPT_DIR, "metaprompt.txt")
-        with open(_METAPROMPT_PATH, encoding="utf-8") as f:
-            self.metaprompt = f.read()
-        # Groq APIキーを環境変数から取得し、クライアントを初期化します
+        _METAPROMPT_PATH = _CURRENT_SCRIPT_DIR / "metaprompt.txt"
+        self.metaprompt = _METAPROMPT_PATH.read_text(encoding="utf-8")
+
+        # tempディレクトリを作成
+        _TEMP_DIR_PATH.mkdir(parents=True, exist_ok=True)
+
+        # Groq APIキーでクライアント初期化
         groq_api_key = os.getenv("GROQ_API_KEY")
-        # tempディレクトリを作成 (存在しない場合のみ)
-        os.makedirs(_TEMP_DIR_PATH, exist_ok=True)
         try:
             self.groq_client = Groq(api_key=groq_api_key)
         except Exception as e:
             logger.error("Groq クライアント初期化に失敗しました: %s", e)
             raise
-        self.safe_code_executor = (
-            SafeCodeExecutor()
-        )  # SafeCodeExecutorのインスタンスを作成
-        groq_api_key = os.getenv("GROQ_API_KEY")
+
+        # 2重初期化されていた安全実行器を1度だけ生成
+        self.safe_code_executor = SafeCodeExecutor()
+
+        # APIキー検証（重複していたチェックを整理）
         if not groq_api_key:
             logger.error("GROQ_API_KEY 環境変数が設定されていません。")
             raise ValueError("GROQ_API_KEY 環境変数が設定されていません。")
-        # tempディレクトリを作成 (存在しない場合のみ)
-        os.makedirs(_TEMP_DIR_PATH, exist_ok=True)
-        self.groq_client = Groq(api_key=groq_api_key)
-        self.safe_code_executor = (
-            SafeCodeExecutor()
-        )  # SafeCodeExecutorのインスタンスを作成
 
     def invoke_model(self, prompt: str, model: str = "scout") -> str:
         """
@@ -226,12 +217,12 @@ class CalibrationPrompt:
         if return_df:
             return df
         timestr = time.strftime("%Y%m%d-%H%M%S")
-        temp_file_path = os.path.join(_TEMP_DIR_PATH, f"predict_{timestr}.csv")
+        temp_file_path = _TEMP_DIR_PATH / f"predict_{timestr}.csv"
         df.to_csv(temp_file_path, index=False)
-        logger.info("予測結果を出力: %s", temp_file_path)
+        logger.info("予測結果を出力: %s", str(temp_file_path))
         return gr.DownloadButton(
             label=f"Download predict result (predict_{timestr}.csv)",
-            value=pathlib.Path(temp_file_path),
+            value=temp_file_path,
             visible=True,
         )
 
@@ -328,9 +319,11 @@ class CalibrationPrompt:
         cur_dataset_with_predictions = output
         score = self.eval_score(cur_dataset_with_predictions)
         timestr = time.strftime("%Y%m%d-%H%M%S")
-        temp_file_path = os.path.join(_TEMP_DIR_PATH, f"predict_{timestr}.csv")
+        temp_file_path = _TEMP_DIR_PATH / f"predict_{timestr}.csv"
         cur_dataset_with_predictions.to_csv(temp_file_path, index=False)
-        logger.info("最適化ステップ出力を保存: %s (score=%.4f)", temp_file_path, score)
+        logger.info(
+            "最適化ステップ出力を保存: %s (score=%.4f)", str(temp_file_path), score
+        )
         return {
             "cur_prompt": cur_prompt,
             "score": score,

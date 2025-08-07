@@ -3,6 +3,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Union
 
 import groq
@@ -14,7 +15,7 @@ from groq.types.chat.completion_create_params import ResponseFormat
 from src.rater import Rater
 
 # .env 読み込み（アプリ側と二重設定しない前提で軽量に実行）
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # モジュールロガー（basicConfigはアプリ側で設定）
 logger = logging.getLogger(__name__)
@@ -62,15 +63,14 @@ class GroqConfig:
 
 
 # --- 初期化処理 ---
-current_script_path = os.path.dirname(os.path.abspath(__file__))
-prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
+current_script_dir = Path(__file__).resolve().parent
+prompt_guide_path = current_script_dir / "PromptGuide.md"
 
 
 @lru_cache(maxsize=1)
-def load_prompt_guide(path: str) -> str:
+def load_prompt_guide(path: Path) -> str:
     """PromptGuide.md を読み込み、キャッシュする。"""
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+    return path.read_text(encoding="utf-8")
 
 
 PromptGuide = load_prompt_guide(prompt_guide_path)

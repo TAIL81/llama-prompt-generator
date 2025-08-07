@@ -48,31 +48,29 @@ class GroqConfig:
         "meta-llama/llama-4-scout-17b-16e-instruct"  # プロンプト書き換えに使用するモデル
     )
     detect_lang_model: str = "llama-3.1-8b-instant"  # 言語検出に使用するモデル
-    judge_model: str = "llama-3.1-8b-instant"  # 評価に使用するモデル
+    judge_model: str = "llama-3.3-70b-versatile"  # 評価に使用するモデル
     max_tokens: int = 8192  # モデルからの応答の最大トークン数
     reasoning_effort: Literal["none", "default"] = (
-        "none"  # "default" for thinking, "none" for non-thinking
+        "default"  # "default" for thinking, "none" for non-thinking
     )
     temperature_rewrite: float = 0.7
     top_p_rewrite: float = 1.0
     temperature_detect_lang: float = 0.0
     temperature_judge: float = 0.0
-    translate_model: str = "llama-3.1-8b-instant"  # 翻訳に使用するモデル
 
 
-# 現在のスクリプトが配置されているディレクトリを取得します
-current_script_path = os.path.dirname(os.path.abspath(__file__))
-# PromptGuide.md へのフルパスを構築します
-prompt_guide_path = os.path.join(current_script_path, "PromptGuide.md")
+# 現在のスクリプトが配置されているディレクトリ（pathlib 化）
+current_script_dir = Path(__file__).resolve().parent
+# PromptGuide.md へのフルパス（pathlib 化）
+prompt_guide_path = current_script_dir / "PromptGuide.md"
 
 
 @lru_cache(maxsize=1)
-def load_prompt_guide(path: str) -> str:
+def load_prompt_guide(path: Path) -> str:
     """
     PromptGuide.md ファイルを読み込み、キャッシュします。
     """
-    with open(path, "r", encoding="utf-8") as f:  # ファイルを読み込みモードで開く
-        return f.read()
+    return path.read_text(encoding="utf-8")
 
 
 PromptGuide = load_prompt_guide(prompt_guide_path)  # プロンプトガイドの内容を読み込む

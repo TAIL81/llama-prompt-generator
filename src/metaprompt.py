@@ -11,7 +11,7 @@ from groq import Groq
 from groq.types.chat import ChatCompletionMessageParam
 
 # .env 読み込み（アプリ側と二重設定しない前提で軽量に実行）
-env_path = Path(__file__).parent.parent / ".env"
+env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(env_path)
 
 # モジュールロガー（basicConfigはアプリ側で設定）
@@ -27,16 +27,15 @@ class GroqConfig:
     temperature: float = 0
 
 
-# 現在のスクリプトディレクトリとファイルパス
-current_script_path = os.path.dirname(os.path.abspath(__file__))
-metaprompt_txt_path = os.path.join(current_script_path, "metaprompt.txt")
+# 現在のスクリプトディレクトリとファイルパス（pathlib で統一）
+current_script_dir = Path(__file__).resolve().parent
+metaprompt_txt_path = current_script_dir / "metaprompt.txt"
 
 
 @lru_cache(maxsize=1)
-def load_metaprompt_content(path: str) -> str:
+def load_metaprompt_content(path: Path) -> str:
     """metaprompt.txt を読み込みキャッシュする。"""
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+    return path.read_text(encoding="utf-8")
 
 
 class MetaPrompt:
