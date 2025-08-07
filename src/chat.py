@@ -5,37 +5,10 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Generator, Iterable, Iterator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, Iterable, List, Optional, Union
 
+import requests
 from dotenv import load_dotenv
-from openai import (
-    APIConnectionError,
-    APIError,
-    APITimeoutError,
-    AuthenticationError,
-    BadRequestError,
-    OpenAI,
-    RateLimitError,
-)
-from openai.types.chat import (
-    ChatCompletionContentPartImageParam,
-    ChatCompletionContentPartInputAudioParam,
-    ChatCompletionContentPartRefusalParam,
-    ChatCompletionContentPartTextParam,
-    ChatCompletionMessageParam,
-)
-from openai.types.chat.chat_completion_chunk import (
-    ChatCompletionChunk,
-    ChoiceDelta,
-    ChoiceDeltaToolCall,
-    ChoiceDeltaToolCallFunction,
-)
-from openai.types.chat.chat_completion_content_part_param import (
-    ChatCompletionContentPartParam,
-)
-
-# ChatCompletionMessageToolCall, ChatCompletionMessageToolCallFunction は存在しない環境があるため削除
-# TypedDict も未使用のため削除
 
 logger = logging.getLogger(__name__)
 
@@ -59,16 +32,18 @@ class ChatService:
         load_dotenv()
 
         self.api_key = os.getenv("GROQ_API_KEY")
-        self.api_base = os.getenv("OPENAI_API_BASE", self.DEFAULT_API_BASE)
-        self.model = os.getenv("OPENAI_MODEL", self.DEFAULT_MODEL)
-        self.api_version = os.getenv("OPENAI_API_VERSION")
+        # GroqはOpenAI互換エンドポイントだが、baseは環境変数で上書き可能
+        self.api_base = os.getenv("GROQ_API_BASE", self.DEFAULT_API_BASE)
+        # モデル名はGroqのデフォルトを設定（必要に応じて環境変数で上書き）
+        self.model = os.getenv("GROQ_MODEL", self.DEFAULT_MODEL)
+        # 任意: バージョンをクエリで付ける
+        self.api_version = os.getenv("GROQ_API_VERSION")
 
         self.max_retries = self._get_env_var("MAX_RETRIES", max_retries, int)
         self.retry_backoff_base = self._get_env_var(
             "RETRY_BACKOFF_BASE", retry_backoff_base, float
         )
 
-        self.client = self._create_client()
         self.chars_per_token = self._get_env_var(
             "TOKEN_CHARS_PER_TOKEN", self.DEFAULT_CHARS_PER_TOKEN, float
         )
@@ -80,6 +55,12 @@ class ChatService:
         )
         self.usage_log_path = os.getenv("USAGE_LOG_PATH", self.DEFAULT_USAGE_LOG_PATH)
 
+        # HTTP session
+        self.session = self._create_session()
+
+        # 内部バッファ
+        self._last_full_response_text: str = ""
+
     def _get_env_var(self, key: str, default: Any, cast_type: type) -> Any:
         value = os.getenv(key, default)
         try:
@@ -90,10 +71,17 @@ class ChatService:
             )
             return default
 
-    def _create_client(self) -> Optional[OpenAI]:
+    def _create_session(self) -> Optional[requests.Session]:
         if not self.api_key:
             return None
-        return OpenAI(api_key=self.api_key, base_url=self.api_base)
+        s = requests.Session()
+        s.headers.update(
+            {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+        )
+        return s
 
     def _estimate_cost(self, usage: Dict[str, int]) -> float:
         prompt_rate = self.prompt_price_per_million / 1_000_000.0
@@ -126,6 +114,8 @@ class ChatService:
         history_count: int,
         error_message: Optional[str] = None,
     ) -> None:
+        import hashlib
+
         system_prompt_hash = hashlib.sha256(
             (system_prompt or "").encode("utf-8")
         ).hexdigest()
@@ -144,9 +134,8 @@ class ChatService:
             return 0
         return max(1, int(len(text) / self.chars_per_token))
 
-    def _num_tokens_from_messages(
-        self, messages: List[ChatCompletionMessageParam]
-    ) -> int:
+    def _num_tokens_from_messages(self, messages: List[Dict[str, Any]]) -> int:
+        # 既存の概算ロジックを維持（OpenAI推定式の近似）
         num_tokens = 0
         for message in messages:
             num_tokens += 4
@@ -157,89 +146,124 @@ class ChatService:
                     num_tokens -= 1
         return num_tokens + 3
 
-    def _prepare_api_params(
+    def _prepare_api_payload(
         self,
+        *,
+        messages: List[Dict[str, Any]],
+        temperature: float,
         tools: Optional[List[Dict[str, Any]]],
-        tool_choice: Optional[str],
+        tool_choice: Optional[Union[str, Dict[str, Any]]],
     ) -> Dict[str, Any]:
-        params: Dict[str, Any] = {}
-        if self.api_version:
-            params["api_version"] = self.api_version
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
 
-        params["reasoning_effort"] = "low"
-        params["max_completion_tokens"] = 32766
+        # Groq拡張: reasoning_effort, max_completion_tokens
+        payload["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "low")
+        payload["max_completion_tokens"] = int(
+            os.getenv("GROQ_MAX_COMPLETION_TOKENS", "32766")
+        )
 
+        # tools と tool_choice はOpenAI互換形式でGroqも対応
         if tools is None:
-            params["tools"] = [
+            payload["tools"] = [
                 {"type": "browser_search"},
                 {"type": "code_interpreter"},
             ]
-            params["tool_choice"] = "auto"
+            payload["tool_choice"] = "auto"
         else:
-            params["tools"] = tools
+            payload["tools"] = tools
             if tool_choice:
-                params["tool_choice"] = tool_choice
-        return params
+                payload["tool_choice"] = tool_choice
 
-    def _process_stream(
-        self, stream: Iterable[ChatCompletionChunk]
-    ) -> Generator[Dict[str, Any], None, Dict[str, Any]]:
-        full_response_content = ""
+        return payload
+
+    def _parse_sse_stream(
+        self, resp: requests.Response
+    ) -> Generator[Dict[str, Any], None, None]:
+        """
+        Groq Chat CompletionsのSSEを逐次パースして、以下のイベントをyield:
+        - {"type": "content", "value": str}
+        - {"type": "tool_calls", "value": List[...]}  // function呼び出しが完了したタイミングでまとめて
+        - {"type": "error", "value": str}            // 受信中にJSONデコード等で問題があれば
+        """
         collected_tool_calls: Dict[int, Dict[str, Any]] = {}
+        full_response_parts: List[str] = []
 
-        for chunk in stream:
-            # OpenAI SDK の型は Union/Optional を含むため、適切にガードしつつ処理する
-            chunk = cast(ChatCompletionChunk, chunk)
-            delta: ChoiceDelta = chunk.choices[0].delta  # type: ignore[assignment]
+        for raw in resp.iter_lines(decode_unicode=True):
+            if not raw:
+                continue
+            if raw.startswith("data: "):
+                data = raw[len("data: ") :]
+            elif raw.startswith("data:"):
+                data = raw[len("data:") :].lstrip()
+            else:
+                continue
 
-            # content は Optional[str]。存在し、かつ str の場合だけ扱う（TypedDict バリアント警告を回避）
-            content_val = getattr(delta, "content", None)
-            if isinstance(content_val, str):
-                full_response_content += content_val
-                yield {"type": "content", "value": content_val}
+            if data == "[DONE]":
+                if collected_tool_calls:
+                    yield {
+                        "type": "tool_calls",
+                        "value": list(collected_tool_calls.values()),
+                    }
+                break
 
-            # tool_calls は Optional[List[ChoiceDeltaToolCall]]。存在する場合のみ処理
-            tool_calls: Optional[List[ChoiceDeltaToolCall]] = getattr(delta, "tool_calls", None)  # type: ignore[assignment]
-            if tool_calls:
-                for tc_chunk in tool_calls:
-                    idx = getattr(tc_chunk, "index", 0)
-                    if idx not in collected_tool_calls:
-                        collected_tool_calls[idx] = {
-                            "id": getattr(tc_chunk, "id", ""),
-                            "type": "function",
-                            "function": {
-                                "name": "",
-                                "arguments": "",
-                            },
-                        }
-                    # function は ChoiceDeltaToolCallFunction | None
-                    fn: Optional[ChoiceDeltaToolCallFunction] = getattr(tc_chunk, "function", None)  # type: ignore[assignment]
-                    if fn:
-                        name_val = getattr(fn, "name", None)
+            try:
+                obj = json.loads(data)
+            except json.JSONDecodeError:
+                yield {"type": "error", "value": f"JSON decode error: {data[:200]}..."}
+                continue
+
+            try:
+                choices = obj.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+
+                content_val = delta.get("content")
+                if isinstance(content_val, str) and content_val:
+                    full_response_parts.append(content_val)
+                    yield {"type": "content", "value": content_val}
+
+                tool_calls = delta.get("tool_calls")
+                if isinstance(tool_calls, list):
+                    for tc in tool_calls:
+                        idx = tc.get("index", 0)
+                        if idx not in collected_tool_calls:
+                            collected_tool_calls[idx] = {
+                                "id": tc.get("id", ""),
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        fn = tc.get("function") or {}
+                        name_val = fn.get("name")
                         if isinstance(name_val, str):
                             collected_tool_calls[idx]["function"]["name"] = name_val
-                        args_val = getattr(fn, "arguments", None)
+                        args_val = fn.get("arguments")
                         if isinstance(args_val, str):
                             collected_tool_calls[idx]["function"][
                                 "arguments"
                             ] += args_val
+            except Exception as e:
+                yield {"type": "error", "value": f"SSE parse error: {str(e)}"}
+                continue
 
-        if collected_tool_calls:
-            yield {"type": "tool_calls", "value": list(collected_tool_calls.values())}
-
-        return {"full_response_content": full_response_content}
+        self._last_full_response_text = "".join(full_response_parts)
 
     def chat_completion_stream(
         self,
-        messages: List[ChatCompletionMessageParam],
+        messages: List[Dict[str, Any]],
         temperature: float,
         tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> Generator[Dict[str, Any], None, Dict[str, Any]]:
-        if not self.client:
+        if not self.session:
             yield {
                 "type": "error",
-                "value": "[エラー] OpenAIクライアントが初期化されていません。APIキーを確認してください。",
+                "value": "[エラー] Groqクライアントが初期化されていません。GROQ_API_KEYを設定してください。",
             }
             return {
                 "usage": {
@@ -251,127 +275,95 @@ class ChatService:
             }
 
         prompt_tokens = self._num_tokens_from_messages(messages)
-        # system_prompt は str 前提でログに渡すため、str へ正規化
+
+        # system_promptはstr想定に正規化
         raw_system_prompt = next(
             (m.get("content", "") for m in messages if m.get("role") == "system"), ""
         )
         if isinstance(raw_system_prompt, str):
             system_prompt = raw_system_prompt
-        elif raw_system_prompt is None:
-            system_prompt = ""
         else:
-            # Iterable[ChatCompletionContentPartParam] の可能性を想定し、text を抽出
-            parts: List[str] = []
+            # 配列やその他は単純化してテキスト連結（SDKに依存せず安全に）
             try:
-                for part in cast(
-                    Iterable[ChatCompletionContentPartParam], raw_system_prompt
-                ):
+                parts: List[str] = []
+                for part in raw_system_prompt or []:
                     if isinstance(part, dict):
-                        # dict 形の場合は text を優先（Pylance 型明示）
-                        part_dict = cast(Dict[str, Any], part)
-                        txt = part_dict.get("text")
+                        txt = part.get("text")
                         if isinstance(txt, str):
                             parts.append(txt)
-                    else:
-                        # 型クラスの場合: type 属性で分岐
-                        ptype = getattr(part, "type", None)
-                        if ptype == "text":
-                            txt2 = getattr(part, "text", None)
-                            if isinstance(txt2, str):
-                                parts.append(txt2)
                 system_prompt = " ".join(parts)
             except Exception:
                 system_prompt = ""
         history_count = sum(1 for m in messages if m.get("role") == "user")
 
-        api_params = self._prepare_api_params(tools, tool_choice)
+        payload = self._prepare_api_payload(
+            messages=messages,
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+
+        params = {}
+        if self.api_version:
+            params["api_version"] = self.api_version
+
+        url = f"{self.api_base.rstrip('/')}/chat/completions"
 
         for attempt in range(self.max_retries):
             try:
-                stream = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
+                resp = self.session.post(
+                    url,
+                    params=params,
+                    data=json.dumps(payload),
                     stream=True,
-                    temperature=temperature,
-                    **api_params,
+                    timeout=600,
                 )
 
-                stream_processor = self._process_stream(stream)
-                final_stream_result = {}
-                for event in stream_processor:
-                    yield event
-                    if event.get("type") == "content":
-                        # This is a bit of a hack to get the final result from the generator
-                        # A better approach might be to have the generator return a final value
-                        pass
-
-                # The generator _process_stream should return the final result
-                # but since it's a generator, we can't get the return value directly.
-                # Let's assume the last yielded value is the final result.
-                # A better implementation would use a different pattern.
-                # For now, we will re-implement the logic to get the full response.
-
-                # Re-creating stream to get full response, this is inefficient.
-                stream_for_full_response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    stream=True,
-                    temperature=temperature,
-                    **api_params,
-                )
-                # content 文字列だけを安全に連結（TypedDict バリアントに依存しない）
-                parts: List[str] = []
-                for ch in stream_for_full_response:
-                    # choices は Optional の可能性があるためガード
-                    choices = getattr(ch, "choices", None)
-                    if not choices:
-                        continue
-                    first = choices[0]
-                    # delta は Pydantic BaseModel/TypedDict なので文字列化で厳密型チェックを回避しつつテキストのみ抽出
-                    delta_any: Any = getattr(first, "delta", None)  # type: ignore[assignment]
-                    if not delta_any:
-                        continue
-                    # BaseModel なら model_dump で辞書化、そうでなければ __dict__ / asdict 相当を試す
-                    to_dict = getattr(delta_any, "model_dump", None)
-                    delta_dict_any: Any
-                    if callable(to_dict):
-                        delta_dict_any = to_dict()
-                    elif hasattr(delta_any, "__dict__"):
-                        delta_dict_any = delta_any.__dict__
+                # エラーステータスは本文を読みつつ適切に処理
+                if resp.status_code >= 400:
+                    try:
+                        err_json = resp.json()
+                        message = err_json.get("error", {}).get(
+                            "message", json.dumps(err_json, ensure_ascii=False)
+                        )
+                    except Exception:
+                        message = f"HTTP {resp.status_code}: {resp.text[:500]}"
+                    yield {"type": "error", "value": message}
+                    # 4xxは致命的、429のみリトライ対象にしても良いがここではstatusで判別
+                    if resp.status_code in (429, 408, 409, 425, 500, 502, 503, 504):
+                        # リトライ可能とみなす
+                        raise RuntimeError(message)
                     else:
-                        try:
-                            delta_dict_any = dict(delta_any)
-                        except Exception:
-                            delta_dict_any = {}
-                    # Pylance 対策: 明示的に Dict[str, Any] へキャストしつつ、dict でなければスキップ
-                    if not isinstance(delta_dict_any, dict):
-                        continue
-                    delta_dict = cast(Dict[str, Any], delta_dict_any)
-                    content_val = delta_dict.get("content")
-                    if isinstance(content_val, str):
-                        parts.append(content_val)
-                    elif isinstance(content_val, list):
-                        # まれに content が parts の配列になる SDK 実装に対応
-                        for p in content_val:
-                            if isinstance(p, str):
-                                parts.append(p)
-                            elif isinstance(p, dict):
-                                # dict のときのみ .get を使用（Pylance への型明示）
-                                p_dict = cast(Dict[str, Any], p)
-                                txt = p_dict.get("text")
-                                if isinstance(txt, str):
-                                    parts.append(txt)
-                            elif hasattr(p, "text"):
-                                # dict 以外では .get は使用しない。text 属性のみ参照する
-                                txt_attr = getattr(p, "text", None)
-                                if isinstance(txt_attr, str):
-                                    parts.append(txt_attr)
-                            # それ以外の型は無視
-                        # 上記以外の要素は無視
-                full_response_content = "".join(parts)
+                        # 非リトライ
+                        self._log_api_result(
+                            success=False,
+                            model=self.model,
+                            usage={
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": 0,
+                                "total_tokens": prompt_tokens,
+                            },
+                            cost_usd=0.0,
+                            system_prompt=system_prompt,
+                            history_count=history_count,
+                            error_message=message,
+                        )
+                        return {
+                            "usage": {
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": 0,
+                                "total_tokens": prompt_tokens,
+                            },
+                            "cost_usd": 0.0,
+                        }
 
+                # ストリームを逐次処理
+                for event in self._parse_sse_stream(resp):
+                    yield event
+
+                # ストリーム終了後にusage推定
                 completion_tokens = self._estimate_tokens_from_text(
-                    full_response_content
+                    self._last_full_response_text
                 )
                 usage = {
                     "prompt_tokens": prompt_tokens,
@@ -388,23 +380,12 @@ class ChatService:
                     system_prompt=system_prompt,
                     history_count=history_count,
                 )
-                logger.info(
-                    f"Request successful. Token usage: {usage}, cost_usd: {cost_usd:.8f}"
-                )
                 return {"usage": usage, "cost_usd": cost_usd}
 
-            except (AuthenticationError, BadRequestError) as e:
-                error_msg = f"[{type(e).__name__}] {getattr(e, 'message', str(e))}"
-                logger.error(f"Fatal API error: {error_msg}")
-                yield {"type": "error", "value": error_msg}
-                break
-
-            except (RateLimitError, APITimeoutError, APIConnectionError, APIError) as e:
+            except (requests.Timeout, requests.ConnectionError) as e:
+                # 最終試行で失敗したらログして終了
                 if attempt >= self.max_retries - 1:
-                    error_msg = f"[{type(e).__name__}] {getattr(e, 'message', str(e))}"
-                    logger.error(
-                        f"API error after {self.max_retries} attempts: {error_msg}"
-                    )
+                    msg = f"[{type(e).__name__}] {str(e)}"
                     self._log_api_result(
                         success=False,
                         model=self.model,
@@ -416,16 +397,37 @@ class ChatService:
                         cost_usd=0.0,
                         system_prompt=system_prompt,
                         history_count=history_count,
-                        error_message=error_msg,
+                        error_message=msg,
                     )
-                    yield {"type": "error", "value": error_msg}
+                    yield {"type": "error", "value": msg}
                     break
                 wait_time = self.retry_backoff_base ** (attempt + 1)
                 logger.warning(
-                    f"API error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds..."
+                    f"Network error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds..."
                 )
                 time.sleep(wait_time)
-
+            except RuntimeError as e:
+                # 上でHTTPエラーをRuntimeErrorへラップしている場合のリトライ
+                if attempt >= self.max_retries - 1:
+                    msg = f"[HTTPError] {str(e)}"
+                    self._log_api_result(
+                        success=False,
+                        model=self.model,
+                        usage={
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": 0,
+                            "total_tokens": prompt_tokens,
+                        },
+                        cost_usd=0.0,
+                        system_prompt=system_prompt,
+                        history_count=history_count,
+                        error_message=msg,
+                    )
+                    yield {"type": "error", "value": msg}
+                    break
+                wait_time = self.retry_backoff_base ** (attempt + 1)
+                logger.warning(f"HTTP error. Retrying in {wait_time:.2f} seconds...")
+                time.sleep(wait_time)
             except Exception as e:
                 logger.exception("An unexpected error occurred.")
                 error_msg = f"[不明なエラー] {str(e)}"
