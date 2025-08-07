@@ -7,7 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Generator, Iterable, List, Optional, Union
 
-import requests
+import openai
+from openai.types.responses import Response  # type: ignore
+from openai import NotGiven  # type: ignore
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -63,8 +65,8 @@ class ChatService:
         )
         self.usage_log_path = os.getenv("USAGE_LOG_PATH", self.DEFAULT_USAGE_LOG_PATH)
 
-        # HTTP session
-        self.session = self._create_session()
+        # OpenAI互換クライアント (Groq)
+        self.client = self._create_client()
 
         # 最後の完全な応答テキストを保持する内部バッファ
         self._last_full_response_text: str = ""
@@ -81,19 +83,20 @@ class ChatService:
             )
             return default
 
-    def _create_session(self) -> Optional[requests.Session]:
-        """HTTPセッションを作成し、APIキーをヘッダーに設定する。"""
+    def _create_client(self):
+        """OpenAI互換クライアントを作成（GroqのResponses APIを使用）。"""
         if not self.api_key:
             return None
-        s = requests.Session()
-        s.headers.update(
-            # 認証ヘッダーとコンテンツタイプを設定
-            {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-        )
-        return s
+        # openai>=1.x 形式のクライアント
+        try:
+            client = openai.OpenAI(
+                api_key=self.api_key,
+                base_url=self.api_base.rstrip("/"),
+            )
+            return client
+        except Exception:
+            logger.exception("Failed to create OpenAI-compatible client.")
+            return None
 
     # 使用量に基づいてコストを推定する
     def _estimate_cost(self, usage: Dict[str, int]) -> float:
@@ -170,6 +173,7 @@ class ChatService:
         *,
         messages: List[Dict[str, Any]],
         temperature: float,
+        stream: bool,
         tools: Optional[List[Dict[str, Any]]],
         tool_choice: Optional[Union[str, Dict[str, Any]]],
     ) -> Dict[str, Any]:
@@ -178,7 +182,7 @@ class ChatService:
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
-            "stream": True,
+            "stream": stream,
         }
 
         # Groq拡張: reasoning_effort, max_completion_tokens
@@ -205,99 +209,18 @@ class ChatService:
 
         return payload
 
-    def _parse_sse_stream(
-        self, resp: requests.Response
-    ) -> Generator[Dict[str, Any], None, None]:
-        """
-        Groq Chat CompletionsのSSEを逐次パースして、以下のイベントをyield:
-        - {"type": "content", "value": str}
-        - {"type": "tool_calls", "value": List[...]}  // function呼び出しが完了したタイミングでまとめて
-        - {"type": "error", "value": str}            // 受信中にJSONデコード等で問題があれば
-        """
-        # 収集されたツール呼び出しを保持する辞書
-        collected_tool_calls: Dict[int, Dict[str, Any]] = {}
-        full_response_parts: List[str] = []
-
-        for raw in resp.iter_lines(decode_unicode=True):
-            if not raw:
-                continue
-            if raw.startswith("data: "):
-                # "data: " プレフィックスを削除
-                data = raw[len("data: ") :]
-            elif raw.startswith("data:"):
-                data = raw[len("data:") :].lstrip()
-            else:
-                # 無効な行はスキップ
-                continue
-
-            if data == "[DONE]":
-                if collected_tool_calls:
-                    yield {
-                        "type": "tool_calls",
-                        "value": list(collected_tool_calls.values()),
-                    }
-                break
-
-            # 受信したデータをJSONとしてパース
-            try:
-                obj = json.loads(data)
-            except json.JSONDecodeError:
-                # JSONデコードエラーが発生した場合、エラーイベントをyield
-                yield {"type": "error", "value": f"JSON decode error: {data[:200]}..."}
-                continue
-
-            try:
-                choices = obj.get("choices") or []
-                if not choices:
-                    continue
-                delta = choices[0].get("delta") or {}
-
-                # コンテンツの値を抽出
-                content_val = delta.get("content")
-                if isinstance(content_val, str) and content_val:
-                    full_response_parts.append(content_val)
-                    # コンテンツイベントをyield
-                    yield {"type": "content", "value": content_val}
-
-                tool_calls = delta.get("tool_calls")
-                if isinstance(tool_calls, list):
-                    for tc in tool_calls:
-                        idx = tc.get("index", 0)
-                        if idx not in collected_tool_calls:
-                            # 新しいツール呼び出しを初期化
-                            collected_tool_calls[idx] = {
-                                "id": tc.get("id", ""),
-                                "type": "function",
-                                "function": {"name": "", "arguments": ""},
-                            }
-                        fn = tc.get("function") or {}
-                        # 関数名を抽出
-                        name_val = fn.get("name")
-                        if isinstance(name_val, str):
-                            collected_tool_calls[idx]["function"]["name"] = name_val
-                        # 引数を抽出
-                        args_val = fn.get("arguments")
-                        if isinstance(args_val, str):
-                            # 引数を既存の引数に追加
-                            collected_tool_calls[idx]["function"][
-                                "arguments"
-                            ] += args_val
-            except Exception as e:
-                yield {"type": "error", "value": f"SSE parse error: {str(e)}"}
-                continue
-
-        # 最後の完全な応答テキストを保存
-        self._last_full_response_text = "".join(full_response_parts)
+    # _parse_sse_stream はOpenAIクライアントのストリーマを使うため不要
 
     def chat_completion_stream(
         self,
         messages: List[Dict[str, Any]],
         temperature: float,
+        stream: bool = False,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> Generator[Dict[str, Any], None, Dict[str, Any]]:
-        """チャット補完をストリーム形式で取得する。"""
-        if not self.session:
+        """チャット補完をストリーム形式または非ストリーム形式で取得する。"""
+        if not self.client:
             yield {
                 "type": "error",
                 "value": "[エラー] Groqクライアントが初期化されていません。GROQ_API_KEYを設定してください。",
@@ -317,176 +240,230 @@ class ChatService:
         raw_system_prompt = next(
             (m.get("content", "") for m in messages if m.get("role") == "system"), ""
         )
-        # システムプロンプトが文字列の場合
         if isinstance(raw_system_prompt, str):
             system_prompt = raw_system_prompt
         else:
-            # 配列やその他は単純化してテキスト連結（SDKに依存せず安全に）
             try:
                 parts: List[str] = []
                 for part in raw_system_prompt or []:
-                    if isinstance(part, dict):
-                        txt = part.get("text")
-                        if isinstance(txt, str):
-                            parts.append(txt)
+                    if isinstance(part, dict) and isinstance(part.get("text"), str):
+                        parts.append(part["text"])
                 system_prompt = " ".join(parts)
             except Exception:
                 system_prompt = ""
-        # ユーザーメッセージの数をカウント
         history_count = sum(1 for m in messages if m.get("role") == "user")
 
-        # APIペイロードを準備
-        payload = self._prepare_api_payload(
-            messages=messages,
-            temperature=temperature,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-        params = {}
-        if self.api_version:
-            params["api_version"] = self.api_version
-        url = f"{self.api_base.rstrip('/')}/chat/completions"
+        # Responses API 用の入力変換
+        # OpenAI Responses APIは input を推奨。role付き配列も受け付けるため互換形式に変換。
+        # messages: [{role, content}] をそのまま input に渡す。
+        responses_input = []
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if isinstance(content, str):
+                responses_input.append({"role": role, "content": content})
+            elif isinstance(content, list):
+                # text パートのみ抽出
+                text_parts = []
+                for part in content:
+                    if isinstance(part, dict) and isinstance(part.get("text"), str):
+                        text_parts.append(part["text"])
+                responses_input.append({"role": role, "content": " ".join(text_parts)})
+            else:
+                responses_input.append({"role": role, "content": str(content)})
+
+        # OpenAI SDK の型に合わせる（不明/未指定は NotGiven を渡す）
+        # tools は SDK の ToolParam である必要があるため、未指定なら NotGiven にする
+        responses_tools = NotGiven() if tools is None else tools  # type: ignore[arg-type]
+        # tool_choice も NotGiven にフォールバック
+        responses_tool_choice = NotGiven() if tool_choice is None else tool_choice  # type: ignore[assignment]
+        # reasoning は None/NotGiven 許可。SDK の Reasoning 型に厳密対応できないため未指定時は NotGiven
+        reasoning_effort = os.getenv("GROQ_REASONING_EFFORT", "low")
+        responses_reasoning = NotGiven() if not reasoning_effort else {"effort": reasoning_effort}  # type: ignore[dict-item]
+        max_completion_tokens = int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "32766"))
+
         for attempt in range(self.max_retries):
             try:
-                resp = self.session.post(
-                    url,
-                    params=params,
-                    data=json.dumps(payload),
-                    stream=True,
-                    timeout=600,
-                )
-                # エラーステータスは本文を読みつつ適切に処理
-                # HTTPステータスコードが400以上の場合
-                if resp.status_code >= 400:
-                    # エラーレスポンスをJSONとしてパース
-                    try:
-                        err_json = resp.json()
-                        message = err_json.get("error", {}).get(
-                            "message", json.dumps(err_json, ensure_ascii=False)
-                        )
-                    except Exception:
-                        message = f"HTTP {resp.status_code}: {resp.text[:500]}"
-                    yield {"type": "error", "value": message}
-                    # 4xxは致命的、429のみリトライ対象にしても良いがここではstatusで判別
-                    if resp.status_code in (429, 408, 409, 425, 500, 502, 503, 504):
-                        # リトライ可能とみなす
-                        raise RuntimeError(message)
-                    else:
-                        # 非リトライ
-                        self._log_api_result(
-                            success=False,
-                            model=self.model,
-                            usage={
+                if stream:
+                    # ストリーム: OpenAIクライアントのイベントストリームを使用
+                    # output_textを再構成するためのバッファ
+                    full_text_parts: List[str] = []
+                    with self.client.responses.stream(
+                        model=self.model,
+                        input=responses_input,
+                        temperature=temperature,
+                        tools=responses_tools,  # type: ignore[arg-type]
+                        tool_choice=responses_tool_choice,  # type: ignore[arg-type]
+                        reasoning=responses_reasoning,  # type: ignore[arg-type]
+                        max_output_tokens=max_completion_tokens,
+                    ) as stream_resp:
+                        # OpenAI SDK の高レベルAPIは output_text をまとめて取得可能
+                        try:
+                            for event in stream_resp:
+                                # 逐次テキストのデルタ API は型が多岐に渡るため、
+                                # SDK 提供の convenience を使い、最後に output_text で出力する
+                                pass
+                        except Exception as ie:
+                            yield {"type": "error", "value": f"stream error: {str(ie)}"}
+                        # ストリーム終了後に最終レスポンスを取得しテキストを分割して逐次出力
+                        final: Response = stream_resp.get_final_response()  # type: ignore[assignment]
+                        output_text = getattr(final, "output_text", None)
+                        if isinstance(output_text, str) and output_text:
+                            # ユーザーにある程度リアクティブに見せるため、行単位で分割して出力
+                            for chunk in output_text.splitlines(keepends=True):
+                                if chunk:
+                                    yield {"type": "content", "value": chunk}
+                                    full_text_parts.append(chunk)
+                        # tool 呼び出し（あれば）
+                        try:
+                            if getattr(final, "output", None):
+                                tool_calls = []
+                                for item in final.output:
+                                    if getattr(item, "type", "") == "tool_call":
+                                        tool_calls.append(getattr(item, "tool", {}))
+                                if tool_calls:
+                                    yield {"type": "tool_calls", "value": tool_calls}
+                        except Exception:
+                            pass
+                        # ストリーム終了後にusage取得（なければ見積り）
+                        usage = {}
+                        try:
+                            if getattr(final, "usage", None):
+                                # OpenAI 互換 usage {input_tokens, output_tokens, total_tokens} の想定
+                                fu = final.usage
+                                # 互換のため既存キーへマップ
+                                usage = {
+                                    "prompt_tokens": getattr(fu, "input_tokens", 0)
+                                    or getattr(fu, "prompt_tokens", 0)
+                                    or prompt_tokens,
+                                    "completion_tokens": getattr(fu, "output_tokens", 0)
+                                    or getattr(fu, "completion_tokens", 0)
+                                    or self._estimate_tokens_from_text(
+                                        "".join(full_text_parts)
+                                    ),
+                                    "total_tokens": getattr(fu, "total_tokens", 0)
+                                    or (
+                                        prompt_tokens
+                                        + self._estimate_tokens_from_text(
+                                            "".join(full_text_parts)
+                                        )
+                                    ),
+                                }
+                            else:
+                                raise AttributeError("no usage in final response")
+                        except Exception:
+                            completion_tokens = self._estimate_tokens_from_text(
+                                "".join(full_text_parts)
+                            )
+                            usage = {
                                 "prompt_tokens": prompt_tokens,
-                                "completion_tokens": 0,
-                                "total_tokens": prompt_tokens,
-                            },
-                            cost_usd=0.0,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": prompt_tokens + completion_tokens,
+                            }
+
+                        cost_usd = self._estimate_cost(usage)
+                        self._log_api_result(
+                            success=True,
+                            model=self.model,
+                            usage=usage,
+                            cost_usd=cost_usd,
                             system_prompt=system_prompt,
                             history_count=history_count,
-                            error_message=message,
                         )
-                        return {
-                            "usage": {
-                                "prompt_tokens": prompt_tokens,
-                                "completion_tokens": 0,
-                                "total_tokens": prompt_tokens,
-                            },
-                            "cost_usd": 0.0,
+                        return {"usage": usage, "cost_usd": cost_usd}
+                else:
+                    # 非ストリーム: 単発応答
+                    resp: Response = self.client.responses.create(  # type: ignore[assignment]
+                        model=self.model,
+                        input=responses_input,
+                        temperature=temperature,
+                        tools=responses_tools,  # type: ignore[arg-type]
+                        tool_choice=responses_tool_choice,  # type: ignore[arg-type]
+                        reasoning=responses_reasoning,  # type: ignore[arg-type]
+                        max_output_tokens=max_completion_tokens,
+                    )
+                    # テキスト
+                    try:
+                        output_text = getattr(resp, "output_text", None)
+                    except Exception:
+                        output_text = None
+                    if isinstance(output_text, str) and output_text:
+                        yield {"type": "content", "value": output_text}
+                    # ツール呼び出しがあれば出力（仕様上 location が異なる可能性があるため best-effort）
+                    try:
+                        if getattr(resp, "output", None):
+                            tool_calls = []
+                            for item in resp.output:
+                                if getattr(item, "type", "") == "tool_call":
+                                    tool_calls.append(getattr(item, "tool", {}))
+                            if tool_calls:
+                                yield {"type": "tool_calls", "value": tool_calls}
+                    except Exception:
+                        pass
+
+                    # usage
+                    usage = {}
+                    try:
+                        if getattr(resp, "usage", None):
+                            ru = resp.usage
+                            usage = {
+                                "prompt_tokens": getattr(ru, "input_tokens", 0)
+                                or getattr(ru, "prompt_tokens", 0)
+                                or prompt_tokens,
+                                "completion_tokens": getattr(ru, "output_tokens", 0)
+                                or getattr(ru, "completion_tokens", 0)
+                                or self._estimate_tokens_from_text(output_text or ""),
+                                "total_tokens": getattr(ru, "total_tokens", 0)
+                                or (
+                                    prompt_tokens
+                                    + self._estimate_tokens_from_text(output_text or "")
+                                ),
+                            }
+                        else:
+                            raise AttributeError("no usage")
+                    except Exception:
+                        completion_tokens = self._estimate_tokens_from_text(
+                            output_text or ""
+                        )
+                        usage = {
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens": prompt_tokens + completion_tokens,
                         }
 
-                # ストリームを逐次処理
-                for event in self._parse_sse_stream(resp):
-                    yield event
-
-                # ストリーム終了後にusage推定
-                completion_tokens = self._estimate_tokens_from_text(
-                    self._last_full_response_text
-                )
-                usage = {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": prompt_tokens + completion_tokens,
-                }
-                cost_usd = self._estimate_cost(usage)
-
-                self._log_api_result(
-                    success=True,
-                    model=self.model,
-                    usage=usage,
-                    cost_usd=cost_usd,
-                    system_prompt=system_prompt,
-                    history_count=history_count,
-                )
-                return {"usage": usage, "cost_usd": cost_usd}
-
-            except (requests.Timeout, requests.ConnectionError) as e:
-                # ネットワークエラーが発生した場合
-                # 最終試行で失敗したらログして終了
-                if attempt >= self.max_retries - 1:
-                    msg = f"[{type(e).__name__}] {str(e)}"
+                    cost_usd = self._estimate_cost(usage)
                     self._log_api_result(
-                        success=False,
+                        success=True,
                         model=self.model,
-                        usage={
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": 0,
-                            "total_tokens": prompt_tokens,
-                        },
-                        cost_usd=0.0,
+                        usage=usage,
+                        cost_usd=cost_usd,
                         system_prompt=system_prompt,
                         history_count=history_count,
-                        error_message=msg,
                     )
-                    yield {"type": "error", "value": msg}
-                    break
-                wait_time = self.retry_backoff_base ** (attempt + 1)
-                logger.warning(
-                    f"Network error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds..."
-                )
-                time.sleep(wait_time)
-            except RuntimeError as e:
-                # HTTPエラーがRuntimeErrorとしてラップされている場合のリトライ
-                # 上でHTTPエラーをRuntimeErrorへラップしている場合のリトライ
-                if attempt >= self.max_retries - 1:
-                    msg = f"[HTTPError] {str(e)}"
-                    self._log_api_result(
-                        success=False,
-                        model=self.model,
-                        usage={
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": 0,
-                            "total_tokens": prompt_tokens,
-                        },
-                        cost_usd=0.0,
-                        system_prompt=system_prompt,
-                        history_count=history_count,
-                        error_message=msg,
-                    )
-                    yield {"type": "error", "value": msg}
-                    break
-                wait_time = self.retry_backoff_base ** (attempt + 1)
-                logger.warning(f"HTTP error. Retrying in {wait_time:.2f} seconds...")
-                time.sleep(wait_time)
+                    return {"usage": usage, "cost_usd": cost_usd}
+
             except Exception as e:
-                # その他の予期せぬエラーが発生した場合
-                logger.exception("An unexpected error occurred.")
-                error_msg = f"[不明なエラー] {str(e)}"
-                self._log_api_result(
-                    success=False,
-                    model=self.model,
-                    usage={
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": 0,
-                        "total_tokens": prompt_tokens,
-                    },
-                    cost_usd=0.0,
-                    system_prompt=system_prompt,
-                    history_count=history_count,
-                    error_message=error_msg,
-                )
-                yield {"type": "error", "value": error_msg}
-                break
+                # OpenAIクライアント内で429/5xx等も例外になる想定。指数バックオフでリトライ。
+                if attempt >= self.max_retries - 1:
+                    error_msg = f"[OpenAIClientError] {str(e)}"
+                    self._log_api_result(
+                        success=False,
+                        model=self.model,
+                        usage={
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": 0,
+                            "total_tokens": prompt_tokens,
+                        },
+                        cost_usd=0.0,
+                        system_prompt=system_prompt,
+                        history_count=history_count,
+                        error_message=error_msg,
+                    )
+                    yield {"type": "error", "value": error_msg}
+                    break
+                wait_time = self.retry_backoff_base ** (attempt + 1)
+                logger.warning(f"Client error. Retrying in {wait_time:.2f} seconds...")
+                time.sleep(wait_time)
 
         # 最終的な使用量とコストを返す（エラーの場合）
         final_usage = {
