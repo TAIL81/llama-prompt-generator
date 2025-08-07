@@ -11,8 +11,10 @@ def create_chat_tab(config: Any):
     chat_service = ChatService()
     initial_temperature = 1.0
 
-    if not chat_service.client:
-        gr.Warning("OPENAI_API_KEY is not set. Chat tab will not work.")
+    # ChatService は requests.Session を self.session に保持する実装。
+    # 旧実装の `client` 属性参照を `session` に置き換える。
+    if not chat_service.session:
+        gr.Warning("GROQ_API_KEY is not set. Chat tab will not work.")
 
     default_system_prompt = lang_store[language].get(
         "Chat Default System Prompt",
@@ -59,15 +61,22 @@ def create_chat_tab(config: Any):
                 )
                 clear = gr.ClearButton(value=lang_store[language].get("Clear", "Clear"))
 
-        def respond(message: str, chat_history: List[Dict[str, str]], system_prompt_text: str, temp_value: float):
+        def respond(
+            message: str,
+            chat_history: List[Dict[str, str]],
+            system_prompt_text: str,
+            temp_value: float,
+        ):
             if not isinstance(chat_history, list):
                 chat_history = []
 
             chat_history.append({"role": "user", "content": message})
-            
+
             messages_to_send = []
             if system_prompt_text:
-                messages_to_send.append({"role": "system", "content": system_prompt_text})
+                messages_to_send.append(
+                    {"role": "system", "content": system_prompt_text}
+                )
             messages_to_send.extend(chat_history)
 
             chat_history.append({"role": "assistant", "content": ""})
@@ -103,7 +112,7 @@ def create_chat_tab(config: Any):
                 yield "", chat_history
 
         gr.HTML(
-            '''
+            """
             <style>
               #chatbot { min-height: 360px; font-size: 0.875rem !important; line-height: 1.5 !important; }
               #chatbot .message, #chatbot .bubble, #chatbot .prose, #chatbot .markdown, #chatbot p, #chatbot li, #chatbot code, #chatbot pre, #chatbot span { font-size: 0.875rem !important; line-height: 1.5 !important; }
@@ -112,10 +121,12 @@ def create_chat_tab(config: Any):
               #chat-input-row { margin-top: 0 !important; padding-top: 6px; }
               #chat-input-row textarea { min-height: 72px; }
             </style>
-            '''
+            """
         )
         clear.add([msg, chatbot])
-        
+
         # `gr.State` is removed as it's no longer needed for complex state management
         msg.submit(respond, [msg, chatbot, system_prompt, temperature], [msg, chatbot])
-        submit_button.click(respond, [msg, chatbot, system_prompt, temperature], [msg, chatbot])
+        submit_button.click(
+            respond, [msg, chatbot, system_prompt, temperature], [msg, chatbot]
+        )
