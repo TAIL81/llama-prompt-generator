@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, Generator, Iterable, List, Optional, Union
 
 import openai
-from openai.types.responses import Response  # type: ignore
-from openai import NotGiven  # type: ignore
 from dotenv import load_dotenv
+from openai import NotGiven  # type: ignore
+from openai.types.responses import Response  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -168,49 +168,6 @@ class ChatService:
                     num_tokens -= 1
         return num_tokens + 3
 
-    def _prepare_api_payload(
-        self,
-        *,
-        messages: List[Dict[str, Any]],
-        temperature: float,
-        stream: bool,
-        tools: Optional[List[Dict[str, Any]]],
-        tool_choice: Optional[Union[str, Dict[str, Any]]],
-    ) -> Dict[str, Any]:
-        """APIリクエストのペイロードを準備する。"""
-        payload: Dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "stream": stream,
-        }
-
-        # Groq拡張: reasoning_effort, max_completion_tokens
-        # 推論の努力レベルを設定（環境変数で上書き可能）
-        payload["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "medium")
-        # 完了トークンの最大数を設定（環境変数で上書き可能）
-        payload["max_completion_tokens"] = int(
-            # 環境変数から取得、デフォルトは32766
-            os.getenv("GROQ_MAX_COMPLETION_TOKENS", "32766")
-        )
-
-        # tools と tool_choice はOpenAI互換形式でGroqも対応
-        if tools is None:
-            payload["tools"] = [
-                {"type": "browser_search"},
-                {"type": "code_interpreter"},
-            ]
-            # ツール選択を自動に設定
-            payload["tool_choice"] = "auto"
-        else:
-            payload["tools"] = tools
-            if tool_choice:
-                payload["tool_choice"] = tool_choice
-
-        return payload
-
-    # _parse_sse_stream はOpenAIクライアントのストリーマを使うため不要
-
     def chat_completion_stream(
         self,
         messages: List[Dict[str, Any]],
@@ -278,7 +235,7 @@ class ChatService:
         # tool_choice も NotGiven にフォールバック
         responses_tool_choice = NotGiven() if tool_choice is None else tool_choice  # type: ignore[assignment]
         # reasoning は None/NotGiven 許可。SDK の Reasoning 型に厳密対応できないため未指定時は NotGiven
-        reasoning_effort = os.getenv("GROQ_REASONING_EFFORT", "low")
+        reasoning_effort = os.getenv("GROQ_REASONING_EFFORT", "medium")
         responses_reasoning = NotGiven() if not reasoning_effort else {"effort": reasoning_effort}  # type: ignore[dict-item]
         max_completion_tokens = int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "32766"))
 
