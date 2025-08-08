@@ -133,7 +133,7 @@ def create_metaprompt_tab(component_manager, config):
             info=lang_store[language][
                 "Please input your variables, one variable per line"
             ],
-            lines=5,
+            lines=3,
             placeholder=lang_store[language]["CUSTOMER_COMPLAINT\nCOMPANY_NAME"],
         )
         # ボタンを配置するためのカラムと行
@@ -164,7 +164,7 @@ def create_metaprompt_tab(component_manager, config):
                 # メタプロンプト出力：変数
                 variables_result_meta = gr.Textbox(
                     label=lang_store[language]["MetaPrompt Output: Variables"],
-                    lines=16,  # 標準化
+                    lines=3,  # 標準化
                     show_copy_button=True,
                     interactive=False,
                 )
@@ -180,7 +180,7 @@ def create_metaprompt_tab(component_manager, config):
                 # APE出力：変数
                 variables_result_ape = gr.Textbox(
                     label=lang_store[language]["APE Output: Variables"],
-                    lines=16,  # 標準化
+                    lines=3,  # 標準化
                     show_copy_button=True,
                     interactive=False,
                     scale=1,

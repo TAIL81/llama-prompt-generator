@@ -12,7 +12,6 @@ OPENAI_MODEL_CHOICES = [
 ]
 GROQ_MODEL_CHOICES = [
     "compound-beta-mini",
-    "compound-beta-kimi",
     "compound-beta",
 ]
 

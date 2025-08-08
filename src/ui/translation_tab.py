@@ -63,7 +63,7 @@ def create_translation_tab(component_manager, config):
                 gr.Textbox(
                     label=lang_store[language]["Prompt Template Generated"],
                     value=value,
-                    lines=1,
+                    lines=3,
                     max_lines=20,
                     show_copy_button=True,
                     interactive=False,

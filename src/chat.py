@@ -187,7 +187,7 @@ class ChatService:
 
         # Groq拡張: reasoning_effort, max_completion_tokens
         # 推論の努力レベルを設定（環境変数で上書き可能）
-        payload["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "low")
+        payload["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "medium")
         # 完了トークンの最大数を設定（環境変数で上書き可能）
         payload["max_completion_tokens"] = int(
             # 環境変数から取得、デフォルトは32766
