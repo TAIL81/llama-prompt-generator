@@ -59,6 +59,9 @@ def create_chat_tab(config: Any):
                     step=0.1,
                     label=lang_store[language].get("Temperature", "Temperature"),
                 )
+                with gr.Row():
+                    browser_search_checkbox = gr.Checkbox(label="Browser Search", value=False)
+                    code_interpreter_checkbox = gr.Checkbox(label="Code Interpreter", value=False)
                 clear = gr.ClearButton(value=lang_store[language].get("Clear", "Clear"))
 
         def respond(
@@ -66,6 +69,8 @@ def create_chat_tab(config: Any):
             chat_history: List[Dict[str, str]],
             system_prompt_text: str,
             temp_value: float,
+            use_browser_search: bool,
+            use_code_interpreter: bool,
         ):
             # 入力検証
             if not message or not message.strip():
@@ -89,9 +94,20 @@ def create_chat_tab(config: Any):
 
             chat_history.append({"role": "assistant", "content": ""})
 
+            # a list of tools the model may call.
+            tools = []
+            if use_browser_search:
+                tools.append({"type": "browser_search"})
+            if use_code_interpreter:
+                tools.append({"type": "code_interpreter"})
+
+            tool_choice = "auto" if tools else None
+
             stream = chat_service.chat_completion_stream(
                 messages=messages_to_send,
                 temperature=float(temp_value),
+                tools=tools,
+                tool_choice=tool_choice,
             )
 
             try:
@@ -138,11 +154,11 @@ def create_chat_tab(config: Any):
         # 送信中disable/完了でenableのため、submit_button と msg の interactive を追加出力
         msg.submit(
             respond,
-            [msg, chatbot, system_prompt, temperature],
+            [msg, chatbot, system_prompt, temperature, browser_search_checkbox, code_interpreter_checkbox],
             [msg, chatbot],
         )
         submit_button.click(
             respond,
-            [msg, chatbot, system_prompt, temperature],
+            [msg, chatbot, system_prompt, temperature, browser_search_checkbox, code_interpreter_checkbox],
             [msg, chatbot],
         )
