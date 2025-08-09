@@ -59,6 +59,7 @@ class ChatService:
 
         # 最後の完全な応答テキストを保持する内部バッファ
         self._last_full_response_text: str = ""
+        self._last_full_reasoning_text: str = ""
 
     def _get_env_var(self, key: str, default: Any, cast_type: type) -> Any:
         """環境変数から値を取得し、指定された型にキャストするヘルパー関数。
@@ -165,6 +166,12 @@ class ChatService:
         if delta is None:
             return None
 
+        # reasoningの値を抽出 (gpt-oss-モデル用)
+        if hasattr(delta, "reasoning") and delta.reasoning:
+            reasoning_val = delta.reasoning
+            self._last_full_reasoning_text += reasoning_val
+            return {"type": "reasoning", "value": reasoning_val}
+
         # コンテンツの値を抽出
         if content_val := delta.content:
             self._last_full_response_text += content_val
@@ -217,6 +224,7 @@ class ChatService:
         history_count = sum(1 for m in messages if m.get("role") == "user")
 
         self._last_full_response_text = ""
+        self._last_full_reasoning_text = ""
         collected_tool_calls: Dict[int, Dict[str, Any]] = {}
 
         # toolsが指定されていない場合、デフォルトのツールを設定

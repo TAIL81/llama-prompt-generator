@@ -74,8 +74,6 @@ def create_chat_tab(config: Any):
                 yield gr.update(), chat_history
                 return
 
-            # 送信中UI: 入力・ボタンを無効化（submit_buttonとmsgは外側のイベントで更新）
-            # notify_info("送信中…")
             if not isinstance(chat_history, list):
                 chat_history = []
 
@@ -90,6 +88,13 @@ def create_chat_tab(config: Any):
 
             chat_history.append({"role": "assistant", "content": ""})
 
+            # reasoningとcontentを保持する変数
+            reasoning_text = ""
+            content_text = ""
+
+            # UIを更新
+            yield "", chat_history
+
             stream = chat_service.chat_completion_stream(
                 messages=messages_to_send,
                 temperature=float(temp_value),
@@ -100,9 +105,10 @@ def create_chat_tab(config: Any):
                     etype = event.get("type")
                     if etype == "content":
                         token = event.get("value", "")
-                        chat_history[-1]["content"] += token
-                        # 出力更新のみ
-                        yield "", chat_history
+                        content_text += token
+                    elif etype == "reasoning":
+                        token = event.get("value", "")
+                        reasoning_text += token
                     elif etype == "tool_calls":
                         calls_text = "\n".join(
                             [
@@ -111,12 +117,24 @@ def create_chat_tab(config: Any):
                             ]
                         )
                         if calls_text:
-                            chat_history[-1]["content"] += "\n" + calls_text
-                            yield "", chat_history
+                            content_text += "\n" + calls_text
                     elif etype == "error":
                         err = event.get("value", "未知のエラー")
-                        chat_history[-1]["content"] = f"[エラー] {err}"
+                        content_text = f"[エラー] {err}"
+                        chat_history[-1]["content"] = content_text
                         yield "", chat_history
+                        return
+
+                    # 表示を更新
+                    display_content = ""
+                    if reasoning_text:
+                        display_content = f"<think>{reasoning_text}</think>{content_text}"
+                    else:
+                        display_content = content_text
+                    
+                    chat_history[-1]["content"] = display_content
+                    yield "", chat_history
+
             except Exception as e:
                 chat_history[-1]["content"] = f"[不明なエラー] {str(e)}"
                 yield "", chat_history
@@ -130,6 +148,17 @@ def create_chat_tab(config: Any):
               #chatbot, #chatbot .gr-panel, #chatbot .gr-chatbot { background-color: var(--block-background-fill, #1e2430) !important; border: 1px solid var(--border-color-primary, #3a4150) !important; box-shadow: none !important; }
               #chat-input-row { margin-top: 0 !important; padding-top: 6px; }
               #chat-input-row textarea { min-height: 72px; }
+              /* thinkタグのスタイル */
+              think {
+                display: block;
+                background-color: #2c3e50; /* 暗めの背景色 */
+                color: #ecf0f1; /* 明るめの文字色 */
+                padding: 10px;
+                border-left: 5px solid #3498db; /* 左側のボーダー */
+                margin-bottom: 10px;
+                white-space: pre-wrap; /* 改行とスペースを保持 */
+                font-family: monospace; /* 等幅フォント */
+              }
             </style>
             """
         )
