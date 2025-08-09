@@ -14,7 +14,7 @@ def create_chat_tab(config: Any):
 
     # ChatService は requests.Session を self.session に保持する実装。
     # 旧実装の `client` 属性参照を `session` に置き換える。
-    if not chat_service.session:
+    if not chat_service.client:
         gr.Warning("GROQ_API_KEY is not set. Chat tab will not work.")
 
     default_system_prompt = lang_store[language].get(
@@ -75,7 +75,7 @@ def create_chat_tab(config: Any):
                 return
 
             # 送信中UI: 入力・ボタンを無効化（submit_buttonとmsgは外側のイベントで更新）
-            notify_info("送信中…")
+            # notify_info("送信中…")
             if not isinstance(chat_history, list):
                 chat_history = []
 

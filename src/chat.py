@@ -7,18 +7,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Generator, Iterable, List, Optional, Union
 
-import requests
 from dotenv import load_dotenv
+from groq import APIError, APIStatusError, Groq, RateLimitError, APIConnectionError
 
 logger = logging.getLogger(__name__)
 
 
 class ChatService:
     # --- デフォルト設定値 ---
-    DEFAULT_API_BASE = "https://api.groq.com/openai/v1"
     DEFAULT_MODEL = "openai/gpt-oss-120b"
     DEFAULT_MAX_RETRIES = 3
-    # リトライ時の指数バックオフのベース値
+    # リトライ時の指数バックオフのベース値 (SDKが処理)
     DEFAULT_RETRY_BACKOFF_BASE = 2.0
     DEFAULT_CHARS_PER_TOKEN = 4.0
     DEFAULT_PROMPT_PRICE = 0.0
@@ -28,26 +27,18 @@ class ChatService:
     def __init__(
         self,
         max_retries: int = DEFAULT_MAX_RETRIES,
-        retry_backoff_base: float = DEFAULT_RETRY_BACKOFF_BASE,
+        retry_backoff_base: float = DEFAULT_RETRY_BACKOFF_BASE,  # SDK側で利用
     ):
         # .envファイルから環境変数を読み込む
         load_dotenv()
 
         # Groq APIキーを環境変数から取得
         self.api_key = os.getenv("GROQ_API_KEY")
-        # GroqはOpenAI互換エンドポイントだが、baseは環境変数で上書き可能
-        self.api_base = os.getenv("GROQ_API_BASE", self.DEFAULT_API_BASE)
         # モデル名はGroqのデフォルトを設定（必要に応じて環境変数で上書き）
         self.model = os.getenv("GROQ_MODEL", self.DEFAULT_MODEL)
-        # 任意: バージョンをクエリで付ける
-        self.api_version = os.getenv("GROQ_API_VERSION")
 
         # 最大リトライ回数を環境変数またはデフォルト値から取得
         self.max_retries = self._get_env_var("MAX_RETRIES", max_retries, int)
-        # リトライ時のバックオフベース値を環境変数またはデフォルト値から取得
-        self.retry_backoff_base = self._get_env_var(
-            "RETRY_BACKOFF_BASE", retry_backoff_base, float
-        )
 
         # 1トークンあたりの文字数を環境変数またはデフォルト値から取得
         self.chars_per_token = self._get_env_var(
@@ -63,8 +54,8 @@ class ChatService:
         )
         self.usage_log_path = os.getenv("USAGE_LOG_PATH", self.DEFAULT_USAGE_LOG_PATH)
 
-        # HTTP session
-        self.session = self._create_session()
+        # Groqクライアントを初期化
+        self.client = self._init_client()
 
         # 最後の完全な応答テキストを保持する内部バッファ
         self._last_full_response_text: str = ""
@@ -72,7 +63,9 @@ class ChatService:
     def _get_env_var(self, key: str, default: Any, cast_type: type) -> Any:
         """環境変数から値を取得し、指定された型にキャストするヘルパー関数。
         取得に失敗した場合はデフォルト値を返す。"""
-        value = os.getenv(key, default)
+        value = os.getenv(key)
+        if value is None:
+            return default
         try:
             return cast_type(value)
         except (ValueError, TypeError):
@@ -81,19 +74,15 @@ class ChatService:
             )
             return default
 
-    def _create_session(self) -> Optional[requests.Session]:
-        """HTTPセッションを作成し、APIキーをヘッダーに設定する。"""
+    def _init_client(self) -> Optional[Groq]:
+        """Groqクライアントを初期化する。"""
         if not self.api_key:
             return None
-        s = requests.Session()
-        s.headers.update(
-            # 認証ヘッダーとコンテンツタイプを設定
-            {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-        )
-        return s
+        try:
+            return Groq(api_key=self.api_key, max_retries=self.max_retries)
+        except Exception:
+            logger.exception("Failed to initialize Groq client.")
+            return None
 
     # 使用量に基づいてコストを推定する
     def _estimate_cost(self, usage: Dict[str, int]) -> float:
@@ -131,8 +120,6 @@ class ChatService:
         error_message: Optional[str] = None,
     ) -> None:
         """API呼び出しの結果をログに記録する。"""
-        import hashlib
-
         system_prompt_hash = hashlib.sha256(
             (system_prompt or "").encode("utf-8")
         ).hexdigest()
@@ -165,129 +152,40 @@ class ChatService:
                     num_tokens -= 1
         return num_tokens + 3
 
-    def _prepare_api_payload(
+    def _process_stream_chunk(
         self,
-        *,
-        messages: List[Dict[str, Any]],
-        temperature: float,
-        tools: Optional[List[Dict[str, Any]]],
-        tool_choice: Optional[Union[str, Dict[str, Any]]],
-    ) -> Dict[str, Any]:
-        """APIリクエストのペイロードを準備する。"""
-        payload: Dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "stream": True,
-        }
+        chunk: Any,
+        collected_tool_calls: Dict[int, Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """ストリームのチャンクを処理し、イベントを返す。"""
+        if not chunk.choices:
+            return None
 
-        # Groq拡張: reasoning_effort, max_completion_tokens
-        # 推論の努力レベルを設定（環境変数で上書き可能）
-        payload["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "medium")
-        # 完了トークンの最大数を設定（環境変数で上書き可能）
-        payload["max_completion_tokens"] = int(
-            # 環境変数から取得、デフォルトは32766
-            os.getenv("GROQ_MAX_COMPLETION_TOKENS", "32766")
-        )
+        delta = chunk.choices[0].delta
+        if delta is None:
+            return None
 
-        # tools と tool_choice はOpenAI互換形式でGroqも対応
-        if tools is None:
-            payload["tools"] = [
-                {"type": "browser_search"},
-                {"type": "code_interpreter"},
-            ]
-            # ツール選択を自動に設定
-            payload["tool_choice"] = "auto"
-        else:
-            payload["tools"] = tools
-            if tool_choice:
-                payload["tool_choice"] = tool_choice
+        # コンテンツの値を抽出
+        if content_val := delta.content:
+            self._last_full_response_text += content_val
+            return {"type": "content", "value": content_val}
 
-        return payload
-
-    def _parse_sse_stream(
-        self, resp: requests.Response
-    ) -> Generator[Dict[str, Any], None, None]:
-        """
-        Groq Chat CompletionsのSSEを逐次パースして、以下のイベントをyield:
-        - {"type": "content", "value": str}
-        - {"type": "tool_calls", "value": List[...]}  // function呼び出しが完了したタイミングでまとめて
-        - {"type": "error", "value": str}            // 受信中にJSONデコード等で問題があれば
-        """
-        # 収集されたツール呼び出しを保持する辞書
-        collected_tool_calls: Dict[int, Dict[str, Any]] = {}
-        full_response_parts: List[str] = []
-
-        for raw in resp.iter_lines(decode_unicode=True):
-            if not raw:
-                continue
-            if raw.startswith("data: "):
-                # "data: " プレフィックスを削除
-                data = raw[len("data: ") :]
-            elif raw.startswith("data:"):
-                data = raw[len("data:") :].lstrip()
-            else:
-                # 無効な行はスキップ
-                continue
-
-            if data == "[DONE]":
-                if collected_tool_calls:
-                    yield {
-                        "type": "tool_calls",
-                        "value": list(collected_tool_calls.values()),
+        # ツール呼び出しを収集
+        if tool_calls := delta.tool_calls:
+            for tc in tool_calls:
+                idx = tc.index
+                if idx not in collected_tool_calls:
+                    collected_tool_calls[idx] = {
+                        "id": tc.id or "",
+                        "type": "function",
+                        "function": {"name": "", "arguments": ""},
                     }
-                break
-
-            # 受信したデータをJSONとしてパース
-            try:
-                obj = json.loads(data)
-            except json.JSONDecodeError:
-                # JSONデコードエラーが発生した場合、エラーイベントをyield
-                yield {"type": "error", "value": f"JSON decode error: {data[:200]}..."}
-                continue
-
-            try:
-                choices = obj.get("choices") or []
-                if not choices:
-                    continue
-                delta = choices[0].get("delta") or {}
-
-                # コンテンツの値を抽出
-                content_val = delta.get("content")
-                if isinstance(content_val, str) and content_val:
-                    full_response_parts.append(content_val)
-                    # コンテンツイベントをyield
-                    yield {"type": "content", "value": content_val}
-
-                tool_calls = delta.get("tool_calls")
-                if isinstance(tool_calls, list):
-                    for tc in tool_calls:
-                        idx = tc.get("index", 0)
-                        if idx not in collected_tool_calls:
-                            # 新しいツール呼び出しを初期化
-                            collected_tool_calls[idx] = {
-                                "id": tc.get("id", ""),
-                                "type": "function",
-                                "function": {"name": "", "arguments": ""},
-                            }
-                        fn = tc.get("function") or {}
-                        # 関数名を抽出
-                        name_val = fn.get("name")
-                        if isinstance(name_val, str):
-                            collected_tool_calls[idx]["function"]["name"] = name_val
-                        # 引数を抽出
-                        args_val = fn.get("arguments")
-                        if isinstance(args_val, str):
-                            # 引数を既存の引数に追加
-                            collected_tool_calls[idx]["function"][
-                                "arguments"
-                            ] += args_val
-            except Exception as e:
-                yield {"type": "error", "value": f"SSE parse error: {str(e)}"}
-                continue
-
-        # 最後の完全な応答テキストを保存
-        self._last_full_response_text = "".join(full_response_parts)
+                if tc.function:
+                    if name := tc.function.name:
+                        collected_tool_calls[idx]["function"]["name"] = name
+                    if args := tc.function.arguments:
+                        collected_tool_calls[idx]["function"]["arguments"] += args
+        return None
 
     def chat_completion_stream(
         self,
@@ -297,201 +195,108 @@ class ChatService:
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> Generator[Dict[str, Any], None, Dict[str, Any]]:
         """チャット補完をストリーム形式で取得する。"""
-        if not self.session:
+        if not self.client:
             yield {
                 "type": "error",
                 "value": "[エラー] Groqクライアントが初期化されていません。GROQ_API_KEYを設定してください。",
             }
             return {
-                "usage": {
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                },
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
                 "cost_usd": 0.0,
             }
 
         prompt_tokens = self._num_tokens_from_messages(messages)
-
-        # system_promptはstr想定に正規化
         raw_system_prompt = next(
             (m.get("content", "") for m in messages if m.get("role") == "system"), ""
         )
-        # システムプロンプトが文字列の場合
-        if isinstance(raw_system_prompt, str):
-            system_prompt = raw_system_prompt
-        else:
-            # 配列やその他は単純化してテキスト連結（SDKに依存せず安全に）
-            try:
-                parts: List[str] = []
-                for part in raw_system_prompt or []:
-                    if isinstance(part, dict):
-                        txt = part.get("text")
-                        if isinstance(txt, str):
-                            parts.append(txt)
-                system_prompt = " ".join(parts)
-            except Exception:
-                system_prompt = ""
-        # ユーザーメッセージの数をカウント
+        system_prompt = (
+            raw_system_prompt
+            if isinstance(raw_system_prompt, str)
+            else json.dumps(raw_system_prompt)
+        )
         history_count = sum(1 for m in messages if m.get("role") == "user")
 
-        # APIペイロードを準備
-        payload = self._prepare_api_payload(
-            messages=messages,
-            temperature=temperature,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-        params = {}
-        if self.api_version:
-            params["api_version"] = self.api_version
-        url = f"{self.api_base.rstrip('/')}/chat/completions"
-        for attempt in range(self.max_retries):
-            try:
-                resp = self.session.post(
-                    url,
-                    params=params,
-                    data=json.dumps(payload),
-                    stream=True,
-                    timeout=600,
-                )
-                # エラーステータスは本文を読みつつ適切に処理
-                # HTTPステータスコードが400以上の場合
-                if resp.status_code >= 400:
-                    # エラーレスポンスをJSONとしてパース
-                    try:
-                        err_json = resp.json()
-                        message = err_json.get("error", {}).get(
-                            "message", json.dumps(err_json, ensure_ascii=False)
-                        )
-                    except Exception:
-                        message = f"HTTP {resp.status_code}: {resp.text[:500]}"
-                    yield {"type": "error", "value": message}
-                    # 4xxは致命的、429のみリトライ対象にしても良いがここではstatusで判別
-                    if resp.status_code in (429, 408, 409, 425, 500, 502, 503, 504):
-                        # リトライ可能とみなす
-                        raise RuntimeError(message)
-                    else:
-                        # 非リトライ
-                        self._log_api_result(
-                            success=False,
-                            model=self.model,
-                            usage={
-                                "prompt_tokens": prompt_tokens,
-                                "completion_tokens": 0,
-                                "total_tokens": prompt_tokens,
-                            },
-                            cost_usd=0.0,
-                            system_prompt=system_prompt,
-                            history_count=history_count,
-                            error_message=message,
-                        )
-                        return {
-                            "usage": {
-                                "prompt_tokens": prompt_tokens,
-                                "completion_tokens": 0,
-                                "total_tokens": prompt_tokens,
-                            },
-                            "cost_usd": 0.0,
-                        }
+        self._last_full_response_text = ""
+        collected_tool_calls: Dict[int, Dict[str, Any]] = {}
 
-                # ストリームを逐次処理
-                for event in self._parse_sse_stream(resp):
+        # toolsが指定されていない場合、デフォルトのツールを設定
+        if tools is None:
+            tools = [
+                {"type": "browser_search"},
+                {"type": "code_interpreter"},
+            ]
+            if tool_choice is None:
+                tool_choice = "auto"
+
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=True,
+            )
+
+            for chunk in stream:
+                event = self._process_stream_chunk(chunk, collected_tool_calls)
+                if event:
                     yield event
 
-                # ストリーム終了後にusage推定
-                completion_tokens = self._estimate_tokens_from_text(
-                    self._last_full_response_text
-                )
-                usage = {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": prompt_tokens + completion_tokens,
-                }
-                cost_usd = self._estimate_cost(usage)
+            if collected_tool_calls:
+                yield {"type": "tool_calls", "value": list(collected_tool_calls.values())}
 
-                self._log_api_result(
-                    success=True,
-                    model=self.model,
-                    usage=usage,
-                    cost_usd=cost_usd,
-                    system_prompt=system_prompt,
-                    history_count=history_count,
-                )
-                return {"usage": usage, "cost_usd": cost_usd}
+            # ストリーム終了後にusage推定
+            completion_tokens = self._estimate_tokens_from_text(
+                self._last_full_response_text
+            )
+            usage = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            }
+            cost_usd = self._estimate_cost(usage)
 
-            except (requests.Timeout, requests.ConnectionError) as e:
-                # ネットワークエラーが発生した場合
-                # 最終試行で失敗したらログして終了
-                if attempt >= self.max_retries - 1:
-                    msg = f"[{type(e).__name__}] {str(e)}"
-                    self._log_api_result(
-                        success=False,
-                        model=self.model,
-                        usage={
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": 0,
-                            "total_tokens": prompt_tokens,
-                        },
-                        cost_usd=0.0,
-                        system_prompt=system_prompt,
-                        history_count=history_count,
-                        error_message=msg,
-                    )
-                    yield {"type": "error", "value": msg}
-                    break
-                wait_time = self.retry_backoff_base ** (attempt + 1)
-                logger.warning(
-                    f"Network error: {type(e).__name__}. Retrying in {wait_time:.2f} seconds..."
-                )
-                time.sleep(wait_time)
-            except RuntimeError as e:
-                # HTTPエラーがRuntimeErrorとしてラップされている場合のリトライ
-                # 上でHTTPエラーをRuntimeErrorへラップしている場合のリトライ
-                if attempt >= self.max_retries - 1:
-                    msg = f"[HTTPError] {str(e)}"
-                    self._log_api_result(
-                        success=False,
-                        model=self.model,
-                        usage={
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": 0,
-                            "total_tokens": prompt_tokens,
-                        },
-                        cost_usd=0.0,
-                        system_prompt=system_prompt,
-                        history_count=history_count,
-                        error_message=msg,
-                    )
-                    yield {"type": "error", "value": msg}
-                    break
-                wait_time = self.retry_backoff_base ** (attempt + 1)
-                logger.warning(f"HTTP error. Retrying in {wait_time:.2f} seconds...")
-                time.sleep(wait_time)
-            except Exception as e:
-                # その他の予期せぬエラーが発生した場合
-                logger.exception("An unexpected error occurred.")
-                error_msg = f"[不明なエラー] {str(e)}"
-                self._log_api_result(
-                    success=False,
-                    model=self.model,
-                    usage={
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": 0,
-                        "total_tokens": prompt_tokens,
-                    },
-                    cost_usd=0.0,
-                    system_prompt=system_prompt,
-                    history_count=history_count,
-                    error_message=error_msg,
-                )
-                yield {"type": "error", "value": error_msg}
-                break
+            self._log_api_result(
+                success=True,
+                model=self.model,
+                usage=usage,
+                cost_usd=cost_usd,
+                system_prompt=system_prompt,
+                history_count=history_count,
+            )
+            return {"usage": usage, "cost_usd": cost_usd}
 
-        # 最終的な使用量とコストを返す（エラーの場合）
-        final_usage = {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": 0,
-            "total_tokens": prompt_tokens,
+        except (RateLimitError, APIConnectionError, APIStatusError, APIError) as e:
+            error_message = f"[{type(e).__name__}] {str(e)}"
+            logger.error(f"Groq API error: {error_message}")
+            self._log_api_result(
+                success=False,
+                model=self.model,
+                usage={"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens},
+                cost_usd=0.0,
+                system_prompt=system_prompt,
+                history_count=history_count,
+                error_message=error_message,
+            )
+            yield {"type": "error", "value": error_message}
+
+        except Exception as e:
+            error_message = f"[不明なエラー] {str(e)}"
+            logger.exception("An unexpected error occurred during chat completion.")
+            self._log_api_result(
+                success=False,
+                model=self.model,
+                usage={"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens},
+                cost_usd=0.0,
+                system_prompt=system_prompt,
+                history_count=history_count,
+                error_message=error_message,
+            )
+            yield {"type": "error", "value": error_message}
+
+        # エラー発生時の戻り値
+        return {
+            "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 0, "total_tokens": prompt_tokens},
+            "cost_usd": 0.0,
         }
-        return {"usage": final_usage, "cost_usd": 0.0}
