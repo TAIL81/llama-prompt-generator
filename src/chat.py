@@ -9,11 +9,8 @@ from typing import Any, Dict, Generator, Iterable, List, Optional, Union
 
 import openai
 from dotenv import load_dotenv
-from openai import NotGiven
-from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
-from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
-from typing_extensions import cast
+from openai import NotGiven  # type: ignore
+from openai.types.responses import Response  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +84,7 @@ class ChatService:
             return default
 
     def _create_client(self):
-        """OpenAI互換クライアントを作成（GroqのChat Completions APIを使用）。"""
+        """OpenAI互換クライアントを作成（GroqのResponses APIを使用）。"""
         if not self.api_key:
             return None
         # openai>=1.x 形式のクライアント
@@ -175,7 +172,7 @@ class ChatService:
         self,
         messages: List[Dict[str, Any]],
         temperature: float,
-        stream: bool = True,  # stream をデフォルトTrueに変更
+        stream: bool = False,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> Generator[Dict[str, Any], None, Dict[str, Any]]:
@@ -213,104 +210,178 @@ class ChatService:
                 system_prompt = ""
         history_count = sum(1 for m in messages if m.get("role") == "user")
 
-        # OpenAI SDK の型に合わせる
-        sdk_messages: List[ChatCompletionMessageParam] = [
-            cast(ChatCompletionMessageParam, msg) for msg in messages
-        ]
-        sdk_tools: Union[List[ChatCompletionToolParam], NotGiven] = (
-            [cast(ChatCompletionToolParam, tool) for tool in tools]
-            if tools is not None
-            else NotGiven()
-        )
-        sdk_tool_choice = NotGiven() if tool_choice is None else tool_choice
+        # Responses API 用の入力変換
+        # OpenAI Responses APIは input を推奨。role付き配列も受け付けるため互換形式に変換。
+        # messages: [{role, content}] をそのまま input に渡す。
+        responses_input = []
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if isinstance(content, str):
+                responses_input.append({"role": role, "content": content})
+            elif isinstance(content, list):
+                # text パートのみ抽出
+                text_parts = []
+                for part in content:
+                    if isinstance(part, dict) and isinstance(part.get("text"), str):
+                        text_parts.append(part["text"])
+                responses_input.append({"role": role, "content": " ".join(text_parts)})
+            else:
+                responses_input.append({"role": role, "content": str(content)})
+
+        # OpenAI SDK の型に合わせる（不明/未指定は NotGiven を渡す）
+        # tools は SDK の ToolParam である必要があるため、未指定なら NotGiven にする
+        responses_tools = NotGiven() if tools is None else tools  # type: ignore[arg-type]
+        # tool_choice も NotGiven にフォールバック
+        responses_tool_choice = NotGiven() if tool_choice is None else tool_choice  # type: ignore[assignment]
+        # reasoning は None/NotGiven 許可。SDK の Reasoning 型に厳密対応できないため未指定時は NotGiven
+        reasoning_effort = os.getenv("GROQ_REASONING_EFFORT", "medium")
+        responses_reasoning = NotGiven() if not reasoning_effort else {"effort": reasoning_effort}  # type: ignore[dict-item]
+        max_completion_tokens = int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "32766"))
 
         for attempt in range(self.max_retries):
             try:
                 if stream:
                     # ストリーム: OpenAIクライアントのイベントストリームを使用
+                    # output_textを再構成するためのバッファ
                     full_text_parts: List[str] = []
-                    tool_calls = []
-                    stream_resp = self.client.chat.completions.create(
+                    with self.client.responses.stream(
                         model=self.model,
-                        messages=sdk_messages,
+                        input=responses_input,
                         temperature=temperature,
-                        tools=sdk_tools,
-                        tool_choice=sdk_tool_choice,  # type: ignore
-                        stream=True,
-                    )
-                    for chunk in stream_resp:
-                        if not isinstance(chunk, ChatCompletionChunk):
-                            continue
+                        tools=responses_tools,  # type: ignore[arg-type]
+                        tool_choice=responses_tool_choice,  # type: ignore[arg-type]
+                        reasoning=responses_reasoning,  # type: ignore[arg-type]
+                        max_output_tokens=max_completion_tokens,
+                    ) as stream_resp:
+                        # OpenAI SDK の高レベルAPIは output_text をまとめて取得可能
+                        try:
+                            for event in stream_resp:
+                                # 逐次テキストのデルタ API は型が多岐に渡るため、
+                                # SDK 提供の convenience を使い、最後に output_text で出力する
+                                pass
+                        except Exception as ie:
+                            yield {"type": "error", "value": f"stream error: {str(ie)}"}
+                        # ストリーム終了後に最終レスポンスを取得しテキストを分割して逐次出力
+                        final: Response = stream_resp.get_final_response()  # type: ignore[assignment]
+                        output_text = getattr(final, "output_text", None)
+                        if isinstance(output_text, str) and output_text:
+                            # ユーザーにある程度リアクティブに見せるため、行単位で分割して出力
+                            for chunk in output_text.splitlines(keepends=True):
+                                if chunk:
+                                    yield {"type": "content", "value": chunk}
+                                    full_text_parts.append(chunk)
+                        # tool 呼び出し（あれば）
+                        try:
+                            if getattr(final, "output", None):
+                                tool_calls = []
+                                for item in final.output:
+                                    if getattr(item, "type", "") == "tool_call":
+                                        tool_calls.append(getattr(item, "tool", {}))
+                                if tool_calls:
+                                    yield {"type": "tool_calls", "value": tool_calls}
+                        except Exception:
+                            pass
+                        # ストリーム終了後にusage取得（なければ見積り）
+                        usage = {}
+                        try:
+                            if getattr(final, "usage", None):
+                                # OpenAI 互換 usage {input_tokens, output_tokens, total_tokens} の想定
+                                fu = final.usage
+                                # 互換のため既存キーへマップ
+                                usage = {
+                                    "prompt_tokens": getattr(fu, "input_tokens", 0)
+                                    or getattr(fu, "prompt_tokens", 0)
+                                    or prompt_tokens,
+                                    "completion_tokens": getattr(fu, "output_tokens", 0)
+                                    or getattr(fu, "completion_tokens", 0)
+                                    or self._estimate_tokens_from_text(
+                                        "".join(full_text_parts)
+                                    ),
+                                    "total_tokens": getattr(fu, "total_tokens", 0)
+                                    or (
+                                        prompt_tokens
+                                        + self._estimate_tokens_from_text(
+                                            "".join(full_text_parts)
+                                        )
+                                    ),
+                                }
+                            else:
+                                raise AttributeError("no usage in final response")
+                        except Exception:
+                            completion_tokens = self._estimate_tokens_from_text(
+                                "".join(full_text_parts)
+                            )
+                            usage = {
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": prompt_tokens + completion_tokens,
+                            }
 
-                        # content
-                        if chunk.choices and chunk.choices[0].delta.content:
-                            content = chunk.choices[0].delta.content
-                            yield {"type": "content", "value": content}
-                            full_text_parts.append(content)
-
-                        # tool_calls
-                        if chunk.choices and chunk.choices[0].delta.tool_calls:
-                            for tc in chunk.choices[0].delta.tool_calls:
-                                if tc.function:
-                                    tool_calls.append(tc.function.dict())
-
-                    if tool_calls:
-                        yield {"type": "tool_calls", "value": tool_calls}
-
-                    # usage (ストリームの最後で取得できる場合がある)
-                    # Groq APIはストリーミングレスポンスにusageを含めない場合がある
-                    completion_tokens = self._estimate_tokens_from_text(
-                        "".join(full_text_parts)
-                    )
-                    usage = {
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "total_tokens": prompt_tokens + completion_tokens,
-                    }
-
-                    cost_usd = self._estimate_cost(usage)
-                    self._log_api_result(
-                        success=True,
-                        model=self.model,
-                        usage=usage,
-                        cost_usd=cost_usd,
-                        system_prompt=system_prompt,
-                        history_count=history_count,
-                    )
-                    return {"usage": usage, "cost_usd": cost_usd}
+                        cost_usd = self._estimate_cost(usage)
+                        self._log_api_result(
+                            success=True,
+                            model=self.model,
+                            usage=usage,
+                            cost_usd=cost_usd,
+                            system_prompt=system_prompt,
+                            history_count=history_count,
+                        )
+                        return {"usage": usage, "cost_usd": cost_usd}
                 else:
                     # 非ストリーム: 単発応答
-                    resp: ChatCompletion = self.client.chat.completions.create(
+                    resp: Response = self.client.responses.create(  # type: ignore[assignment]
                         model=self.model,
-                        messages=sdk_messages,
+                        input=responses_input,
                         temperature=temperature,
-                        tools=sdk_tools,
-                        tool_choice=sdk_tool_choice,  # type: ignore
-                        stream=False,
+                        tools=responses_tools,  # type: ignore[arg-type]
+                        tool_choice=responses_tool_choice,  # type: ignore[arg-type]
+                        reasoning=responses_reasoning,  # type: ignore[arg-type]
+                        max_output_tokens=max_completion_tokens,
                     )
                     # テキスト
-                    output_text = resp.choices[0].message.content or ""
-                    if output_text:
+                    try:
+                        output_text = getattr(resp, "output_text", None)
+                    except Exception:
+                        output_text = None
+                    if isinstance(output_text, str) and output_text:
                         yield {"type": "content", "value": output_text}
-
-                    # ツール呼び出し
-                    if resp.choices[0].message.tool_calls:
-                        tool_calls = [
-                            tc.function.dict()
-                            for tc in resp.choices[0].message.tool_calls
-                        ]
-                        yield {"type": "tool_calls", "value": tool_calls}
+                    # ツール呼び出しがあれば出力（仕様上 location が異なる可能性があるため best-effort）
+                    try:
+                        if getattr(resp, "output", None):
+                            tool_calls = []
+                            for item in resp.output:
+                                if getattr(item, "type", "") == "tool_call":
+                                    tool_calls.append(getattr(item, "tool", {}))
+                            if tool_calls:
+                                yield {"type": "tool_calls", "value": tool_calls}
+                    except Exception:
+                        pass
 
                     # usage
                     usage = {}
-                    if resp.usage:
-                        usage = {
-                            "prompt_tokens": resp.usage.prompt_tokens,
-                            "completion_tokens": resp.usage.completion_tokens,
-                            "total_tokens": resp.usage.total_tokens,
-                        }
-                    else:
-                        completion_tokens = self._estimate_tokens_from_text(output_text)
+                    try:
+                        if getattr(resp, "usage", None):
+                            ru = resp.usage
+                            usage = {
+                                "prompt_tokens": getattr(ru, "input_tokens", 0)
+                                or getattr(ru, "prompt_tokens", 0)
+                                or prompt_tokens,
+                                "completion_tokens": getattr(ru, "output_tokens", 0)
+                                or getattr(ru, "completion_tokens", 0)
+                                or self._estimate_tokens_from_text(output_text or ""),
+                                "total_tokens": getattr(ru, "total_tokens", 0)
+                                or (
+                                    prompt_tokens
+                                    + self._estimate_tokens_from_text(output_text or "")
+                                ),
+                            }
+                        else:
+                            raise AttributeError("no usage")
+                    except Exception:
+                        completion_tokens = self._estimate_tokens_from_text(
+                            output_text or ""
+                        )
                         usage = {
                             "prompt_tokens": prompt_tokens,
                             "completion_tokens": completion_tokens,
