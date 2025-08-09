@@ -12,8 +12,9 @@ def create_chat_tab(config: Any):
     chat_service = ChatService()
     initial_temperature = 1.0
 
-    # ChatService は OpenAIクライアントを self.client に保持する実装へ変更済み。
-    if not getattr(chat_service, "client", None):
+    # ChatService は requests.Session を self.session に保持する実装。
+    # 旧実装の `client` 属性参照を `session` に置き換える。
+    if not chat_service.session:
         gr.Warning("GROQ_API_KEY is not set. Chat tab will not work.")
 
     default_system_prompt = lang_store[language].get(
